@@ -1,6 +1,6 @@
 import { Close, colors, Text, Warning, Button } from '@novu/design-system';
 import { useMantineTheme } from '@mantine/core';
-import styled from '@emotion/styled';
+import styled from '@emotion/styled/macro';
 import { useLocalStorage } from '@mantine/hooks';
 import { Group } from '@mantine/core';
 import { useNavigate } from 'react-router-dom';

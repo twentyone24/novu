@@ -6,7 +6,9 @@ import { When } from '../../../../components/utils/When';
 import { ControlsEmptyPanel } from './ControlsEmptyPanel';
 import { css } from '@novu/novui/css';
 import { Container } from '@novu/novui/jsx';
+/*
 import { useDebouncedCallback } from '@novu/novui';
+*/
 import { useTelemetry } from '../../../../hooks/useNovuAPI';
 
 export type OnChangeType = 'step' | 'payload';
@@ -47,9 +49,13 @@ export const WorkflowStepEditorControlsPanel: FC<IWorkflowStepEditorControlsPane
     return Object.keys(step?.controls?.schema?.properties || step?.inputs?.schema?.properties || {}).length > 0;
   }, [step?.controls?.schema, step?.inputs?.schema]);
 
+  /*
   const handleOnChange = useDebouncedCallback(async (type: OnChangeType, data: any, id?: string) => {
     onChange(type, data, id);
   }, TYPING_DEBOUNCE_TIME_MS);
+*/
+
+  const handleOnChange = (type: OnChangeType, data: any, id?: string) => {};
 
   return (
     <>

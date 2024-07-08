@@ -1,5 +1,5 @@
 import { Divider } from '@mantine/core';
-import styled from '@emotion/styled';
+import styled from '@emotion/styled/macro';
 import { Button as MantineButton } from '@mantine/core';
 
 import { colors, GitHub, Google, Text } from '@novu/design-system';
