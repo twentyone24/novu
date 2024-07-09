@@ -9,17 +9,17 @@ export class SegmentService {
   public _mixpanelEnabled: boolean;
 
   constructor() {
-    this._segmentEnabled = !!process.env.REACT_APP_SEGMENT_KEY;
-    this._mixpanelEnabled = !!process.env.REACT_APP_MIXPANEL_KEY;
+    this._segmentEnabled = !!process.env.VITE_SEGMENT_KEY;
+    this._mixpanelEnabled = !!process.env.VITE_MIXPANEL_KEY;
 
     if (this._mixpanelEnabled) {
-      init(process.env.REACT_APP_MIXPANEL_KEY as string, {
+      init(process.env.VITE_MIXPANEL_KEY as string, {
         record_sessions_percent: 100,
       });
     }
 
     if (this._segmentEnabled) {
-      this._segment = AnalyticsBrowser.load({ writeKey: process.env.REACT_APP_SEGMENT_KEY as string });
+      this._segment = AnalyticsBrowser.load({ writeKey: process.env.VITE_SEGMENT_KEY as string });
       if (!this._mixpanelEnabled) {
         return;
       }

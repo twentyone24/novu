@@ -92,15 +92,15 @@ spec:
           args: {{- include "common.tplvalues.render" (dict "value" .Values.web.args "context" $) | nindent 12 }}
           {{- end }}
           env:
-            - name: REACT_APP_ENVIRONMENT
+            - name: VITE_ENVIRONMENT
               value : {{ print .Values.web.env.NODE_ENV | quote }}
-            - name: REACT_APP_DOCKER_HOSTED_ENV
+            - name: VITE_DOCKER_HOSTED_ENV
               value : "true"
             - name: API_ROOT_URL
               value : {{  .Values.web.apiExternalEndpoint }}
-            - name: REACT_APP_API_URL
+            - name: VITE_API_URL
               value : {{  .Values.web.apiExternalEndpoint }}
-            - name: REACT_APP_WS_URL
+            - name: VITE_WS_URL
               value : {{  .Values.web.wsExternalEndpoint }}
 
             {{- if .Values.web.extraEnvVars }}

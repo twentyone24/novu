@@ -1,6 +1,6 @@
 import { ActionIcon, Avatar } from '@mantine/core';
 import { colors, Dropdown, IconLogout, IconOutlineGroupAdd, IconSettings, Text, When } from '@novu/design-system';
-import { CONTEXT_PATH, IS_DOCKER_HOSTED, REACT_APP_VERSION } from '../../../../config';
+import { CONTEXT_PATH, IS_DOCKER_HOSTED, VITE_VERSION } from '../../../../config';
 import { ROUTES } from '../../../../constants/routes';
 import { useAuth } from '../../../../hooks/useAuth';
 import { Link } from 'react-router-dom';
@@ -74,7 +74,7 @@ export function HeaderMenuItems({}) {
       {profileMenuItems}
       <When truthy={IS_SELF_HOSTED}>
         <Dropdown.Item disabled>
-          <Text color={colors.B40}>Version: {REACT_APP_VERSION}</Text>
+          <Text color={colors.B40}>Version: {VITE_VERSION}</Text>
         </Dropdown.Item>
       </When>
     </Dropdown>
