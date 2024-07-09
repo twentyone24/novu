@@ -45,8 +45,6 @@ export const WIDGET_EMBED_PATH =
 export const IS_DOCKER_HOSTED =
   window._env_.VITE_DOCKER_HOSTED_ENV === 'true' || import.meta.env.VITE_DOCKER_HOSTED_ENV === 'true';
 
-export const VITE_VERSION = version;
-
 export const INTERCOM_APP_ID = window._env_.VITE_INTERCOM_APP_ID || import.meta.env.VITE_INTERCOM_APP_ID;
 
 export const CONTEXT_PATH = getContextPath(NovuComponentEnum.WEB);
