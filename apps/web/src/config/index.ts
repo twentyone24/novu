@@ -58,7 +58,7 @@ export const MAIL_SERVER_DOMAIN =
 
 export const LAUNCH_DARKLY_CLIENT_SIDE_ID =
   window._env_.VITE_LAUNCH_DARKLY_CLIENT_SIDE_ID || import.meta.env.VITE_LAUNCH_DARKLY_CLIENT_SIDE_ID;
-console.log({ LAUNCH_DARKLY_CLIENT_SIDE_ID });
+
 export const FEATURE_FLAGS = Object.values(FeatureFlagsKeysEnum).reduce((acc, key) => {
   const defaultValue = 'false';
   acc[key] = window._env_[key] || import.meta.env[key] || defaultValue;
