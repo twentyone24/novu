@@ -1,3 +1,4 @@
+import { ChannelTypeEnum } from '@novu/shared';
 import { ActionStepEnum, ChannelStepEnum } from '../constants';
 import { MissingSecretKeyError, StepAlreadyExistsError, WorkflowPayloadInvalidError } from '../errors';
 import { channelStepSchemas, delayActionSchemas, digestActionSchemas, emptySchema, providerSchemas } from '../schemas';
@@ -17,6 +18,10 @@ import type {
   ChannelStep,
   ActionStep,
   StepOutput,
+  WorkflowOptionsPreference,
+  DiscoverWorkflowOutputPreference,
+  ChannelPreferenceEditableSpaces,
+  ChannelPreference,
 } from '../types';
 import { WithPassthrough } from '../types/provider.types';
 import { EMOJI, getBridgeUrl, initApiClient, log } from '../utils';
@@ -112,6 +117,7 @@ export function workflow<
       unknownSchema: options.controlSchema || options.inputSchema || emptySchema,
     },
     tags: options.tags || [],
+    preference: transformPreference(options.preference),
     execute: execute as Execute<Record<string, unknown>, Record<string, unknown>>,
   };
 
@@ -375,4 +381,39 @@ function prettyPrintDiscovery(discoveredWorkflow: DiscoverWorkflowOutput): void 
       console.log(`  ${providerPrefix} ${EMOJI.PROVIDER} Discovered provider: '${provider.type}'`);
     });
   });
+}
+
+function transformPreference(preference?: WorkflowOptionsPreference): DiscoverWorkflowOutputPreference {
+  const setChannel = (channelType: ChannelTypeEnum): ChannelPreference => {
+    const enabled: boolean =
+      preference?.channels?.[channelType]?.enabled !== undefined
+        ? (preference?.channels?.[channelType]?.enabled as boolean)
+        : true;
+    let editable: ChannelPreferenceEditableSpaces[] = ['dashboard', 'subscriber'];
+
+    if (preference?.channels?.[channelType]?.editable) {
+      if (preference?.channels?.[channelType]?.editable === false) {
+        editable = [];
+      }
+
+      if (Array.isArray(preference?.channels?.[channelType]?.editable)) {
+        editable = preference?.channels?.[channelType]?.editable as ChannelPreferenceEditableSpaces[];
+      }
+    }
+
+    return {
+      enabled,
+      editable,
+    };
+  };
+
+  return {
+    channels: {
+      [ChannelTypeEnum.EMAIL]: setChannel(ChannelTypeEnum.EMAIL),
+      [ChannelTypeEnum.SMS]: setChannel(ChannelTypeEnum.SMS),
+      [ChannelTypeEnum.PUSH]: setChannel(ChannelTypeEnum.PUSH),
+      [ChannelTypeEnum.IN_APP]: setChannel(ChannelTypeEnum.IN_APP),
+      [ChannelTypeEnum.CHAT]: setChannel(ChannelTypeEnum.CHAT),
+    },
+  };
 }

@@ -2,6 +2,7 @@ import type { Step } from './step.types';
 import type { Subscriber } from './subscriber.types';
 import type { Prettify } from './util.types';
 import type { Schema } from './schema.types';
+import { ChannelTypeEnum } from '@novu/shared';
 
 /**
  * The parameters for the workflow function.
@@ -32,6 +33,17 @@ export type Execute<T_Payload extends Record<string, unknown>, T_Controls extend
   event: ExecuteInput<T_Payload, T_Controls>
 ) => Promise<void>;
 
+export type ChannelPreferenceEditableSpaces = 'dashboard' | 'subscriber';
+
+export type WorkflowOptionsPreference = {
+  channels?: {
+    [key in (typeof ChannelTypeEnum)[keyof typeof ChannelTypeEnum]]?: {
+      enabled?: boolean;
+      editable?: boolean | ChannelPreferenceEditableSpaces[];
+    };
+  };
+};
+
 /**
  * The options for the workflow.
  */
@@ -45,5 +57,6 @@ export type WorkflowOptions<T_PayloadSchema extends Schema, T_ControlSchema exte
    */
   inputSchema?: T_ControlSchema;
   controlSchema?: T_ControlSchema;
+  preference?: WorkflowOptionsPreference;
   tags?: string[];
 };
