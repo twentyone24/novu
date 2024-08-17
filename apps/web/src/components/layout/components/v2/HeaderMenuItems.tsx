@@ -31,7 +31,7 @@ export function HeaderMenuItems({}) {
   const isDark = useIsDarkTheme();
   const iconColor = isDark ? colors.white : colors.B40;
 
-  if (!currentOrganization) {
+  if (!currentUser || !currentOrganization) {
     return null;
   }
 

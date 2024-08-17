@@ -13,7 +13,7 @@ import { useStudioState } from '../../../../studio/StudioStateProvider';
 import { buildBridgeHTTPClient } from '../../../../bridgeApi/bridgeApi.client';
 import { useTelemetry } from '../../../../hooks/useNovuAPI';
 import { useDocsModal } from '../../../docs/useDocsModal';
-import { DOCS_URL } from '../../../docs/docs.const';
+import { PATHS } from '../../../docs/docs.const';
 
 export type BridgeUpdateModalProps = {
   isOpen: boolean;
@@ -29,7 +29,7 @@ export const BridgeUpdateModal: FC<BridgeUpdateModalProps> = ({ isOpen, toggleOp
   const [isUpdating, setIsUpdating] = useState(false);
   const { Component, toggle, setPath } = useDocsModal();
 
-  const { environment, isLoading: isLoadingEnvironment } = useEnvironment();
+  const { environment, isLoaded: isEnvironmentLoaded } = useEnvironment();
 
   useEffect(() => {
     setUrl(bridgeURL);
@@ -82,7 +82,7 @@ export const BridgeUpdateModal: FC<BridgeUpdateModalProps> = ({ isOpen, toggleOp
 
       await storeInProperLocation(url);
       track('Update endpoint clicked - [Bridge Modal]');
-      successMessage('You have successfuly updated your Novu Endpoint configuration');
+      successMessage('You have successfully updated your Novu Endpoint configuration');
       toggleOpen();
     } catch (error) {
       const err = error as Error;
@@ -99,7 +99,7 @@ export const BridgeUpdateModal: FC<BridgeUpdateModalProps> = ({ isOpen, toggleOp
     }
   };
 
-  const isLoading = isLoadingEnvironment || isUpdating;
+  const isLoading = !isEnvironmentLoaded || isUpdating;
 
   return (
     <>
@@ -124,7 +124,8 @@ export const BridgeUpdateModal: FC<BridgeUpdateModalProps> = ({ isOpen, toggleOp
                 <LinkText
                   onClick={(e) => {
                     e.preventDefault();
-                    window.open(`${DOCS_URL}/concepts/endpoint`, '_blank');
+                    setPath(PATHS.CONCEPT_ENDPOINT);
+                    toggle();
                   }}
                   href=""
                 >

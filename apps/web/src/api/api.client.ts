@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { CustomDataType } from '@novu/shared';
-
 import { API_ROOT } from '../config';
+import { getToken } from '../components/providers/AuthProvider';
+import { getEnvironmentId } from '../components/providers/EnvironmentProvider';
 
 interface IOptions {
   absoluteUrl: boolean;
@@ -84,11 +85,14 @@ function buildUrl(url: string, absoluteUrl: boolean) {
 }
 
 function getHeaders() {
-  const token = localStorage.getItem('auth_token');
+  // TODO: change the way we get the clerk token
+  const token = getToken();
+  const lastEnvironmentId = getEnvironmentId();
 
   return token
     ? {
         Authorization: `Bearer ${token}`,
+        'Novu-Environment-Id': lastEnvironmentId || '',
       }
     : {};
 }
@@ -98,10 +102,12 @@ export function buildApiHttpClient({
   baseURL = API_ROOT || 'https://api.novu.co',
   secretKey,
   jwt,
+  environmentId,
 }: {
   baseURL?: string;
   secretKey?: string;
   jwt?: string;
+  environmentId?: string;
 }) {
   if (!secretKey && !jwt) {
     throw new Error('A secretKey or jwt is required to create a Novu API client.');
@@ -114,6 +120,7 @@ export function buildApiHttpClient({
     headers: {
       Authorization: authHeader,
       'Content-Type': 'application/json',
+      'Novu-Environment-Id': environmentId,
     },
   });
 

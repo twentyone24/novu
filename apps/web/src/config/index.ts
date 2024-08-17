@@ -5,9 +5,18 @@ function isBrowser() {
   return typeof window !== 'undefined';
 }
 
+function autodetectApiRoot() {
+  const origin = window.location.origin;
+  const matcher = new RegExp(/web|dashboard/);
+
+  const isValidTargetForReplace = !origin.includes('localhost') && matcher.test(origin);
+
+  return isValidTargetForReplace ? origin.replace(matcher, 'api') : '';
+}
+
 declare global {
   interface Window {
-    _env_: any;
+    _env_: Record<string, string | undefined>;
   }
 }
 
@@ -15,8 +24,8 @@ const isPlaywright = isBrowser() && (window as any).isPlaywright;
 
 export const API_ROOT =
   window._env_.VITE_API_URL || isPlaywright
-    ? window._env_.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:1336'
-    : window._env_.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    ? window._env_.VITE_API_URL || import.meta.env.VITE_API_URL || autodetectApiRoot() || 'http://localhost:1336'
+    : window._env_.VITE_API_URL || import.meta.env.VITE_API_URL || autodetectApiRoot() || 'http://localhost:3000';
 
 export const WS_URL = isPlaywright
   ? window._env_.VITE_WS_URL || import.meta.env.VITE_WS_URL || 'http://localhost:1340'
@@ -28,7 +37,8 @@ export const NOVU_GTM_ID = window._env_.VITE_NOVU_GTM_ID || import.meta.env.VITE
 
 export const ENV = window._env_.VITE_ENVIRONMENT || import.meta.env.VITE_ENVIRONMENT;
 
-const blueprintApiUrlByEnv = ENV === 'production' || ENV === 'prod' ? 'https://api.novu.co' : 'https://dev.api.novu.co';
+const blueprintApiUrlByEnv =
+  ENV === 'production' || ENV === 'prod' ? 'https://api.novu.co' : 'https://api.novu-staging.co';
 
 export const BLUEPRINTS_API_URL =
   window._env_.VITE_BLUEPRINTS_API_URL || isPlaywright
@@ -45,7 +55,7 @@ export const WIDGET_EMBED_PATH =
 export const IS_DOCKER_HOSTED =
   window._env_.VITE_DOCKER_HOSTED_ENV === 'true' || import.meta.env.VITE_DOCKER_HOSTED_ENV === 'true';
 
-export const INTERCOM_APP_ID = window._env_.VITE_INTERCOM_APP_ID || import.meta.env.VITE_INTERCOM_APP_ID;
+export const INTERCOM_APP_ID = window._env_.VITE_INTERCOM_APP_ID || import.meta.env.VITE_INTERCOM_APP_ID || '';
 
 export const CONTEXT_PATH = getContextPath(NovuComponentEnum.WEB);
 
@@ -69,3 +79,20 @@ export const FEATURE_FLAGS = Object.values(FeatureFlagsKeysEnum).reduce((acc, ke
 export const HUBSPOT_PORTAL_ID = window._env_.VITE_HUBSPOT_EMBED || import.meta.env.VITE_HUBSPOT_EMBED;
 
 export const IS_EU_ENV = (ENV === 'production' || ENV === 'prod') && API_ROOT.includes('eu.api.novu.co');
+
+export const IS_EE_AUTH_ENABLED =
+  window._env_.VITE_IS_EE_AUTH_ENABLED === 'true' || import.meta.env.VITE_IS_EE_AUTH_ENABLED === 'true';
+
+export const CLERK_PUBLISHABLE_KEY =
+  window._env_.VITE_CLERK_PUBLISHABLE_KEY || import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
+
+if (IS_EE_AUTH_ENABLED && !CLERK_PUBLISHABLE_KEY) {
+  throw new Error('Missing Clerk Publishable Key');
+}
+
+export const BRIDGE_SYNC_SAMPLE_ENDPOINT = 'https://deploy-preview-1--onboarding-sandbox.netlify.app/api/novu';
+/**
+ * This is used for versioning the sandbox endpoints across revisions
+ * On change, we should move the current one to the legacy list
+ */
+export const BRIDGE_ENDPOINTS_LEGACY_VERSIONS = ['https://onboarding-sandbox.netlify.app/api/novu'];

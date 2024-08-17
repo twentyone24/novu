@@ -30,13 +30,8 @@ import {
   SelectVariant,
   ExecutionLogRoute,
   ExecutionLogRouteCommand,
-  IProviderOverride,
-  IProvidersOverride,
-  ExecuteOutput,
-  IBridgeChannelResponse,
-  IBlock,
-  SelectIntegrationCommand,
 } from '@novu/application-generic';
+import { ChatOutput, ExecuteOutput } from '@novu/framework';
 
 import { CreateLog } from '../../../shared/logs';
 import { SendMessageCommand } from './send-message.command';
@@ -81,7 +76,7 @@ export class SendMessageChat extends SendMessageBase {
     if (!step?.template) throw new PlatformException('Chat channel template not found');
 
     const { subscriber } = command.compileContext;
-    const i18nextInstance = await this.initiateTranslations(
+    const i18nInstance = await this.initiateTranslations(
       command.environmentId,
       command.organizationId,
       subscriber.locale
@@ -93,7 +88,8 @@ export class SendMessageChat extends SendMessageBase {
       step.template = template;
     }
 
-    let content = '';
+    const bridgeOutput = command.bridgeData?.outputs as ChatOutput | undefined;
+    let content: string = bridgeOutput?.body || '';
 
     try {
       if (!command.bridgeData) {
@@ -101,7 +97,8 @@ export class SendMessageChat extends SendMessageBase {
           CompileTemplateCommand.create({
             template: step.template.content as string,
             data: this.getCompilePayload(command.compileContext),
-          })
+          }),
+          i18nInstance
         );
       }
     } catch (e) {
@@ -277,9 +274,9 @@ export class SendMessageChat extends SendMessageBase {
   }
 
   private getBridgeOverride(
-    providersOverrides: IProvidersOverride | undefined,
+    providersOverrides: ExecuteOutput['providers'],
     integration: IntegrationEntity
-  ): IProviderOverride | null {
+  ): Record<string, unknown> | null {
     if (!providersOverrides) {
       return null;
     }
@@ -396,18 +393,19 @@ export class SendMessageChat extends SendMessageBase {
         throw new PlatformException(`Chat handler for provider ${integration.providerId} is  not found`);
       }
 
-      const bridgeContent = this.getOverrideContent(command.bridgeData, integration);
       const overrides = {
         ...(command.overrides[integration?.channel] || {}),
         ...(command.overrides[integration?.providerId] || {}),
       };
+      const bridgeProviderData = command.bridgeData?.providers?.[integration.providerId] || {};
 
       const result = await chatHandler.send({
+        bridgeProviderData,
         phoneNumber,
         customData: overrides,
         webhookUrl: chatWebhookUrl,
         channel: channelSpecification,
-        ...(bridgeContent?.content ? (bridgeContent as DefinedContent) : { content }),
+        content,
       });
 
       await this.executionLogRoute.execute(
@@ -447,22 +445,4 @@ export class SendMessageChat extends SendMessageBase {
       );
     }
   }
-
-  private getOverrideContent(
-    bridgeData: ExecuteOutput<IBridgeChannelResponse> | undefined | null,
-    integration: IntegrationEntity
-  ): { content: string | undefined; blocks: IBlock[] | undefined } | { content: string | undefined } {
-    const bridgeProviderOverride = this.getBridgeOverride(bridgeData?.providers, integration);
-
-    let bridgeContent: { content: string | undefined; blocks: IBlock[] | undefined } | { content: string | undefined };
-    if (bridgeProviderOverride) {
-      bridgeContent = { content: bridgeProviderOverride.text, blocks: bridgeProviderOverride.blocks };
-    } else {
-      bridgeContent = { content: bridgeData?.outputs.body };
-    }
-
-    return bridgeContent;
-  }
 }
-
-type DefinedContent = { content: string; blocks: IBlock[] | undefined } | { content: string };

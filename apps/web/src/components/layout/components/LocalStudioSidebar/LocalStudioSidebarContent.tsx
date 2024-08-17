@@ -6,13 +6,15 @@ import { IBridgeWorkflow } from '../../../../studio/types';
 import { NavMenu } from '../../../nav/NavMenu';
 import { NavMenuSection } from '../../../nav/NavMenuSection';
 import { LocalStudioSidebarOrganizationDisplay } from './LocalStudioSidebarOrganizationDisplay';
-import { LocalStudioSidebarToggleButton } from './LocalStudioSidebarToggleButtonProps';
+import { LocalStudioSidebarToggleButton } from './LocalStudioSidebarToggleButton';
 import { token } from '@novu/novui/tokens';
 import { css, cx } from '@novu/novui/css';
 import { useStudioState } from '../../../../studio/StudioStateProvider';
 import { WithLoadingSkeleton } from '@novu/novui';
 import { NavMenuButtonInner, rawButtonBaseStyles } from '../../../nav/NavMenuButton/NavMenuButton.shared';
 import { useDocsModal } from '../../../docs/useDocsModal';
+import { PATHS } from '../../../docs/docs.const';
+import { ROUTES } from '../../../../constants/routes';
 
 type LocalStudioSidebarContentProps = {
   workflows: IBridgeWorkflow[];
@@ -34,14 +36,14 @@ export const LocalStudioSidebarContent: WithLoadingSkeleton<FC<LocalStudioSideba
     <>
       <NavMenu variant="root">
         <LocalStudioSidebarOrganizationDisplay
-          title={organizationName || 'Your organization '}
-          subtitle="Local studio"
+          title={'Local Studio'}
+          subtitle={organizationName || 'Your organization '}
         />
         <NavMenuSection>
           <button
             onClick={(e) => {
               e.preventDefault();
-              setPath('workflow/introduction');
+              setPath(PATHS.WORKFLOW_INTRODUCTION);
               toggle();
             }}
             className={css({ width: 'full' })}

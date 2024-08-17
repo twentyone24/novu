@@ -1,5 +1,9 @@
 import { IPushOptions, IPushProvider } from '@novu/stateless';
-import { ChannelTypeEnum, ICredentials } from '@novu/shared';
+import {
+  ChannelTypeEnum,
+  ICredentials,
+  PushProviderIdEnum,
+} from '@novu/shared';
 import {} from '@novu/dal';
 import { IPushHandler } from '../interfaces';
 
@@ -7,7 +11,7 @@ export abstract class BasePushHandler implements IPushHandler {
   protected provider: IPushProvider;
 
   protected constructor(
-    private providerId: string,
+    private providerId: PushProviderIdEnum,
     private channelType: string
   ) {}
 
@@ -22,7 +26,9 @@ export abstract class BasePushHandler implements IPushHandler {
       );
     }
 
-    return await this.provider.sendMessage(options);
+    const { bridgeProviderData, ...otherOptions } = options;
+
+    return await this.provider.sendMessage(otherOptions, bridgeProviderData);
   }
 
   abstract buildProvider(credentials: ICredentials);

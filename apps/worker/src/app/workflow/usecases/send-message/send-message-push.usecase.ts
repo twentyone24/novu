@@ -100,14 +100,16 @@ export class SendMessagePush extends SendMessageBase {
           CompileTemplateCommand.create({
             template: step.template?.content as string,
             data,
-          })
+          }),
+          i18nInstance
         );
 
         title = await this.compileTemplate.execute(
           CompileTemplateCommand.create({
             template: step.template?.title as string,
             data,
-          })
+          }),
+          i18nInstance
         );
       }
     } catch (e) {
@@ -292,6 +294,7 @@ export class SendMessagePush extends SendMessageBase {
     try {
       const pushHandler = this.getIntegrationHandler(integration);
       const bridgeOutputs = command.bridgeData?.outputs;
+      const bridgeProviderData = command.bridgeData?.providers?.[integration.providerId] || {};
 
       const result = await pushHandler.send({
         target: [deviceToken],
@@ -301,6 +304,7 @@ export class SendMessagePush extends SendMessageBase {
         overrides,
         subscriber,
         step,
+        bridgeProviderData,
       });
 
       await this.executionLogRoute.execute(

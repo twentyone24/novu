@@ -1,25 +1,52 @@
+import fs from 'fs';
+import path from 'path';
+import { compress } from 'esbuild-plugin-compress';
+import { solidPlugin } from 'esbuild-plugin-solid';
+import postcss from 'postcss';
+import loadPostcssConfig from 'postcss-load-config';
 import { defineConfig, Options } from 'tsup';
-// import { compress } from 'esbuild-plugin-compress';
-import glob from 'tiny-glob';
-import { parsePresetOptions, generateTsupOptions, type PresetOptions } from 'tsup-preset-solid';
 import { name, version } from './package.json';
+
+const processCSS = async (css: string, filePath: string) => {
+  const { plugins, options } = await loadPostcssConfig({}, filePath);
+  const result = await postcss(plugins).process(css, { ...options, from: filePath });
+
+  return result.css;
+};
+
+const buildCSS = async () => {
+  const cssFilePath = path.join(__dirname, './src/ui/index.css');
+  const destinationCssFilePath = path.join(__dirname, './dist/index.css');
+  const css = fs.readFileSync(cssFilePath, 'utf-8');
+  const processedCss = await processCSS(css, cssFilePath);
+  fs.writeFileSync(destinationCssFilePath, processedCss);
+};
+
+const runAfterLast =
+  (commands: Array<string | false>) =>
+  (...configs: Options[]) => {
+    const [last, ...rest] = configs.reverse();
+
+    return [...rest.reverse(), { ...last, onSuccess: [last.onSuccess, ...commands].filter(Boolean).join(' && ') }];
+  };
 
 const isProd = process.env?.NODE_ENV === 'production';
 
 const baseConfig: Options = {
-  splitting: false,
+  splitting: true,
   sourcemap: false,
   clean: true,
-  dts: true,
+  esbuildPlugins: [solidPlugin()],
   define: { PACKAGE_NAME: `"${name}"`, PACKAGE_VERSION: `"${version}"`, __DEV__: `${!isProd}` },
 };
 
 const baseModuleConfig: Options = {
   ...baseConfig,
   treeshake: true,
-  dts: false,
-  define: { PACKAGE_NAME: `"${name}"`, PACKAGE_VERSION: `"${version}"`, __DEV__: `${!isProd}` },
-  entry: await glob('./src/**/!(*.d|*.test).ts'),
+  entry: {
+    index: './src/index.ts',
+    'ui/index': './src/ui/index.ts',
+  },
   outExtension: ({ format }) => {
     return {
       js: format === 'cjs' ? '.cjs' : '.mjs',
@@ -27,58 +54,45 @@ const baseModuleConfig: Options = {
   },
 };
 
-const uiPresetOptions: PresetOptions = {
-  entries: [
-    {
-      // entries with '.tsx' extension will have `solid` export condition generated
-      entry: 'src/ui/index.tsx',
-    },
-  ],
-  out_dir: 'dist/ui',
-  // Set to `true` to remove all `console.*` calls and `debugger` statements in prod builds
-  drop_console: true,
-  // Set to `true` to generate a CommonJS build alongside ESM
-  cjs: true,
-};
-
 export default defineConfig((config: Options) => {
-  const isWatching = !!config.watch;
+  const copyPackageJson = (format: 'esm' | 'cjs') => `cp ./package.${format}.json ./dist/${format}/package.json`;
 
-  const PARSED_DATA = parsePresetOptions(uiPresetOptions, isWatching);
+  const cjs: Options = {
+    ...baseModuleConfig,
+    format: 'cjs',
+    outDir: 'dist/cjs',
+    tsconfig: 'tsconfig.cjs.json',
+  };
 
-  return [
-    {
-      ...baseModuleConfig,
-      format: 'esm',
-      outDir: 'dist/esm',
-      tsconfig: 'tsconfig.json',
+  const esm: Options = {
+    ...baseModuleConfig,
+    format: 'esm',
+    outDir: 'dist/esm',
+    tsconfig: 'tsconfig.json',
+  };
+
+  const umd: Options = {
+    ...baseConfig,
+    entry: { novu: 'src/umd.ts' },
+    format: ['iife'],
+    minify: true,
+    dts: false,
+    outExtension: () => {
+      return {
+        js: '.min.js',
+      };
     },
-    {
-      ...baseModuleConfig,
-      format: 'cjs',
-      outDir: 'dist/cjs',
-      tsconfig: 'tsconfig.cjs.json',
-    },
-    ...generateTsupOptions(PARSED_DATA),
-    // {
-    //   ...baseConfig,
-    //   entry: { novu: 'src/umd.ts' },
-    //   format: ['iife'],
-    //   minify: true,
-    //   dts: false,
-    //   outExtension: () => {
-    //     return {
-    //       js: '.min.js',
-    //     };
-    //   },
-    //   esbuildPlugins: [
-    //     compress({
-    //       gzip: true,
-    //       brotli: false,
-    //       outputDir: '.',
-    //       exclude: ['**/*.map'],
-    //     }),
-    //   ],
-    // },
-  ];
+    esbuildPlugins: [
+      ...(baseConfig.esbuildPlugins ? baseConfig.esbuildPlugins : []),
+      compress({
+        gzip: true,
+        brotli: false,
+        outputDir: '.',
+        exclude: ['**/*.map'],
+      }),
+    ],
+    onSuccess: async () => await buildCSS(),
+  };
+
+  return runAfterLast(['pnpm run build:declarations', copyPackageJson('esm'), copyPackageJson('cjs')])(umd, esm, cjs);
 });

@@ -32,7 +32,7 @@ export function LoginForm({ email, invitationToken }: LoginFormProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => setRedirectURL(), []);
 
-  const { login, currentUser, organizations } = useAuth();
+  const { login, currentUser, currentOrganization } = useAuth();
   const { startVercelSetup } = useVercelIntegration();
   const { isFromVercel, params: vercelParams } = useVercelParams();
   const [params] = useSearchParams();
@@ -59,6 +59,8 @@ export function LoginForm({ email, invitationToken }: LoginFormProps) {
   const handleLoginInUseEffect = async () => {
     // if currentUser is true, it means user exists, then while accepting invitation, InvitationPage will handle accept this case
     if (currentUser) {
+      handleVercelFlow();
+
       return;
     }
 
@@ -79,18 +81,13 @@ export function LoginForm({ email, invitationToken }: LoginFormProps) {
       }
     }
 
-    if (organizations) {
+    if (currentOrganization) {
       navigate(ROUTES.WORKFLOWS);
     } else {
       await login(tokenInQuery, ROUTES.AUTH_APPLICATION);
     }
 
-    if (isFromVercel) {
-      await login(tokenInQuery);
-      startVercelSetup();
-
-      return;
-    }
+    await handleVercelFlow();
 
     if (source === 'cli') {
       segment.track('Dashboard Visit', {
@@ -105,10 +102,20 @@ export function LoginForm({ email, invitationToken }: LoginFormProps) {
     await login(tokenInQuery, ROUTES.WORKFLOWS);
   };
 
+  async function handleVercelFlow() {
+    if (isFromVercel) {
+      if (tokenInQuery) {
+        await login(tokenInQuery);
+      }
+
+      startVercelSetup();
+    }
+  }
+
   useEffect(() => {
     handleLoginInUseEffect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [login]);
+  }, [login, currentUser]);
 
   const signupLink = isFromVercel ? `${ROUTES.AUTH_SIGNUP}?${params.toString()}` : ROUTES.AUTH_SIGNUP;
   const resetPasswordLink = isFromVercel

@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       react_app_api_url:
-        required: true
+        required: false
         type: string
       react_app_ws_url:
         required: true
@@ -42,6 +42,12 @@ on:
         required: true
         type: string
       netlify_site_id:
+        required: true
+        type: string
+      clerk_publishable_key:
+        required: true
+        type: string
+      clerk_is_ee_auth_enabled:
         required: true
         type: string
 
@@ -87,6 +93,8 @@ jobs:
           echo VITE_STRIPE_CLIENT_KEY=${{ secrets.STRIPE_CLIENT_KEY }} >> .env
           echo VITE_NOVU_GTM_ID=${{ secrets.NOVU_GTM_ID }} >> .env
           echo VITE_MIXPANEL_KEY=${{ secrets.MIXPANEL_TOKEN }} >> .env
+          echo VITE_CLERK_PUBLISHABLE_KEY=${{ inputs.clerk_publishable_key }} >> .env
+          echo VITE_IS_EE_AUTH_ENABLED=${{ inputs.clerk_is_ee_auth_enabled }} >> .env
       - name: Envsetup
         working-directory: apps/web
         run: npm run envsetup

@@ -1,8 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { addBreadcrumb } from '@sentry/node';
 import { OrganizationRepository, IntegrationEntity } from '@novu/dal';
 import { ChannelTypeEnum, EmailProviderIdEnum, IEmailOptions } from '@novu/shared';
-import { ModuleRef } from '@nestjs/core';
 
 import { SendTestEmailCommand } from './send-test-email.command';
 import {
@@ -16,6 +15,7 @@ import {
   SelectIntegration,
   SelectIntegrationCommand,
 } from '@novu/application-generic';
+import { PreviewStep, PreviewStepCommand } from '../../../bridge/usecases/preview-step';
 
 @Injectable()
 export class SendTestEmail {
@@ -25,7 +25,7 @@ export class SendTestEmail {
     private selectIntegration: SelectIntegration,
     private analyticsService: AnalyticsService,
     protected getNovuProviderCredentials: GetNovuProviderCredentials,
-    protected moduleRef: ModuleRef
+    private previewStep: PreviewStep
   ) {}
 
   @InstrumentUsecase()
@@ -66,6 +66,7 @@ export class SendTestEmail {
 
     let html = '';
     let subject = '';
+    let bridgeProviderData: Record<string, unknown> = {};
 
     if (!command.bridge) {
       const template = await this.compileEmailTemplateUsecase.execute(
@@ -88,12 +89,12 @@ export class SendTestEmail {
     }
 
     if (command.bridge) {
-      if (process.env.NOVU_ENTERPRISE === 'true' || process.env.CI_EE_TEST === 'true') {
-        if (!require('@novu/ee-bridge-api')?.PreviewStep) {
-          throw new ApiException('Bridge api module is not loaded');
-        }
-        const service = this.moduleRef.get(require('@novu/ee-bridge-api')?.PreviewStep, { strict: false });
-        const data = await service.execute({
+      if (!command.workflowId || !command.stepId) {
+        throw new BadRequestException('Workflow ID and step ID are required');
+      }
+
+      const data = await this.previewStep.execute(
+        PreviewStepCommand.create({
           workflowId: command.workflowId,
           stepId: command.stepId,
           inputs: command.controls || command.inputs,
@@ -102,14 +103,18 @@ export class SendTestEmail {
           environmentId: command.environmentId,
           organizationId: command.organizationId,
           userId: command.userId,
-        });
+        })
+      );
 
-        if (!data.outputs) {
-          throw new ApiException('Could not retrieve content from edge');
-        }
+      if (!data.outputs) {
+        throw new ApiException('Could not retrieve content from edge');
+      }
 
-        html = data.outputs.body;
-        subject = data.outputs.subject;
+      html = data.outputs.body;
+      subject = data.outputs.subject;
+
+      if (data.providers && typeof data.providers === 'object') {
+        bridgeProviderData = data.providers[integration.providerId] || {};
       }
     }
 
@@ -121,7 +126,7 @@ export class SendTestEmail {
         from: command.payload.$sender_email || integration?.credentials.from || 'no-reply@novu.co',
       };
 
-      await this.sendMessage(integration, mailData, mailFactory, command);
+      await this.sendMessage(integration, mailData, mailFactory, command, bridgeProviderData);
 
       return;
     }
@@ -131,13 +136,14 @@ export class SendTestEmail {
     integration: IntegrationEntity,
     mailData: IEmailOptions,
     mailFactory: MailFactory,
-    command: SendTestEmailCommand
+    command: SendTestEmailCommand,
+    bridgeProviderData: Record<string, unknown>
   ) {
     const { providerId } = integration;
 
     try {
       const mailHandler = mailFactory.getHandler(integration, mailData.from);
-      await mailHandler.send(mailData);
+      await mailHandler.send({ ...mailData, bridgeProviderData });
       this.analyticsService.track('Test Email Sent - [Events]', command.userId, {
         _organization: command.organizationId,
         _environment: command.environmentId,

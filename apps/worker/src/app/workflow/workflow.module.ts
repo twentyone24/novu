@@ -26,7 +26,7 @@ import {
   WorkflowInMemoryProviderService,
   ExecutionLogRoute,
 } from '@novu/application-generic';
-import { JobRepository } from '@novu/dal';
+import { CommunityOrganizationRepository, JobRepository } from '@novu/dal';
 
 import {
   SendMessage,
@@ -46,6 +46,7 @@ import {
   SetJobAsFailed,
   UpdateJobStatus,
   WebhookFilterBackoffStrategy,
+  ExecuteBridgeJob,
 } from './usecases';
 
 import { SharedModule } from '../shared/shared.module';
@@ -74,12 +75,6 @@ const enterpriseImports = (): Array<Type | DynamicModule | Promise<DynamicModule
         const activeWorkers = workersToProcess.length ? workersToProcess : Object.values(JobTopicNameEnum);
         modules.push(require('@novu/ee-billing')?.BillingModule.forRoot(activeWorkers));
       }
-
-      if (require('@novu/ee-bridge-worker')?.BridgeGatewayModule) {
-        Logger.log('Importing enterprise bridge connector module', 'EnterpriseImport');
-
-        modules.push(require('@novu/ee-bridge-worker')?.BridgeGatewayModule);
-      }
     }
   } catch (e) {
     Logger.error(e, `Unexpected error while importing enterprise modules`, 'EnterpriseImport');
@@ -87,7 +82,7 @@ const enterpriseImports = (): Array<Type | DynamicModule | Promise<DynamicModule
 
   return modules;
 };
-const REPOSITORIES = [JobRepository];
+const REPOSITORIES = [JobRepository, CommunityOrganizationRepository];
 
 const USE_CASES = [
   AddDelayJob,
@@ -138,6 +133,7 @@ const USE_CASES = [
   CompileInAppTemplate,
   InboundEmailParse,
   ExecutionLogRoute,
+  ExecuteBridgeJob,
 ];
 
 const PROVIDERS: Provider[] = [];

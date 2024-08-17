@@ -39,16 +39,12 @@ import { RateLimitingModule } from './app/rate-limiting/rate-limiting.module';
 import { ProductFeatureInterceptor } from './app/shared/interceptors/product-feature.interceptor';
 import { AnalyticsModule } from './app/analytics/analytics.module';
 import { InboxModule } from './app/inbox/inbox.module';
+import { isClerkEnabled } from '@novu/shared';
+import { BridgeModule } from './app/bridge/bridge.module';
 
 const enterpriseImports = (): Array<Type | DynamicModule | Promise<DynamicModule> | ForwardReference> => {
   const modules: Array<Type | DynamicModule | Promise<DynamicModule> | ForwardReference> = [];
   if (process.env.NOVU_ENTERPRISE === 'true' || process.env.CI_EE_TEST === 'true') {
-    if (require('@novu/ee-auth')?.EEAuthModule) {
-      modules.push(require('@novu/ee-auth')?.EEAuthModule);
-    }
-    if (require('@novu/ee-bridge-api')?.BridgeModule) {
-      modules.push(require('@novu/ee-bridge-api')?.BridgeModule);
-    }
     if (require('@novu/ee-translation')?.EnterpriseTranslationModule) {
       modules.push(require('@novu/ee-translation')?.EnterpriseTranslationModule);
     }
@@ -72,11 +68,9 @@ const enterpriseQuotaThrottlerInterceptor =
     : [];
 
 const baseModules: Array<Type | DynamicModule | Promise<DynamicModule> | ForwardReference> = [
-  InboundParseModule,
-  OrganizationModule,
-  SharedModule,
-  UserModule,
   AuthModule,
+  InboundParseModule,
+  SharedModule,
   HealthModule,
   EnvironmentsModule,
   ExecutionDetailsModule,
@@ -85,10 +79,10 @@ const baseModules: Array<Type | DynamicModule | Promise<DynamicModule> | Forward
   WidgetsModule,
   InboxModule,
   NotificationModule,
-  StorageModule,
   NotificationGroupsModule,
-  InvitesModule,
   ContentTemplatesModule,
+  OrganizationModule,
+  UserModule,
   IntegrationModule,
   ChangeModule,
   SubscribersModule,
@@ -99,13 +93,21 @@ const baseModules: Array<Type | DynamicModule | Promise<DynamicModule> | Forward
   TopicsModule,
   BlueprintModule,
   TenantModule,
+  StorageModule,
   WorkflowOverridesModule,
   RateLimitingModule,
+  WidgetsModule,
   ProfilingModule.register(packageJson.name),
   TracingModule.register(packageJson.name, packageJson.version),
+  BridgeModule,
 ];
 
 const enterpriseModules = enterpriseImports();
+
+if (!isClerkEnabled()) {
+  const communityModules = [InvitesModule];
+  baseModules.push(...communityModules);
+}
 
 const modules = baseModules.concat(enterpriseModules);
 

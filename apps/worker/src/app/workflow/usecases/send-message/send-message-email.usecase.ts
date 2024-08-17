@@ -20,6 +20,7 @@ import {
   IAttachmentOptions,
   IEmailOptions,
   LogCodeEnum,
+  FeatureFlagsKeysEnum,
 } from '@novu/shared';
 import {
   InstrumentUsecase,
@@ -32,6 +33,8 @@ import {
   SelectVariant,
   ExecutionLogRoute,
   ExecutionLogRouteCommand,
+  GetFeatureFlag,
+  GetFeatureFlagCommand,
 } from '@novu/application-generic';
 import { EmailOutput } from '@novu/framework';
 
@@ -57,7 +60,8 @@ export class SendMessageEmail extends SendMessageBase {
     protected selectIntegration: SelectIntegration,
     protected getNovuProviderCredentials: GetNovuProviderCredentials,
     protected selectVariant: SelectVariant,
-    protected moduleRef: ModuleRef
+    protected moduleRef: ModuleRef,
+    private getFeatureFlag: GetFeatureFlag
   ) {
     super(
       messageRepository,
@@ -205,6 +209,12 @@ export class SendMessageEmail extends SendMessageBase {
     }
 
     try {
+      const i18nInstance = await this.initiateTranslations(
+        command.environmentId,
+        command.organizationId,
+        subscriber.locale
+      );
+
       if (!command.bridgeData) {
         ({ html, content, subject, senderName } = await this.compileEmailTemplateUsecase.execute(
           CompileEmailTemplateCommand.create({
@@ -213,7 +223,7 @@ export class SendMessageEmail extends SendMessageBase {
             userId: command.userId,
             ...payload,
           }),
-          this.initiateTranslations.bind(this)
+          i18nInstance
         ));
 
         if (this.storeContent()) {
@@ -231,14 +241,31 @@ export class SendMessageEmail extends SendMessageBase {
           );
         }
 
-        html = await inlineCss(html, {
-          // Used for style sheet links that starts with / so should not be needed in our case.
-          url: ' ',
-        });
+        // TODO: remove as part of https://linear.app/novu/issue/NV-4117/email-html-content-issue-in-mobile-devices
+        const shouldDisableInlineCss = await this.getFeatureFlag.execute(
+          GetFeatureFlagCommand.create({
+            key: FeatureFlagsKeysEnum.IS_EMAIL_INLINE_CSS_DISABLED,
+            environmentId: 'system',
+            organizationId: command.organizationId,
+            userId: 'system',
+          })
+        );
+
+        if (!shouldDisableInlineCss) {
+          // this is causing rendering issues in Gmail (especially when media queries are used), so we are disabling it
+          html = await inlineCss(html, {
+            // Used for style sheet links that starts with / so should not be needed in our case.
+            url: ' ',
+          });
+        }
       }
-    } catch (e) {
-      Logger.error({ payload, e }, 'Compiling the email template or storing it or inlining it has failed', LOG_CONTEXT);
-      await this.sendErrorHandlebars(command.job, e.message);
+    } catch (error) {
+      Logger.error(
+        { payload, error },
+        'Compiling the email template or storing it or inlining it has failed',
+        LOG_CONTEXT
+      );
+      await this.sendErrorHandlebars(command.job, error.message);
 
       return;
     }
@@ -417,9 +444,10 @@ export class SendMessageEmail extends SendMessageBase {
   ) {
     const mailFactory = new MailFactory();
     const mailHandler = mailFactory.getHandler(this.buildFactoryIntegration(integration), mailData.from);
+    const bridgeProviderData = command.bridgeData?.providers?.[integration.providerId] || {};
 
     try {
-      const result = await mailHandler.send(mailData);
+      const result = await mailHandler.send({ ...mailData, bridgeProviderData });
 
       Logger.verbose({ command }, 'Email message has been sent', LOG_CONTEXT);
 

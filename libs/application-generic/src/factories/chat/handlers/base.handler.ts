@@ -1,12 +1,12 @@
 import { IChatOptions, IChatProvider } from '@novu/stateless';
-import { ChannelTypeEnum } from '@novu/shared';
+import { ChannelTypeEnum, ChatProviderIdEnum } from '@novu/shared';
 import { IChatHandler } from '../interfaces';
 
 export abstract class BaseChatHandler implements IChatHandler {
   protected provider: IChatProvider;
 
   protected constructor(
-    private providerId: string,
+    private providerId: ChatProviderIdEnum,
     private channelType: string
   ) {}
 
@@ -21,6 +21,8 @@ export abstract class BaseChatHandler implements IChatHandler {
       return {};
     }
 
-    return await this.provider.sendMessage(chatContent);
+    const { bridgeProviderData, ...content } = chatContent;
+
+    return await this.provider.sendMessage(content, bridgeProviderData);
   }
 }

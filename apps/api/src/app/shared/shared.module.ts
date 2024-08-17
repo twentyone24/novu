@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import {
   ChangeRepository,
+  ControlVariablesRepository,
   DalService,
   EnvironmentRepository,
   ExecutionDetailsRepository,
@@ -40,10 +41,22 @@ import {
   storageService,
   ExecutionLogRoute,
   CreateExecutionDetails,
+  injectCommunityAuthProviders,
+  ExecuteBridgeRequest,
 } from '@novu/application-generic';
 
 import packageJson from '../../../package.json';
-import { JobTopicNameEnum } from '@novu/shared';
+import { JobTopicNameEnum, isClerkEnabled } from '@novu/shared';
+
+function getDynamicAuthProviders() {
+  if (isClerkEnabled()) {
+    const eeAuthPackage = require('@novu/ee-auth');
+
+    return eeAuthPackage.injectEEAuthProviders();
+  } else {
+    return injectCommunityAuthProviders();
+  }
+}
 
 const DAL_MODELS = [
   UserRepository,
@@ -68,6 +81,8 @@ const DAL_MODELS = [
   TopicSubscribersRepository,
   TenantRepository,
   WorkflowOverrideRepository,
+  ControlVariablesRepository,
+  ...getDynamicAuthProviders(),
 ];
 
 const dalService = {
@@ -94,6 +109,7 @@ const PROVIDERS = [
   ...DAL_MODELS,
   ExecutionLogRoute,
   CreateExecutionDetails,
+  ExecuteBridgeRequest,
   getFeatureFlag,
 ];
 

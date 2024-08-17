@@ -1,7 +1,7 @@
 import { ActionIcon, Header } from '@mantine/core';
 import { IconHelpOutline } from '@novu/novui/icons';
 import { Tooltip } from '@novu/design-system';
-import { IS_DOCKER_HOSTED } from '../../../../config';
+import { IS_EE_AUTH_ENABLED, IS_DOCKER_HOSTED } from '../../../../config';
 import { useBootIntercom, useFeatureFlag } from '../../../../hooks';
 import useThemeChange from '../../../../hooks/useThemeChange';
 import { discordInviteUrl } from '../../../../pages/quick-start/consts';
@@ -12,6 +12,7 @@ import { HEADER_NAV_HEIGHT } from '../../constants';
 import { NotificationCenterWidget } from '../NotificationCenterWidget';
 import { HeaderMenuItems } from './HeaderMenuItems';
 import { FeatureFlagsKeysEnum } from '@novu/shared';
+import { UserProfileButton } from '../../../../ee/clerk';
 import { BridgeMenuItems } from './BridgeMenuItems';
 import { useStudioState } from '../../../../studio/StudioStateProvider';
 import { WorkflowHeaderBackButton } from './WorkflowHeaderBackButton';
@@ -27,7 +28,7 @@ export function HeaderNav() {
 
   useBootIntercom();
 
-  const { themeIcon, themeLabel, toggleColorScheme } = useThemeChange();
+  const { Icon, themeLabel, toggleColorScheme } = useThemeChange();
 
   return (
     <Header
@@ -36,7 +37,7 @@ export function HeaderNav() {
         position: 'sticky',
         top: 0,
         borderBottom: 'none !important',
-        zIndex: 'sticky',
+        zIndex: '200 !important',
         padding: '50',
       })}
     >
@@ -47,10 +48,13 @@ export function HeaderNav() {
           {shouldShowNewNovuExperience && <BridgeMenuItems />}
           <ActionIcon variant="transparent" onClick={() => toggleColorScheme()}>
             <Tooltip label={themeLabel}>
-              <div>{themeIcon}</div>
+              <div>
+                <Icon title="color-scheme-preference-icon" />
+              </div>
             </Tooltip>
           </ActionIcon>
-          <NotificationCenterWidget user={currentUser} />
+          {/* Ugly fallback to satisfy the restrictive typings of the NotificationCenterWidget */}
+          <NotificationCenterWidget user={currentUser || undefined} />
           {isSelfHosted ? (
             <a href={discordInviteUrl} target="_blank" rel="noopener noreferrer">
               <ActionIcon variant="transparent">
@@ -62,7 +66,7 @@ export function HeaderNav() {
               <IconHelpOutline />
             </ActionIcon>
           )}
-          <HeaderMenuItems />
+          {IS_EE_AUTH_ENABLED ? <UserProfileButton /> : <HeaderMenuItems />}
         </HStack>
       </HStack>
     </Header>

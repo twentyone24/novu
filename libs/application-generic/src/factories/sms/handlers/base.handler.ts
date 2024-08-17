@@ -1,12 +1,12 @@
 import { ISmsOptions, ISmsProvider } from '@novu/stateless';
-import { ChannelTypeEnum, ICredentials } from '@novu/shared';
+import { ChannelTypeEnum, ICredentials, SmsProviderIdEnum } from '@novu/shared';
 import { ISmsHandler } from '../interfaces';
 
 export abstract class BaseSmsHandler implements ISmsHandler {
   protected provider: ISmsProvider;
 
   protected constructor(
-    private providerId: string,
+    private providerId: SmsProviderIdEnum,
     private channelType: string
   ) {}
 
@@ -25,7 +25,9 @@ export abstract class BaseSmsHandler implements ISmsHandler {
       );
     }
 
-    return await this.provider.sendMessage(options);
+    const { bridgeProviderData, ...otherOptions } = options;
+
+    return await this.provider.sendMessage(otherOptions, bridgeProviderData);
   }
 
   abstract buildProvider(credentials: ICredentials);
