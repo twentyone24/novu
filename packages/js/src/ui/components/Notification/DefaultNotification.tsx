@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { JSX, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, JSX, Show } from 'solid-js';
 import type { Notification } from '../../../notifications';
 import { ActionTypeEnum } from '../../../types';
 import { useInboxContext, useLocalization } from '../../context';
@@ -21,6 +21,20 @@ export const DefaultNotification = (props: DefaultNotificationProps) => {
   const style = useStyle();
   const { t, locale } = useLocalization();
   const { status } = useInboxContext();
+  const [minutesPassed, setMinutesPassed] = createSignal(0);
+  const date = createMemo(() => {
+    minutesPassed(); //register as dep
+
+    return formatToRelativeTime({ fromDate: new Date(props.notification.createdAt), locale: locale() });
+  });
+
+  createEffect(() => {
+    const interval = setInterval(() => {
+      setMinutesPassed((prev) => prev + 1);
+    }, 1000 * 60);
+
+    return () => clearInterval(interval);
+  });
 
   const handleNotificationClick: JSX.EventHandlerUnion<HTMLAnchorElement, MouseEvent> = (e) => {
     e.stopPropagation();
@@ -30,7 +44,7 @@ export const DefaultNotification = (props: DefaultNotificationProps) => {
       props.notification.read();
     }
 
-    props.onNotificationClick?.({ notification: props.notification });
+    props.onNotificationClick?.(props.notification);
     if (props.notification.redirect?.url) {
       window.open(props.notification.redirect?.url, '_blank', 'noreferrer noopener');
     }
@@ -41,10 +55,10 @@ export const DefaultNotification = (props: DefaultNotificationProps) => {
 
     if (action === ActionTypeEnum.PRIMARY) {
       props.notification.completePrimary();
-      props.onPrimaryActionClick?.({ notification: props.notification });
+      props.onPrimaryActionClick?.(props.notification);
     } else {
       props.notification.completeSecondary();
-      props.onSecondaryActionClick?.({ notification: props.notification });
+      props.onSecondaryActionClick?.(props.notification);
     }
   };
 
@@ -79,7 +93,7 @@ export const DefaultNotification = (props: DefaultNotificationProps) => {
               nt-float-right nt-text-right group-hover:nt-opacity-0`
             )}
           >
-            {formatToRelativeTime({ fromDate: new Date(props.notification.createdAt), locale: locale() })}
+            {date()}
           </p>
           <div
             class={style(
