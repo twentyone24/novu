@@ -1,17 +1,17 @@
 import { createMemo, For, JSX, Show } from 'solid-js';
 import type { NotificationFilter } from '../../../types';
 import { useNotificationsInfiniteScroll } from '../../api';
-import { useLocalization, useNewMessagesCount } from '../../context';
+import { useNewMessagesCount } from '../../context';
 import { useStyle } from '../../helpers';
 import { EmptyIcon } from '../../icons/EmptyIcon';
 import type { NotificationActionClickHandler, NotificationClickHandler, NotificationMounter } from '../../types';
+import { Localized } from '../primitives/Localized';
 import { NewMessagesCta } from './NewMessagesCta';
 import { Notification } from './Notification';
 import { NotificationListSkeleton, NotificationSkeleton } from './NotificationListSkeleton';
 
 const EmptyNotificationList = () => {
   const style = useStyle();
-  const { t } = useLocalization();
 
   return (
     <div
@@ -21,7 +21,9 @@ const EmptyNotificationList = () => {
       )}
     >
       <EmptyIcon class={style('notificationListEmptyNoticeIcon')} />
-      <p class={style('notificationListEmptyNotice')}>{t('notifications.emptyNotice')}</p>
+      <p class={style('notificationListEmptyNotice')}>
+        <Localized localizationKey="notifications.emptyNotice" />
+      </p>
     </div>
   );
 };

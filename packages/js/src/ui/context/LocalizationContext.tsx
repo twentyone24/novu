@@ -1,17 +1,47 @@
 import { Accessor, createContext, createMemo, ParentProps, useContext } from 'solid-js';
-import { defaultLocalization } from '../config/defaultLocalization';
-import type { Localization, LocalizationKey } from '../types';
+import { defaultLocalization, dynamicLocalization } from '../config/defaultLocalization';
 
-type LocalizationValue<K extends LocalizationKey> = (typeof defaultLocalization)[K];
-type LocalizationParams<K extends LocalizationKey> = LocalizationValue<K> extends (args: infer P) => any
-  ? P
+type DefaultLocalizationKey = keyof typeof defaultLocalization;
+// eslint-disable-next-line @typescript-eslint/ban-types
+export type LocalizationKey = DefaultLocalizationKey;
+
+export type FunctionLocalizationKey = {
+  [K in DefaultLocalizationKey]: (typeof defaultLocalization)[K] extends (...args: any[]) => any ? K : never;
+}[DefaultLocalizationKey];
+
+export type StringLocalizationKey = {
+  [K in DefaultLocalizationKey]: (typeof defaultLocalization)[K] extends string ? K : never;
+}[DefaultLocalizationKey];
+
+export type LocalizationValueOverride<K extends LocalizationKey> = K extends FunctionLocalizationKey
+  ? (...args: Parameters<(typeof defaultLocalization)[K]>) => ReturnType<(typeof defaultLocalization)[K]>
+  : K extends StringLocalizationKey
+  ? string
+  : string; // Allow any string value for arbitrary keys
+
+export type Localization = {
+  [K in DefaultLocalizationKey]?: (typeof defaultLocalization)[K] extends (...args: infer P) => any
+    ? ((...args: P) => ReturnType<(typeof defaultLocalization)[K]>) | string
+    : string;
+} & {
+  dynamic?: Record<string, string>;
+};
+
+export type TranslateFunctionArg<K extends LocalizationKey> = K extends keyof typeof defaultLocalization
+  ? (typeof defaultLocalization)[K] extends (arg: infer A) => any
+    ? A
+    : undefined
   : undefined;
 
+export type TranslateFunction = <K extends LocalizationKey>(
+  key: K,
+  ...args: TranslateFunctionArg<K> extends undefined
+    ? [undefined?] // No arguments needed if TranslateFunctionArg<K> is undefined
+    : [TranslateFunctionArg<K>] // A single argument is required if TranslateFunctionArg<K> is defined
+) => string;
+
 type LocalizationContextType = {
-  t: <K extends LocalizationKey>(
-    key: K,
-    ...args: LocalizationParams<K> extends undefined ? [] : [LocalizationParams<K>]
-  ) => string;
+  t: TranslateFunction;
   locale: Accessor<string>;
 };
 
@@ -20,18 +50,33 @@ const LocalizationContext = createContext<LocalizationContextType | undefined>(u
 type LocalizationProviderProps = ParentProps & { localization?: Localization };
 
 export const LocalizationProvider = (props: LocalizationProviderProps) => {
-  const localization = createMemo(() => ({ ...defaultLocalization, ...(props.localization || {}) }));
+  const splitLocalization = createMemo(() => {
+    const { dynamic, ...rest } = props.localization || {};
+
+    return { dynamic: dynamic || {}, localizationObject: rest };
+  });
+  // eslint-disable-next-line @typescript-eslint/ban-types
+  const localization = createMemo<Record<string, string | Function>>(() => {
+    const { dynamic, localizationObject } = splitLocalization();
+
+    return {
+      ...defaultLocalization,
+      ...dynamicLocalization(),
+      ...dynamic,
+      ...localizationObject,
+    };
+  });
 
   const t: LocalizationContextType['t'] = (key, ...args) => {
     const value = localization()[key];
     if (typeof value === 'function') {
-      return (value as (args: LocalizationParams<typeof key>) => string)(args[0]!);
+      return value(args[0]);
     }
 
     return value as string;
   };
 
-  const locale = createMemo(() => localization().locale);
+  const locale = createMemo(() => localization().locale as string);
 
   return (
     <LocalizationContext.Provider

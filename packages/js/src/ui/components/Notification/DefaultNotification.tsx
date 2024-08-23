@@ -7,6 +7,7 @@ import { Archive, ReadAll, Unarchive, Unread } from '../../icons';
 import type { NotificationActionClickHandler, NotificationClickHandler } from '../../types';
 import { NotificationStatus } from '../../types';
 import { Button } from '../primitives';
+import { Localized } from '../primitives/Localized';
 import { Tooltip } from '../primitives/Tooltip';
 
 type DefaultNotificationProps = {
@@ -18,7 +19,7 @@ type DefaultNotificationProps = {
 
 export const DefaultNotification = (props: DefaultNotificationProps) => {
   const style = useStyle();
-  const { t, locale } = useLocalization();
+  const { locale } = useLocalization();
   const { status } = useInboxContext();
   const [minutesPassed, setMinutesPassed] = createSignal(0);
   const date = createMemo(() => {
@@ -127,7 +128,9 @@ export const DefaultNotification = (props: DefaultNotificationProps) => {
                         </Button>
                       )}
                     />
-                    <Tooltip.Content>{t('notification.actions.read.toolTip')}</Tooltip.Content>
+                    <Tooltip.Content>
+                      <Localized localizationKey="notification.actions.read.toolTip" />
+                    </Tooltip.Content>
                   </Tooltip.Root>
                 }
               >
@@ -149,7 +152,9 @@ export const DefaultNotification = (props: DefaultNotificationProps) => {
                       </Button>
                     )}
                   />
-                  <Tooltip.Content>{t('notification.actions.unread.toolTip')}</Tooltip.Content>
+                  <Tooltip.Content>
+                    <Localized localizationKey="notification.actions.unread.toolTip" />
+                  </Tooltip.Content>
                 </Tooltip.Root>
               </Show>
             </Show>
@@ -174,7 +179,9 @@ export const DefaultNotification = (props: DefaultNotificationProps) => {
                       </Button>
                     )}
                   />
-                  <Tooltip.Content>{t('notification.actions.archive.toolTip')}</Tooltip.Content>
+                  <Tooltip.Content>
+                    <Localized localizationKey="notification.actions.archive.toolTip" />
+                  </Tooltip.Content>
                 </Tooltip.Root>
               }
             >
@@ -196,7 +203,9 @@ export const DefaultNotification = (props: DefaultNotificationProps) => {
                     </Button>
                   )}
                 />
-                <Tooltip.Content>{t('notification.actions.unarchive.toolTip')}</Tooltip.Content>
+                <Tooltip.Content>
+                  <Localized localizationKey="notification.actions.unarchive.toolTip" />
+                </Tooltip.Content>
               </Tooltip.Root>
             </Show>
           </div>

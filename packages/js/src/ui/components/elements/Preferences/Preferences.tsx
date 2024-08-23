@@ -1,9 +1,11 @@
-import { createMemo, createSignal, For, Show } from 'solid-js';
-import { useLocalization } from 'src/ui/context';
+import { createEffect, createMemo, createSignal, For, Show } from 'solid-js';
 import { ChannelPreference, ChannelType, PreferenceLevel } from '../../../../types';
 import { usePreferences } from '../../../api';
+import { setDynamicLocalization } from '../../../config';
+import { StringLocalizationKey } from '../../../context';
 import { useStyle } from '../../../helpers';
 import { ArrowDropDown, Lock } from '../../../icons';
+import { Localized } from '../../primitives/Localized';
 import { Tooltip } from '../../primitives/Tooltip';
 import { ChannelRow, getLabel } from './ChannelRow';
 import { LoadingScreen } from './LoadingScreen';
@@ -11,7 +13,6 @@ import { LoadingScreen } from './LoadingScreen';
 /* This is also going to be exported as a separate component. Keep it pure. */
 export const Preferences = () => {
   const style = useStyle();
-  const { t } = useLocalization();
 
   const { preferences, loading, mutate } = usePreferences();
 
@@ -20,6 +21,18 @@ export const Preferences = () => {
     const workflowPreferences = preferences()?.filter((preference) => preference.level === PreferenceLevel.TEMPLATE);
 
     return { globalPreference, workflowPreferences };
+  });
+
+  createEffect(() => {
+    // Register the names as localizable
+    setDynamicLocalization((prev) => ({
+      ...prev,
+      ...allPreferences().workflowPreferences?.reduce<Record<string, string>>((acc, preference) => {
+        acc[preference.workflow!.id] = preference.workflow!.name;
+
+        return acc;
+      }, {}),
+    }));
   });
 
   const optimisticUpdate = ({
@@ -54,7 +67,7 @@ export const Preferences = () => {
       </Show>
       <Show when={!loading() && preferences()}>
         <PreferencesRow
-          label={t('preferences.global')}
+          localizationKey="preferences.global"
           channels={allPreferences().globalPreference?.channels || {}}
           onChange={optimisticUpdate}
         />
@@ -62,7 +75,7 @@ export const Preferences = () => {
         <For each={allPreferences().workflowPreferences}>
           {(preference) => (
             <PreferencesRow
-              label={preference.workflow?.name as string}
+              localizationKey={preference.workflow!.id as StringLocalizationKey}
               channels={preference.channels}
               workflowId={preference.workflow?.id}
               onChange={optimisticUpdate}
@@ -113,7 +126,7 @@ const ChannelsLabel = (props: { channels: ChannelPreference }) => {
 };
 
 const PreferencesRow = (props: {
-  label: string;
+  localizationKey: StringLocalizationKey;
   channels: ChannelPreference;
   workflowId?: string;
   onChange: ({ channel, enabled, workflowId }: { workflowId?: string; channel: ChannelType; enabled: boolean }) => void;
@@ -121,7 +134,6 @@ const PreferencesRow = (props: {
 }) => {
   const [isOpen, setIsOpen] = createSignal(false);
   const style = useStyle();
-  const { t } = useLocalization();
 
   const channels = createMemo(() => Object.keys(props.channels || {}));
 
@@ -166,10 +178,12 @@ const PreferencesRow = (props: {
                       </span>
                     )}
                   />
-                  <Tooltip.Content>{t('preferences.workflow.disabled.tooltip')}</Tooltip.Content>
+                  <Tooltip.Content>
+                    <Localized localizationKey="preferences.workflow.disabled.tooltip" />
+                  </Tooltip.Content>
                 </Tooltip.Root>
               </Show>
-              {props.label}
+              <Localized localizationKey={props.localizationKey as StringLocalizationKey} />
             </div>
             <ChannelsLabel channels={props.channels} />
           </div>
@@ -193,7 +207,7 @@ const PreferencesRow = (props: {
                   'nt-text-sm nt-text-foreground-alpha-600 nt-text-start'
                 )}
               >
-                {t('preferences.workflow.disabled.notice')}
+                <Localized localizationKey="preferences.workflow.disabled.notice" />
               </span>
             </Show>
             <For each={channels()}>

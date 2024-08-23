@@ -1,3 +1,5 @@
+import { createSignal } from 'solid-js';
+
 export const defaultLocalization = {
   locale: 'en-US',
   'inbox.status.options.unread': 'Unread only',
@@ -24,3 +26,5 @@ export const defaultLocalization = {
     'Contact admin to enable subscription management for this critical notification.',
   'preferences.workflow.disabled.tooltip': 'Contact admin to edit',
 } as const;
+
+export const [dynamicLocalization, setDynamicLocalization] = createSignal<Record<string, string>>({});

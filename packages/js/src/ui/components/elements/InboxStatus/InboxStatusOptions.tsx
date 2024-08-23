@@ -1,10 +1,11 @@
 import { For, Show } from 'solid-js';
 import { JSX } from 'solid-js/jsx-runtime';
-import { useLocalization } from '../../../context';
+import { StringLocalizationKey } from '../../../context';
 import { cn, useStyle } from '../../../helpers';
 import { Archive, Check, Inbox, Unread } from '../../../icons';
 import { NotificationStatus } from '../../../types';
 import { Dropdown, dropdownItemVariants } from '../../primitives/Dropdown';
+import { Localized } from '../../primitives/Localized';
 import { notificationStatusOptionsLocalizationKeys } from './constants';
 
 const cases = [
@@ -26,13 +27,11 @@ export const StatusOptions = (props: {
   setStatus: (status: NotificationStatus) => void;
   status: NotificationStatus;
 }) => {
-  const { t } = useLocalization();
-
   return (
     <For each={cases}>
       {(c) => (
         <StatusItem
-          label={t(notificationStatusOptionsLocalizationKeys[c.status])}
+          localizationKey={notificationStatusOptionsLocalizationKeys[c.status]}
           onClick={() => {
             props.setStatus(c.status);
           }}
@@ -45,7 +44,7 @@ export const StatusOptions = (props: {
 };
 
 export const StatusItem = (props: {
-  label: string;
+  localizationKey: StringLocalizationKey;
   onClick: () => void;
   isSelected?: boolean;
   icon: () => JSX.Element;
@@ -59,7 +58,9 @@ export const StatusItem = (props: {
     >
       <span class={style('inboxStatus__dropdownItemLabelContainer', 'nt-flex nt-gap-2 nt-items-center')}>
         <span class={style('inboxStatus__dropdownItemLeft__icon')}>{props.icon()}</span>
-        <span class={style('inboxStatus__dropdownItemLabel')}>{props.label}</span>
+        <span class={style('inboxStatus__dropdownItemLabel')}>
+          <Localized localizationKey={props.localizationKey} />
+        </span>
       </span>
       <Show when={props.isSelected}>
         <span class={style('inboxStatus__dropdownItemRight__icon')}>
