@@ -216,6 +216,90 @@ const notificationTemplateSchema = new Schema<NotificationTemplateDBModel>(
     data: Schema.Types.Mixed,
     rawData: Schema.Types.Mixed,
     payloadSchema: Schema.Types.Mixed,
+    preference: {
+      channels: {
+        email: {
+          default: {
+            type: Schema.Types.Boolean,
+            default: true,
+          },
+          readOnly: {
+            editor: {
+              type: Schema.Types.Boolean,
+              default: false,
+            },
+            subscriber: {
+              type: Schema.Types.Boolean,
+              default: false,
+            },
+          },
+        },
+        sms: {
+          default: {
+            type: Schema.Types.Boolean,
+            default: true,
+          },
+          readOnly: {
+            editor: {
+              type: Schema.Types.Boolean,
+              default: false,
+            },
+            subscriber: {
+              type: Schema.Types.Boolean,
+              default: false,
+            },
+          },
+        },
+        in_app: {
+          default: {
+            type: Schema.Types.Boolean,
+            default: true,
+          },
+          readOnly: {
+            editor: {
+              type: Schema.Types.Boolean,
+              default: false,
+            },
+            subscriber: {
+              type: Schema.Types.Boolean,
+              default: false,
+            },
+          },
+        },
+        chat: {
+          default: {
+            type: Schema.Types.Boolean,
+            default: true,
+          },
+          readOnly: {
+            editor: {
+              type: Schema.Types.Boolean,
+              default: false,
+            },
+            subscriber: {
+              type: Schema.Types.Boolean,
+              default: false,
+            },
+          },
+        },
+        push: {
+          default: {
+            type: Schema.Types.Boolean,
+            default: true,
+          },
+          readOnly: {
+            editor: {
+              type: Schema.Types.Boolean,
+              default: false,
+            },
+            subscriber: {
+              type: Schema.Types.Boolean,
+              default: false,
+            },
+          },
+        },
+      },
+    },
   },
   { ...schemaOptions, minimize: false }
 );

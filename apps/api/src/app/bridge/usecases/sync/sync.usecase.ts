@@ -121,6 +121,8 @@ export class Sync {
   private async createWorkflows(command: SyncCommand, workflows: DiscoverWorkflowOutput[]) {
     return Promise.all(
       workflows.map(async (workflow) => {
+        workflow.preference;
+
         const workflowExist = await this.notificationTemplateRepository.findByTriggerIdentifier(
           command.environmentId,
           workflow.workflowId
@@ -152,6 +154,7 @@ export class Sync {
               active: this.castToAnyNotSupportedParam(workflow.options)?.active ?? true,
               critical: this.castToAnyNotSupportedParam(workflow.options)?.critical ?? false,
               preferenceSettings: this.castToAnyNotSupportedParam(workflow.options)?.preferenceSettings,
+              preference: workflow.preference,
             })
           );
         } else {
