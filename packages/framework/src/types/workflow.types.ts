@@ -33,13 +33,14 @@ export type Execute<T_Payload extends Record<string, unknown>, T_Controls extend
   event: ExecuteInput<T_Payload, T_Controls>
 ) => Promise<void>;
 
-export type ChannelPreferenceEditableSpaces = 'dashboard' | 'subscriber';
-
 export type WorkflowOptionsPreference = {
   channels?: {
     [key in (typeof ChannelTypeEnum)[keyof typeof ChannelTypeEnum]]?: {
-      enabled?: boolean;
-      editable?: boolean | ChannelPreferenceEditableSpaces[];
+      default?: boolean;
+      readOnly?: {
+        editor?: boolean;
+        subscriber?: boolean;
+      };
     };
   };
 };

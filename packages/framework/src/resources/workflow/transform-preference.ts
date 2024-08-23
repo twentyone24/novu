@@ -1,32 +1,30 @@
 import { ChannelTypeEnum } from '@novu/shared';
-import type {
-  WorkflowOptionsPreference,
-  DiscoverWorkflowOutputPreference,
-  ChannelPreferenceEditableSpaces,
-  ChannelPreference,
-} from '../../types';
+import type { WorkflowOptionsPreference, DiscoverWorkflowOutputPreference, ChannelPreference } from '../../types';
 
 export function transformPreference(preference?: WorkflowOptionsPreference): DiscoverWorkflowOutputPreference {
   const setChannel = (channelType: ChannelTypeEnum): ChannelPreference => {
-    const enabled: boolean =
-      preference?.channels?.[channelType]?.enabled !== undefined
-        ? (preference?.channels?.[channelType]?.enabled as boolean)
+    const defaultValue: boolean =
+      preference?.channels?.[channelType]?.default !== undefined
+        ? (preference?.channels?.[channelType]?.default as boolean)
         : true;
-    let editable: ChannelPreferenceEditableSpaces[] = ['dashboard', 'subscriber'];
+    const readOnly: ChannelPreference['readOnly'] = {
+      editor: false,
+      subscriber: false,
+    };
 
-    if (preference?.channels?.[channelType]?.editable) {
-      if (preference?.channels?.[channelType]?.editable === false) {
-        editable = [];
+    if (preference?.channels?.[channelType]?.readOnly) {
+      if (preference?.channels?.[channelType]?.readOnly?.editor !== undefined) {
+        readOnly.editor = preference?.channels?.[channelType]?.readOnly?.editor as boolean;
       }
 
-      if (Array.isArray(preference?.channels?.[channelType]?.editable)) {
-        editable = preference?.channels?.[channelType]?.editable as ChannelPreferenceEditableSpaces[];
+      if (preference?.channels?.[channelType]?.readOnly?.subscriber !== undefined) {
+        readOnly.subscriber = preference?.channels?.[channelType]?.readOnly?.subscriber as boolean;
       }
     }
 
     return {
-      enabled,
-      editable,
+      default: defaultValue,
+      readOnly,
     };
   };
 

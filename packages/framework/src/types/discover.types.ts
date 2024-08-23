@@ -1,7 +1,7 @@
 import { ActionStepEnum, ChannelStepEnum } from '../constants';
 import type { JsonSchema, Schema } from './schema.types';
 import type { StepOptions } from './step.types';
-import type { ChannelPreferenceEditableSpaces, Execute, WorkflowOptions } from './workflow.types';
+import type { Execute, WorkflowOptions } from './workflow.types';
 import type { Awaitable, Prettify } from './util.types';
 import type { EventTriggerParams, EventTriggerResult } from './event.types';
 import type { WithPassthrough } from './provider.types';
@@ -51,8 +51,11 @@ export type DiscoverStepOutput = {
 };
 
 export type ChannelPreference = {
-  enabled: boolean;
-  editable: ChannelPreferenceEditableSpaces[];
+  default: boolean;
+  readOnly: {
+    editor: boolean;
+    subscriber: boolean;
+  };
 };
 
 export type DiscoverWorkflowOutputPreference = {
