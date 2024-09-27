@@ -17,6 +17,10 @@
       "path": "apps/web"
     },
     {
+      "name": "🚀 @novu/dashboard",
+      "path": "apps/dashboard"
+    },
+    {
       "name": "🚀 @novu/ws",
       "path": "apps/ws"
     },
@@ -58,7 +62,7 @@
     },
     {
       "name": "📦 @novu/shared",
-      "path": "libs/shared"
+      "path": "packages/shared"
     },
     {
       "name": "📦 @novu/testing",

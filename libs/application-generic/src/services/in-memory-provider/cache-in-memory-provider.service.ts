@@ -29,7 +29,7 @@ export class CacheInMemoryProviderService {
     this.inMemoryProviderService = new InMemoryProviderService(
       provider,
       this.isCluster,
-      enableAutoPipelining
+      enableAutoPipelining,
     );
   }
 
@@ -42,7 +42,7 @@ export class CacheInMemoryProviderService {
    * mapping in the /in-memory-provider/providers/index.ts
    */
   private selectProvider(): InMemoryProviderEnum {
-    if (process.env.IS_DOCKER_HOSTED) {
+    if (process.env.IS_SELF_HOSTED) {
       return InMemoryProviderEnum.REDIS;
     }
 
@@ -60,9 +60,9 @@ export class CacheInMemoryProviderService {
       this.descriptiveLogMessage(
         `Cluster mode ${
           isClusterModeEnabled ? 'IS' : 'IS NOT'
-        } enabled for ${LOG_CONTEXT}`
+        } enabled for ${LOG_CONTEXT}`,
       ),
-      LOG_CONTEXT
+      LOG_CONTEXT,
     );
 
     return isClusterModeEnabled;

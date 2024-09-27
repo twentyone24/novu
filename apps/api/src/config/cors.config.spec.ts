@@ -1,6 +1,6 @@
-import { corsOptionsDelegate, isPermittedDeployPreviewOrigin } from './cors.config';
 import { spy } from 'sinon';
 import { expect } from 'chai';
+import { corsOptionsDelegate, isPermittedDeployPreviewOrigin } from './cors.config';
 
 describe('CORS Configuration', () => {
   describe('Local Environment', () => {
@@ -15,7 +15,7 @@ describe('CORS Configuration', () => {
     it('should allow all origins', () => {
       const callbackSpy = spy();
 
-      // @ts-ignore
+      // @ts-expect-error - corsOptionsDelegate is not typed correctly
       corsOptionsDelegate({ url: '/v1/test' }, callbackSpy);
 
       expect(callbackSpy.calledOnce).to.be.ok;
@@ -25,12 +25,11 @@ describe('CORS Configuration', () => {
   });
 
   (['dev', 'production'] as const).forEach((environment) => {
-    describe(environment + ' Environment CORS Configuration', () => {
+    describe(`${environment} Environment CORS Configuration`, () => {
       beforeEach(() => {
         process.env.NODE_ENV = environment;
 
         process.env.FRONT_BASE_URL = 'https://test.com';
-        process.env.LEGACY_V1_FRONT_BASE_URL = 'https://test-legacy.com';
         process.env.LEGACY_STAGING_DASHBOARD_URL = 'https://test-legacy-staging-dashboard.com';
         process.env.WIDGET_BASE_URL = 'https://widget.com';
         process.env.PR_PREVIEW_ROOT_URL = 'https://pr-preview.com';
@@ -43,22 +42,21 @@ describe('CORS Configuration', () => {
       it('should allow only front base url and widget url', () => {
         const callbackSpy = spy();
 
-        // @ts-ignore
+        // @ts-expect-error - corsOptionsDelegate is not typed correctly
         corsOptionsDelegate({ url: '/v1/test' }, callbackSpy);
 
         expect(callbackSpy.calledOnce).to.be.ok;
         expect(callbackSpy.firstCall.firstArg).to.be.null;
-        expect(callbackSpy.firstCall.lastArg.origin.length).to.equal(4);
-        expect(callbackSpy.firstCall.lastArg.origin[0]).to.equal('https://test.com');
-        expect(callbackSpy.firstCall.lastArg.origin[1]).to.equal('https://test-legacy.com');
-        expect(callbackSpy.firstCall.lastArg.origin[2]).to.equal('https://test-legacy-staging-dashboard.com');
-        expect(callbackSpy.firstCall.lastArg.origin[3]).to.equal('https://widget.com');
+        expect(callbackSpy.firstCall.lastArg.origin.length).to.equal(3);
+        expect(callbackSpy.firstCall.lastArg.origin[0]).to.equal(process.env.FRONT_BASE_URL);
+        expect(callbackSpy.firstCall.lastArg.origin[1]).to.equal(process.env.LEGACY_STAGING_DASHBOARD_URL);
+        expect(callbackSpy.firstCall.lastArg.origin[2]).to.equal(process.env.WIDGET_BASE_URL);
       });
 
       it('widget routes should be wildcarded', () => {
         const callbackSpy = spy();
 
-        // @ts-ignore
+        // @ts-expect-error - corsOptionsDelegate is not typed correctly
         corsOptionsDelegate({ url: '/v1/widgets/test' }, callbackSpy);
 
         expect(callbackSpy.calledOnce).to.be.ok;
@@ -69,7 +67,7 @@ describe('CORS Configuration', () => {
       it('inbox routes should be wildcarded', () => {
         const callbackSpy = spy();
 
-        // @ts-ignore
+        // @ts-expect-error - corsOptionsDelegate is not typed correctly
         corsOptionsDelegate({ url: '/v1/inbox/session' }, callbackSpy);
 
         expect(callbackSpy.calledOnce).to.be.ok;
@@ -81,12 +79,12 @@ describe('CORS Configuration', () => {
         it('should allow all origins for dev environment from pr preview', () => {
           const callbackSpy = spy();
 
-          // @ts-ignore
+          // @ts-expect-error - corsOptionsDelegate is not typed correctly
           corsOptionsDelegate(
             {
               url: '/v1/test',
               headers: {
-                origin: 'https://test--' + process.env.PR_PREVIEW_ROOT_URL,
+                origin: `https://test--${process.env.PR_PREVIEW_ROOT_URL}`,
               },
             },
             callbackSpy
@@ -125,7 +123,7 @@ describe('CORS Configuration', () => {
     it('should return true for origin matching PR_PREVIEW_ROOT_URL', () => {
       process.env.NODE_ENV = 'dev';
       process.env.PR_PREVIEW_ROOT_URL = 'https://pr-preview.com';
-      expect(isPermittedDeployPreviewOrigin('https://netlify-' + 'https://pr-preview.com')).to.be.true;
+      expect(isPermittedDeployPreviewOrigin('https://netlify-https://pr-preview.com')).to.be.true;
     });
   });
 });

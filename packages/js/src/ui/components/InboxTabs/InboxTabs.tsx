@@ -1,9 +1,15 @@
 /* eslint-disable local-rules/no-class-without-style */
 import { createMemo, For, Show } from 'solid-js';
-import { useInboxContext, useUnreadCounts } from '../../../ui/context';
-import { cn, useStyle } from '../../helpers';
-import { Check, DotsMenu } from '../../icons';
-import { NotificationStatus, Tab } from '../../types';
+import { useInboxContext, useUnreadCounts } from '../../context';
+import { cn, getTagsFromTab, useStyle } from '../../helpers';
+import { Check, Dots } from '../../icons';
+import {
+  NotificationActionClickHandler,
+  NotificationClickHandler,
+  NotificationRenderer,
+  NotificationStatus,
+  Tab,
+} from '../../types';
 import { NotificationList } from '../Notification';
 import { Button, Dropdown, Tabs } from '../primitives';
 import { tabsRootVariants } from '../primitives/Tabs/TabsRoot';
@@ -15,6 +21,10 @@ const tabsDropdownTriggerVariants = () =>
   `after:nt-w-full after:nt-h-[2px] after:nt-border-b-2 nt-pb-[0.625rem]`;
 
 type InboxTabsProps = {
+  renderNotification?: NotificationRenderer;
+  onNotificationClick?: NotificationClickHandler;
+  onPrimaryActionClick?: NotificationActionClickHandler;
+  onSecondaryActionClick?: NotificationActionClickHandler;
   tabs: Array<Tab>;
 };
 
@@ -22,12 +32,14 @@ export const InboxTabs = (props: InboxTabsProps) => {
   const style = useStyle();
   const { activeTab, status, setActiveTab, filter } = useInboxContext();
   const { dropdownTabs, setTabsList, visibleTabs } = useTabsDropdown({ tabs: props.tabs });
-  const dropdownTabsUnreadCounts = useUnreadCounts({ filters: dropdownTabs().map((tab) => ({ tags: tab.value })) });
+  const dropdownTabsUnreadCounts = useUnreadCounts({
+    filters: dropdownTabs().map((tab) => ({ tags: getTagsFromTab(tab) })),
+  });
 
   const options = createMemo(() =>
     dropdownTabs().map((tab) => ({
       ...tab,
-      rightIcon: tab.label === activeTab() ? <Check class={style('moreTabs__dropdownItemRightIcon')} /> : undefined,
+      rightIcon: tab.label === activeTab() ? <Check class={style('moreTabs__dropdownItemRight__icon')} /> : undefined,
     }))
   );
   const dropdownTabsUnreadSum = createMemo(() =>
@@ -77,7 +89,7 @@ export const InboxTabs = (props: InboxTabsProps) => {
                         : 'after:nt-border-b-transparent nt-text-foreground-alpha-600'
                     )}
                   >
-                    <DotsMenu appearanceKey="moreTabs__dots" />
+                    <Dots class={style('moreTabs__dots')} />
                     <Show when={status() !== NotificationStatus.ARCHIVED && dropdownTabsUnreadSum()}>
                       <InboxTabUnreadNotificationsCount count={dropdownTabsUnreadSum()} />
                     </Show>
@@ -101,7 +113,13 @@ export const InboxTabs = (props: InboxTabsProps) => {
             cn(activeTab() === tab.label ? 'nt-block' : 'nt-hidden', 'nt-flex-1 nt-overflow-hidden')
           )}
         >
-          <NotificationList filter={{ ...filter(), tags: tab.value }} />
+          <NotificationList
+            renderNotification={props.renderNotification}
+            onNotificationClick={props.onNotificationClick}
+            onPrimaryActionClick={props.onPrimaryActionClick}
+            onSecondaryActionClick={props.onSecondaryActionClick}
+            filter={{ ...filter(), tags: getTagsFromTab(tab) }}
+          />
         </Tabs.Content>
       ))}
     </Tabs.Root>

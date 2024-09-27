@@ -47,7 +47,6 @@ export const envValidators = {
   NOTIFICATION_RETENTION_DAYS: num({ default: DEFAULT_NOTIFICATION_RETENTION_DAYS }),
   MESSAGE_GENERIC_RETENTION_DAYS: num({ default: DEFAULT_MESSAGE_GENERIC_RETENTION_DAYS }),
   MESSAGE_IN_APP_RETENTION_DAYS: num({ default: DEFAULT_MESSAGE_IN_APP_RETENTION_DAYS }),
-  LEGACY_V1_FRONT_BASE_URL: url({ default: undefined }),
   LEGACY_STAGING_DASHBOARD_URL: url({ default: undefined }),
   API_ROOT_URL: url({ default: undefined }),
   NOVU_INVITE_TEAM_MEMBER_NUDGE_TRIGGER_IDENTIFIER: str({ default: undefined }),
@@ -55,12 +54,15 @@ export const envValidators = {
   HUBSPOT_PRIVATE_APP_ACCESS_TOKEN: str({ default: undefined }),
 
   // Feature Flags
-  ...Object.keys(FeatureFlagsKeysEnum).reduce((acc, key) => {
-    return {
-      ...acc,
-      [key as FeatureFlagsKeysEnum]: bool({ default: false }),
-    };
-  }, {} as Record<FeatureFlagsKeysEnum, ValidatorSpec<boolean>>),
+  ...Object.keys(FeatureFlagsKeysEnum).reduce(
+    (acc, key) => {
+      return {
+        ...acc,
+        [key as FeatureFlagsKeysEnum]: bool({ default: false }),
+      };
+    },
+    {} as Record<FeatureFlagsKeysEnum, ValidatorSpec<boolean>>
+  ),
 
   // Azure validators
   ...(processEnv.STORAGE_SERVICE === 'AZURE' && {

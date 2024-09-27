@@ -1,22 +1,25 @@
 import React from 'react';
-import { useRenderer } from '../context/RenderContext';
 import { Mounter } from './Mounter';
 import { BellRenderer } from '../utils/types';
+import { withRenderer } from './Renderer';
+import { useNovuUI } from '../context/NovuUIContext';
+import { useRenderer } from '../context/RendererContext';
 
 export type BellProps = {
   renderBell?: BellRenderer;
 };
 
-export const Bell = React.memo((props: BellProps) => {
+const _Bell = React.memo((props: BellProps) => {
   const { renderBell } = props;
-  const { novuUI, mountElement } = useRenderer();
+  const { novuUI } = useNovuUI();
+  const { mountElement } = useRenderer();
 
   const mount = React.useCallback(
     (element: HTMLElement) => {
       return novuUI.mountComponent({
         name: 'Bell',
         element,
-        props: renderBell ? { mountBell: (el, unreadCount) => mountElement(el, renderBell(unreadCount)) } : undefined,
+        props: renderBell ? { renderBell: (el, unreadCount) => mountElement(el, renderBell(unreadCount)) } : undefined,
       });
     },
     [renderBell]
@@ -24,3 +27,5 @@ export const Bell = React.memo((props: BellProps) => {
 
   return <Mounter mount={mount} />;
 });
+
+export const Bell = withRenderer(_Bell);

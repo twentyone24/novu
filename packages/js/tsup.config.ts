@@ -1,7 +1,7 @@
-import fs from 'fs';
-import path from 'path';
 import { compress } from 'esbuild-plugin-compress';
 import { solidPlugin } from 'esbuild-plugin-solid';
+import fs from 'fs';
+import path from 'path';
 import postcss from 'postcss';
 import loadPostcssConfig from 'postcss-load-config';
 import { defineConfig, Options } from 'tsup';
@@ -43,14 +43,11 @@ const baseConfig: Options = {
 const baseModuleConfig: Options = {
   ...baseConfig,
   treeshake: true,
+  dts: true,
   entry: {
     index: './src/index.ts',
     'ui/index': './src/ui/index.ts',
-  },
-  outExtension: ({ format }) => {
-    return {
-      js: format === 'cjs' ? '.cjs' : '.mjs',
-    };
+    'themes/index': './src/ui/themes/index.ts',
   },
 };
 
@@ -94,5 +91,5 @@ export default defineConfig((config: Options) => {
     onSuccess: async () => await buildCSS(),
   };
 
-  return runAfterLast(['pnpm run build:declarations', copyPackageJson('esm'), copyPackageJson('cjs')])(umd, esm, cjs);
+  return runAfterLast([copyPackageJson('esm'), copyPackageJson('cjs')])(umd, esm, cjs);
 });

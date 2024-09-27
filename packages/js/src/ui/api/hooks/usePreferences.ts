@@ -1,13 +1,15 @@
-import { createResource } from 'solid-js';
+import { createEffect, createResource, createSignal, onCleanup, onMount } from 'solid-js';
+import { Preference } from '../../../preferences/preference';
 import { FetchPreferencesArgs } from '../../../preferences/types';
 import { useNovu } from '../../context';
 
 export const usePreferences = (options?: FetchPreferencesArgs) => {
   const novu = useNovu();
 
-  const [preferences, { mutate, refetch }] = createResource(options || {}, async () => {
+  const [loading, setLoading] = createSignal(true);
+  const [preferences, { mutate, refetch }] = createResource(options || {}, async ({ tags }) => {
     try {
-      const response = await novu.preferences.list();
+      const response = await novu.preferences.list({ tags });
 
       return response.data;
     } catch (error) {
@@ -16,5 +18,23 @@ export const usePreferences = (options?: FetchPreferencesArgs) => {
     }
   });
 
-  return { preferences, mutate, refetch };
+  onMount(() => {
+    const listener = ({ data }: { data: Preference[] }) => {
+      if (!data) {
+        return;
+      }
+
+      mutate(data);
+    };
+
+    novu.on('preferences.list.updated', listener);
+
+    onCleanup(() => novu.off('preferences.list.updated', listener));
+  });
+
+  createEffect(() => {
+    setLoading(preferences.loading);
+  });
+
+  return { preferences, loading, mutate, refetch };
 };

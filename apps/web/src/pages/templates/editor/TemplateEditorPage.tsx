@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useParams, useSearchParams } from 'react-rout
 import { ReactFlowProvider } from 'react-flow-renderer';
 import { useFormContext } from 'react-hook-form';
 
+import { isBridgeWorkflow, WorkflowTypeEnum } from '@novu/shared';
 import PageContainer from '../../../components/layout/components/PageContainer';
 import type { IForm } from '../components/formTypes';
 import WorkflowEditor from '../workflow/WorkflowEditor';
@@ -15,7 +16,7 @@ import { NavigateValidatorModal } from '../components/NavigateValidatorModal';
 import { useTourStorage } from '../hooks/useTourStorage';
 import { useBasePath } from '../hooks/useBasePath';
 import { TemplateDetailsPageV2 } from '../editor_v2/TemplateDetailsPageV2';
-import { isBridgeWorkflow, WorkflowTypeEnum } from '@novu/shared';
+import { WorkflowDetailFormContextProvider } from '../../../studio/components/workflows/preferences/WorkflowDetailFormContextProvider';
 
 function BaseTemplateEditorPage() {
   const navigate = useNavigate();
@@ -105,6 +106,10 @@ export default function TemplateEditorPage() {
       </TemplateEditorFormProvider>
     );
   } else {
-    return <TemplateDetailsPageV2 />;
+    return (
+      <WorkflowDetailFormContextProvider>
+        <TemplateDetailsPageV2 />
+      </WorkflowDetailFormContextProvider>
+    );
   }
 }

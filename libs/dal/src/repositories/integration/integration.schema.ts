@@ -1,9 +1,9 @@
-import mongoose from 'mongoose';
-import { Schema } from 'mongoose';
-const mongooseDelete = require('mongoose-delete');
+import mongoose, { Schema } from 'mongoose';
 
 import { schemaOptions } from '../schema-default.options';
 import { IntegrationDBModel } from './integration.entity';
+
+const mongooseDelete = require('mongoose-delete');
 
 const integrationSchema = new Schema<IntegrationDBModel>(
   {
@@ -76,6 +76,7 @@ const integrationSchema = new Schema<IntegrationDBModel>(
       type: Schema.Types.Boolean,
       default: false,
     },
+    removeNovuBranding: Schema.Types.Boolean,
     conditions: [
       {
         isNegated: Schema.Types.Boolean,
@@ -104,7 +105,6 @@ integrationSchema.index({
 
 integrationSchema.plugin(mongooseDelete, { deletedAt: true, deletedBy: true, overrideMethods: 'all' });
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
 export const Integration =
   (mongoose.models.Integration as mongoose.Model<IntegrationDBModel>) ||
   mongoose.model<IntegrationDBModel>('Integration', integrationSchema);

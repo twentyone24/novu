@@ -22,7 +22,7 @@ export class WorkflowInMemoryProviderService {
     this.inMemoryProviderService = new InMemoryProviderService(
       provider,
       this.isCluster,
-      false
+      false,
     );
   }
 
@@ -35,7 +35,7 @@ export class WorkflowInMemoryProviderService {
    * mapping in the /in-memory-provider/providers/index.ts
    */
   private selectProvider(): InMemoryProviderEnum {
-    if (process.env.IS_DOCKER_HOSTED) {
+    if (process.env.IS_SELF_HOSTED) {
       return InMemoryProviderEnum.REDIS;
     }
 
@@ -53,9 +53,9 @@ export class WorkflowInMemoryProviderService {
       this.descriptiveLogMessage(
         `Cluster mode ${
           isClusterModeEnabled ? 'is' : 'is not'
-        } enabled for ${LOG_CONTEXT}`
+        } enabled for ${LOG_CONTEXT}`,
       ),
-      LOG_CONTEXT
+      LOG_CONTEXT,
     );
 
     return isClusterModeEnabled;

@@ -1,13 +1,13 @@
 import { autoUpdate, flip, offset, Placement, shift } from '@floating-ui/dom';
 import { useFloating } from 'solid-floating-ui';
-import { Accessor, createContext, createSignal, JSX, Setter, useContext } from 'solid-js';
-import { useUncontrolledState } from '../../../helpers';
+import { Accessor, createContext, createMemo, createSignal, JSX, Setter, useContext } from 'solid-js';
 
 type PopoverRootProps = {
   open?: boolean;
   children?: JSX.Element;
   fallbackPlacements?: Placement[];
   placement?: Placement;
+  onOpenChange?: Setter<boolean>;
 };
 
 type PopoverContextValue = {
@@ -24,12 +24,21 @@ type PopoverContextValue = {
 const PopoverContext = createContext<PopoverContextValue | undefined>(undefined);
 
 export function PopoverRoot(props: PopoverRootProps) {
+  const [uncontrolledIsOpen, setUncontrolledIsOpen] = createSignal(props.open ?? false);
+  const onOpenChange = () => props.onOpenChange ?? setUncontrolledIsOpen;
+  const open = () => props.open ?? uncontrolledIsOpen();
   const [reference, setReference] = createSignal<HTMLElement | null>(null);
   const [floating, setFloating] = createSignal<HTMLElement | null>(null);
 
   const position = useFloating(reference, floating, {
     placement: props.placement || 'bottom-start',
-    whileElementsMounted: autoUpdate,
+    whileElementsMounted: (reference, floating, update) =>
+      autoUpdate(reference, floating, update, {
+        elementResize: false,
+        ancestorScroll: false,
+        animationFrame: false,
+        layoutShift: false,
+      }),
     middleware: [
       offset(10),
       flip({
@@ -38,18 +47,18 @@ export function PopoverRoot(props: PopoverRootProps) {
       shift(),
     ],
   });
-
-  const [isOpen, setIsOpen] = useUncontrolledState({
-    value: props.open,
-    fallbackValue: false,
-  });
+  const floatingStyles = createMemo(() => ({
+    position: position.strategy,
+    top: `${position.y ?? 0}px`,
+    left: `${position.x ?? 0}px`,
+  }));
 
   const onClose = () => {
-    setIsOpen(false);
+    onOpenChange()(false);
   };
 
   const onToggle = () => {
-    setIsOpen((prev) => !prev);
+    onOpenChange()((prev) => !prev);
   };
 
   return (
@@ -61,12 +70,8 @@ export function PopoverRoot(props: PopoverRootProps) {
         setReference,
         floating,
         setFloating,
-        open: isOpen,
-        floatingStyles: () => ({
-          position: position.strategy,
-          top: `${position.y ?? 0}px`,
-          left: `${position.x ?? 0}px`,
-        }),
+        open,
+        floatingStyles,
       }}
     >
       {props.children}

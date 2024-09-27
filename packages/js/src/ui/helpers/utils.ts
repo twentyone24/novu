@@ -1,6 +1,6 @@
 import clsx, { ClassValue } from 'clsx';
 import { extendTailwindMerge, type ClassNameValue } from 'tailwind-merge';
-import type { CSSProperties, Elements, Variables } from '../types';
+import type { CSSProperties, Elements, Tab, Variables } from '../types';
 
 const twMerge = extendTailwindMerge({
   prefix: 'nt-',
@@ -16,7 +16,7 @@ export function generateRandomString(length: number): string {
   const characters = 'abcdefghijklmnopqrstuvwxyz';
   let result = '';
   const charactersLength = characters.length;
-  for (let i = 0; i < length; i++) {
+  for (let i = 0; i < length; i += 1) {
     result += characters.charAt(Math.floor(Math.random() * charactersLength));
   }
 
@@ -45,7 +45,7 @@ export function cssObjectToString(styles: CSSProperties): string {
 export function createClassAndRuleFromCssString(classNameSet: Set<string>, styles: string) {
   const className = `novu-css-${generateUniqueRandomString(classNameSet, 8)}`;
   const rule = `.${className} { ${styles} }`;
-  //add to set to avoid generating the same class again
+  // add to set to avoid generating the same class again
   classNameSet.add(className);
 
   return { className, rule };
@@ -60,7 +60,7 @@ export function generateDefaultColor(props: { color: string; key: string; id: st
 
 export function generatesSolidShadesFromColor(props: { color: string; key: string; id: string }) {
   const rules = [];
-  for (let i = 0; i < shades.length; i++) {
+  for (let i = 0; i < shades.length; i += 1) {
     const shade = shades[i];
     const cssVariableSolidRule = `.${props.id} { --nv-${props.key}-${shade}: oklch(from ${props.color} calc(l - ${
       (shade - 500) / 1000
@@ -73,7 +73,7 @@ export function generatesSolidShadesFromColor(props: { color: string; key: strin
 
 export function generatesAlphaShadesFromColor(props: { color: string; key: string; id: string }) {
   const rules = [];
-  for (let i = 0; i < shades.length; i++) {
+  for (let i = 0; i < shades.length; i += 1) {
     const shade = shades[i];
     const cssVariableAlphaRule = `.${props.id} { --nv-${props.key}-${shade}: oklch(from ${props.color} l c h / ${
       shade / 1000
@@ -94,6 +94,7 @@ export const parseVariables = (variables: Required<Variables>, id: string) => {
     generateDefaultColor({ color: variables.colorSecondaryForeground, key: 'color-secondary-foreground', id }),
     generateDefaultColor({ color: variables.colorCounter, key: 'color-counter', id }),
     generateDefaultColor({ color: variables.colorCounterForeground, key: 'color-counter-foreground', id }),
+    generateDefaultColor({ color: variables.colorShadow, key: 'color-shadow', id }),
     ...generatesAlphaShadesFromColor({ color: variables.colorBackground, key: 'color-background-alpha', id }),
     ...generatesAlphaShadesFromColor({ color: variables.colorForeground, key: 'color-foreground-alpha', id }),
     ...generatesSolidShadesFromColor({ color: variables.colorPrimary, key: 'color-primary', id }),
@@ -130,4 +131,13 @@ export const parseElements = (elements: Elements) => {
   }
 
   return elementsStyleData;
+};
+
+/**
+ * In the next minor release we can remove the deprecated `value` field from the Tab type.
+ * This function can be removed after that and the code should be updated to use the `filter` field.
+ * @returns tags from the tab object
+ */
+export const getTagsFromTab = (tab?: Tab) => {
+  return tab?.filter?.tags || tab?.value || [];
 };

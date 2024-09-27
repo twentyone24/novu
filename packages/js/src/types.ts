@@ -1,4 +1,9 @@
+import { NovuError } from './utils/errors';
+
+export { type FiltersCountResponse, type ListNotificationsResponse } from './notifications';
 export type { Notification } from './notifications';
+export type { Preference } from './preferences/preference';
+export type { NovuError } from './utils/errors';
 
 export enum NotificationStatus {
   READ = 'read',
@@ -54,6 +59,7 @@ export enum ActionTypeEnum {
 export type Session = {
   token: string;
   totalUnreadCount: number;
+  removeNovuBranding: boolean;
 };
 
 export type MessageButton = {
@@ -79,9 +85,15 @@ export type Subscriber = {
   subscriberId: string;
 };
 
+export type Redirect = {
+  url: string;
+  target?: '_self' | '_blank' | '_parent' | '_top' | '_unfencedTop';
+};
+
 export type Action = {
   label: string;
   isCompleted: boolean;
+  redirect?: Redirect;
 };
 
 export type InboxNotification = {
@@ -99,9 +111,8 @@ export type InboxNotification = {
   secondaryAction?: Action;
   channelType: ChannelType;
   tags?: string[];
-  redirect?: {
-    url: string;
-  };
+  data?: Record<string, unknown>;
+  redirect?: Redirect;
 };
 
 export type NotificationFilter = {
@@ -112,11 +123,10 @@ export type NotificationFilter = {
 
 export type Workflow = {
   id: string;
+  identifier: string;
   name: string;
   critical: boolean;
-  identifier: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data?: Record<string, any>;
+  tags?: string[];
 };
 
 export type ChannelPreference = {
@@ -157,7 +167,7 @@ export type IPreferenceOverride = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type TODO = any;
 
-export type Result<D = undefined, E = unknown> = Promise<{
+export type Result<D = undefined, E = NovuError> = Promise<{
   data?: D;
   error?: E;
 }>;

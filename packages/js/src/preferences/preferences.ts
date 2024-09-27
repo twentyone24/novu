@@ -1,23 +1,63 @@
+import { InboxService } from '../api';
+import { NovuEventEmitter } from '../event-emitter';
 import { BaseModule } from '../base-module';
 import { updatePreference } from './helpers';
 import { Preference } from './preference';
-import type { UpdatePreferencesArgs } from './types';
+import type { ListPreferencesArgs, UpdatePreferencesArgs } from './types';
 import { Result } from '../types';
+import { PreferencesCache } from '../cache/preferences-cache';
 
 export class Preferences extends BaseModule {
-  async list(): Result<Preference[]> {
+  #useCache: boolean;
+
+  readonly cache: PreferencesCache;
+
+  constructor({
+    useCache,
+    inboxServiceInstance,
+    eventEmitterInstance,
+  }: {
+    useCache: boolean;
+    inboxServiceInstance: InboxService;
+    eventEmitterInstance: NovuEventEmitter;
+  }) {
+    super({
+      eventEmitterInstance,
+      inboxServiceInstance,
+    });
+    this.cache = new PreferencesCache({
+      emitterInstance: this._emitter,
+    });
+    this.#useCache = useCache;
+  }
+
+  async list(args: ListPreferencesArgs = {}): Result<Preference[]> {
     return this.callWithSession(async () => {
       try {
-        this._emitter.emit('preferences.list.pending');
+        let data = this.#useCache ? this.cache.getAll(args) : undefined;
+        this._emitter.emit('preferences.list.pending', { args, data });
 
-        const response = await this._inboxService.fetchPreferences();
-        const modifiedResponse: Preference[] = response.map((el) => new Preference(el));
+        if (!data) {
+          const response = await this._inboxService.fetchPreferences(args.tags);
+          data = response.map(
+            (el) =>
+              new Preference(el, {
+                emitterInstance: this._emitter,
+                inboxServiceInstance: this._inboxService,
+              })
+          );
 
-        this._emitter.emit('preferences.list.resolved', { args: undefined, data: modifiedResponse });
+          if (this.#useCache) {
+            this.cache.set(args, data);
+            data = this.cache.getAll(args);
+          }
+        }
 
-        return { data: modifiedResponse };
+        this._emitter.emit('preferences.list.resolved', { args, data });
+
+        return { data };
       } catch (error) {
-        this._emitter.emit('preferences.list.resolved', { args: undefined, error });
+        this._emitter.emit('preferences.list.resolved', { args, error });
         throw error;
       }
     });

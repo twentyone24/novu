@@ -16,16 +16,22 @@ export const updatePreference = async ({
 }): Result<Preference> => {
   const { workflowId, channelPreferences } = args;
   try {
-    emitter.emit('preferences.update.pending', {
+    emitter.emit('preference.update.pending', {
       args,
       data: args.preference
-        ? new Preference({
-            ...args.preference,
-            channels: {
-              ...args.preference.channels,
-              ...channelPreferences,
+        ? new Preference(
+            {
+              ...args.preference,
+              channels: {
+                ...args.preference.channels,
+                ...channelPreferences,
+              },
             },
-          })
+            {
+              emitterInstance: emitter,
+              inboxServiceInstance: apiService,
+            }
+          )
         : undefined,
     });
 
@@ -36,12 +42,15 @@ export const updatePreference = async ({
       response = await apiService.updateGlobalPreferences(channelPreferences);
     }
 
-    const preference = new Preference(response);
-    emitter.emit('preferences.update.resolved', { args, data: preference });
+    const preference = new Preference(response, {
+      emitterInstance: emitter,
+      inboxServiceInstance: apiService,
+    });
+    emitter.emit('preference.update.resolved', { args, data: preference });
 
     return { data: preference };
   } catch (error) {
-    emitter.emit('preferences.update.resolved', { args, error });
+    emitter.emit('preference.update.resolved', { args, error });
 
     return { error: new NovuError('Failed to fetch notifications', error) };
   }

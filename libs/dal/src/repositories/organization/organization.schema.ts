@@ -1,5 +1,4 @@
-import mongoose from 'mongoose';
-import { Schema } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 import { ApiServiceLevelEnum } from '@novu/shared';
 
 import { schemaOptions } from '../schema-default.options';
@@ -62,11 +61,11 @@ const organizationSchema = new Schema<OrganizationDBModel>(
       },
     },
     externalId: Schema.Types.String,
+    stripeCustomerId: Schema.Types.String,
   },
   schemaOptions
 );
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
 export const Organization =
   (mongoose.models.Organization as mongoose.Model<OrganizationDBModel>) ||
   mongoose.model<OrganizationDBModel>('Organization', organizationSchema);

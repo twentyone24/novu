@@ -70,7 +70,7 @@ export class NotificationTemplateRepository extends BaseRepository<
     const requestQuery: NotificationTemplateQuery = {
       isBlueprint: true,
       _organizationId: this.blueprintOrganizationId,
-      triggers: { $elemMatch: { identifier: identifier } },
+      triggers: { $elemMatch: { identifier } },
     };
 
     const item = await this.MongooseModel.findOne(requestQuery)
@@ -207,12 +207,24 @@ export class NotificationTemplateRepository extends BaseRepository<
     return { totalCount: totalItemsCount, data: this.mapEntities(items) };
   }
 
-  async getActiveList(organizationId: string, environmentId: string, active?: boolean) {
+  async filterActive({
+    organizationId,
+    environmentId,
+    tags,
+  }: {
+    organizationId: string;
+    environmentId: string;
+    tags?: string[];
+  }) {
     const requestQuery: NotificationTemplateQuery = {
       _environmentId: environmentId,
       _organizationId: organizationId,
-      active: active,
+      active: true,
     };
+
+    if (tags && tags?.length > 0) {
+      requestQuery.tags = { $in: tags };
+    }
 
     const items = await this.MongooseModel.find(requestQuery)
       .populate('steps.template', { type: 1 })

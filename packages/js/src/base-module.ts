@@ -1,10 +1,7 @@
-import type { ApiService } from '@novu/client';
 import { InboxService } from './api';
-
 import { NovuEventEmitter } from './event-emitter';
 import { Result, Session } from './types';
 import { NovuError } from './utils/errors';
-import { InboxServiceSingleton } from './utils/inbox-service-singleton';
 
 interface CallQueueItem {
   fn: () => Promise<unknown>;
@@ -14,15 +11,20 @@ interface CallQueueItem {
 }
 
 export class BaseModule {
-  _apiService: ApiService;
-  _inboxService: InboxService;
-  _emitter: NovuEventEmitter;
+  protected _inboxService: InboxService;
+  protected _emitter: NovuEventEmitter;
   #callsQueue: CallQueueItem[] = [];
   #sessionError: unknown;
 
-  constructor() {
-    this._emitter = NovuEventEmitter.getInstance();
-    this._inboxService = InboxServiceSingleton.getInstance();
+  constructor({
+    inboxServiceInstance,
+    eventEmitterInstance,
+  }: {
+    inboxServiceInstance: InboxService;
+    eventEmitterInstance: NovuEventEmitter;
+  }) {
+    this._emitter = eventEmitterInstance;
+    this._inboxService = inboxServiceInstance;
     this._emitter.on('session.initialize.resolved', ({ error, data }) => {
       if (data) {
         this.onSessionSuccess(data);
@@ -56,7 +58,7 @@ export class BaseModule {
       });
     }
 
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       this.#callsQueue.push({ fn, resolve, reject });
     });
   }

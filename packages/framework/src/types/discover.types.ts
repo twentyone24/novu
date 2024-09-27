@@ -1,3 +1,4 @@
+import type { WorkflowPreferencesPartial } from '@novu/shared';
 import { ActionStepEnum, ChannelStepEnum } from '../constants';
 import type { JsonSchema, Schema } from './schema.types';
 import type { StepOptions } from './step.types';
@@ -73,6 +74,7 @@ export type DiscoverWorkflowOutput = {
     schema: JsonSchema;
     unknownSchema: Schema;
   };
+  preferences: WorkflowPreferencesPartial;
   tags: string[];
 };
 

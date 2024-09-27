@@ -30,12 +30,13 @@ export class SegmentService {
             const segmentDeviceId = payload.obj.anonymousId;
             mixpanel.register({ $device_id: segmentDeviceId });
             const sessionReplayProperties = mixpanel.get_session_recording_properties();
+            // eslint-disable-next-line no-param-reassign
             payload.obj.properties = {
               ...payload.obj.properties,
               ...sessionReplayProperties,
             };
           }
-          const userId = payload.obj.userId;
+          const { userId } = payload.obj;
           if (payload.type() === 'identify' && userId) {
             mixpanel.identify(userId);
           }
@@ -53,7 +54,13 @@ export class SegmentService {
       return;
     }
 
-    this._segment?.identify(user?._id);
+    this._segment?.identify(user?._id, {
+      email: user.email,
+      name: user.firstName + ' ' + user.lastName,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatar: user.profilePicture,
+    });
   }
 
   alias(anonymousId: string, userId: string) {
@@ -84,6 +91,7 @@ export class SegmentService {
     if (this._mixpanelEnabled) {
       const sessionReplayProperties = mixpanel.get_session_recording_properties();
 
+      // eslint-disable-next-line no-param-reassign
       data = {
         ...(data || {}),
         ...sessionReplayProperties,
@@ -91,7 +99,7 @@ export class SegmentService {
     }
 
     await api.post('/v1/telemetry/measure', {
-      event: event + ' - [WEB]',
+      event: `${event} - [WEB]`,
       data,
     });
   }

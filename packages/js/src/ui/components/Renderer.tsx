@@ -1,6 +1,7 @@
 import { For, onCleanup, onMount } from 'solid-js';
 import { MountableElement, Portal } from 'solid-js/web';
 import { NovuUI } from '..';
+import { Novu } from '../../novu';
 import type { NovuOptions } from '../../types';
 import {
   AppearanceProvider,
@@ -10,13 +11,13 @@ import {
   LocalizationProvider,
   NovuProvider,
 } from '../context';
-import type { Appearance, Localization, Tab } from '../types';
+import type { Appearance, Localization, PreferencesFilter, RouterPush, Tab } from '../types';
 import { Bell, Root } from './elements';
 import { Inbox, InboxContent, InboxContentProps, InboxPage } from './Inbox';
 
 export const novuComponents = {
   Inbox,
-  // InboxContent, //enable this to also allow the whole inbox content as a component
+  InboxContent,
   Bell,
   Notifications: (props: Omit<InboxContentProps, 'hideNav' | 'initialPage'>) => (
     <InboxContent {...props} hideNav={true} initialPage={InboxPage.Notifications} />
@@ -46,9 +47,14 @@ type RendererProps = {
   localization?: Localization;
   options: NovuOptions;
   tabs: Array<Tab>;
+  preferencesFilter?: PreferencesFilter;
+  routerPush?: RouterPush;
+  novu?: Novu;
 };
 
 export const Renderer = (props: RendererProps) => {
+  const nodes = () => [...props.nodes.keys()];
+
   onMount(() => {
     const id = 'novu-default-css';
     const el = document.getElementById(id);
@@ -69,19 +75,22 @@ export const Renderer = (props: RendererProps) => {
   });
 
   return (
-    <NovuProvider options={props.options}>
+    <NovuProvider options={props.options} novu={props.novu}>
       <LocalizationProvider localization={props.localization}>
         <AppearanceProvider id={props.novuUI.id} appearance={props.appearance}>
           <FocusManagerProvider>
-            <InboxProvider tabs={props.tabs}>
+            <InboxProvider tabs={props.tabs} preferencesFilter={props.preferencesFilter} routerPush={props.routerPush}>
               <CountProvider>
-                <For each={[...props.nodes]}>
-                  {([node, component]) => {
+                <For each={nodes()}>
+                  {(node) => {
+                    const novuComponent = () => props.nodes.get(node)!;
                     let portalDivElement: HTMLDivElement;
-                    const Component = novuComponents[component.name];
+                    const Component = novuComponents[novuComponent().name];
 
                     onMount(() => {
-                      if (!['Notifications', 'Preferences'].includes(component.name)) return;
+                      // return here if not `<Notifications /> or `<Preferences />` since we only want to override some styles for those to work properly
+                      // due to the extra divs being introduces by the renderer/mounter
+                      if (!['Notifications', 'Preferences'].includes(novuComponent().name)) return;
 
                       if (node instanceof HTMLElement) {
                         node.classList.add('nt-h-full');
@@ -97,7 +106,7 @@ export const Renderer = (props: RendererProps) => {
                         }}
                       >
                         <Root>
-                          <Component {...component.props} />
+                          <Component {...novuComponent().props} />
                         </Root>
                       </Portal>
                     );

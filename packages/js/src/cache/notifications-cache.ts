@@ -1,14 +1,15 @@
-import { InMemoryCache } from './in-memory-cache';
-import type { Cache } from './types';
-import type { ListNotificationsArgs, ListNotificationsResponse, Notification } from '../notifications';
 import { NotificationEvents, NovuEventEmitter } from '../event-emitter';
+import type { ListNotificationsArgs, ListNotificationsResponse, Notification } from '../notifications';
 import type { NotificationFilter } from '../types';
 import { areTagsEqual, isSameFilter } from '../utils/notification-utils';
+import { InMemoryCache } from './in-memory-cache';
+import type { Cache } from './types';
 
 const excludeEmpty = ({ tags, read, archived, limit, offset, after }: ListNotificationsArgs) =>
   Object.entries({ tags, read, archived, limit, offset, after })
     .filter(([_, value]) => value !== null && value !== undefined && !(Array.isArray(value) && value.length === 0))
     .reduce((acc, [key, value]) => {
+      // @ts-expect-error
       acc[key] = value;
 
       return acc;
@@ -55,8 +56,8 @@ export class NotificationsCache {
    */
   #cache: Cache<ListNotificationsResponse>;
 
-  constructor() {
-    this.#emitter = NovuEventEmitter.getInstance();
+  constructor({ emitter }: { emitter: NovuEventEmitter }) {
+    this.#emitter = emitter;
     updateEvents.forEach((event) => {
       this.#emitter.on(event, this.handleNotificationEvent());
     });
@@ -140,10 +141,6 @@ export class NotificationsCache {
       });
     };
 
-  private has(args: ListNotificationsArgs): boolean {
-    return this.#cache.get(getCacheKey(args)) !== undefined;
-  }
-
   private getAggregated(filter: NotificationFilter): ListNotificationsResponse {
     const cacheKeys = this.#cache.keys().filter((key) => {
       const parsedFilter = getFilter(key);
@@ -169,16 +166,26 @@ export class NotificationsCache {
       );
   }
 
+  has(args: ListNotificationsArgs): boolean {
+    return this.#cache.get(getCacheKey(args)) !== undefined;
+  }
+
   set(args: ListNotificationsArgs, data: ListNotificationsResponse): void {
     this.#cache.set(getCacheKey(args), data);
+  }
+
+  update(args: ListNotificationsArgs, data: ListNotificationsResponse): void {
+    this.set(args, data);
+    const notificationsResponse = this.getAggregated(getFilter(getCacheKey(args)));
+    this.#emitter.emit('notifications.list.updated', {
+      data: notificationsResponse,
+    });
   }
 
   getAll(args: ListNotificationsArgs): ListNotificationsResponse | undefined {
     if (this.has(args)) {
       return this.getAggregated({ tags: args.tags, read: args.read, archived: args.archived });
     }
-
-    return;
   }
 
   /**

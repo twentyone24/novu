@@ -11,6 +11,13 @@ import { AnalyticsEventsEnum } from '../../utils';
 import { GetPreferences } from './get-preferences.usecase';
 
 const mockedSubscriber: any = { _id: '123', subscriberId: 'test-mockSubscriber', firstName: 'test', lastName: 'test' };
+const mockedWorkflow = {
+  _id: '123',
+  name: 'workflow',
+  triggers: [{ identifier: '123' }],
+  critical: false,
+  tags: [],
+};
 const mockedWorkflowPreference: any = {
   template: {},
 
@@ -46,17 +53,25 @@ const mockedPreferencesResponse: any = [
   {
     level: PreferenceLevelEnum.TEMPLATE,
     workflow: {
-      critical: undefined,
-      id: undefined,
-      name: undefined,
-      tags: undefined,
-      triggers: undefined,
+      id: mockedWorkflow._id,
+      identifier: mockedWorkflow.triggers[0].identifier,
+      name: mockedWorkflow.name,
+      critical: mockedWorkflow.critical,
+      tags: mockedWorkflow.tags,
     },
     ...mockedWorkflowPreference.preference,
   },
 ];
 
-const mockedWorkflow: any = [{}];
+const mockedWorkflows: any = [
+  {
+    _id: '123',
+    name: 'workflow',
+    triggers: [{ identifier: '123' }],
+    critical: false,
+    tags: [],
+  },
+];
 
 describe('GetPreferences', () => {
   let getPreferences: GetPreferences;
@@ -112,7 +127,7 @@ describe('GetPreferences', () => {
 
     subscriberRepositoryMock.findBySubscriberId.resolves(mockedSubscriber);
     getSubscriberGlobalPreferenceMock.execute.resolves(mockedGlobalPreferences);
-    notificationTemplateRepositoryMock.getActiveList.resolves(mockedWorkflow);
+    notificationTemplateRepositoryMock.filterActive.resolves(mockedWorkflows);
     getSubscriberWorkflowMock.execute.resolves(mockedWorkflowPreference);
 
     const result = await getPreferences.execute(command);
@@ -124,11 +139,13 @@ describe('GetPreferences', () => {
     ]);
     expect(getSubscriberGlobalPreferenceMock.execute.calledOnce).to.be.true;
     expect(getSubscriberGlobalPreferenceMock.execute.firstCall.args).to.deep.equal([command]);
-    expect(notificationTemplateRepositoryMock.getActiveList.calledOnce).to.be.true;
-    expect(notificationTemplateRepositoryMock.getActiveList.firstCall.args).to.deep.equal([
-      command.organizationId,
-      command.environmentId,
-      true,
+    expect(notificationTemplateRepositoryMock.filterActive.calledOnce).to.be.true;
+    expect(notificationTemplateRepositoryMock.filterActive.firstCall.args).to.deep.equal([
+      {
+        organizationId: command.organizationId,
+        environmentId: command.environmentId,
+        tags: undefined,
+      },
     ]);
     expect(getSubscriberWorkflowMock.execute.calledOnce).to.be.true;
     expect(getSubscriberWorkflowMock.execute.firstCall.args).to.deep.equal([
@@ -136,7 +153,7 @@ describe('GetPreferences', () => {
         organizationId: command.organizationId,
         subscriberId: command.subscriberId,
         environmentId: command.environmentId,
-        template: mockedWorkflow[0],
+        template: mockedWorkflow,
         subscriber: mockedSubscriber,
       },
     ]);
@@ -153,5 +170,116 @@ describe('GetPreferences', () => {
     ]);
 
     expect(result).to.deep.equal(mockedPreferencesResponse);
+  });
+
+  it('it should return subscriber preferences filtered by tags', async () => {
+    const workflowsWithTags: any = [
+      {
+        _id: '111',
+        name: 'workflow',
+        triggers: [{ identifier: '111' }],
+        critical: false,
+        tags: ['newsletter'],
+      },
+      {
+        _id: '222',
+        name: 'workflow',
+        triggers: [{ identifier: '222' }],
+        critical: false,
+        tags: ['security'],
+      },
+    ];
+    const response: any = [
+      { level: PreferenceLevelEnum.GLOBAL, ...mockedGlobalPreferences.preference },
+      {
+        level: PreferenceLevelEnum.TEMPLATE,
+        workflow: {
+          id: workflowsWithTags[0]._id,
+          identifier: workflowsWithTags[0].triggers[0].identifier,
+          name: workflowsWithTags[0].name,
+          critical: workflowsWithTags[0].critical,
+          tags: workflowsWithTags[0].tags,
+        },
+        ...mockedWorkflowPreference.preference,
+      },
+      {
+        level: PreferenceLevelEnum.TEMPLATE,
+        workflow: {
+          id: workflowsWithTags[1]._id,
+          identifier: workflowsWithTags[1].triggers[0].identifier,
+          name: workflowsWithTags[1].name,
+          critical: workflowsWithTags[1].critical,
+          tags: workflowsWithTags[1].tags,
+        },
+        ...mockedWorkflowPreference.preference,
+      },
+    ];
+    const command = {
+      environmentId: 'env-1',
+      organizationId: 'org-1',
+      subscriberId: 'test-mockSubscriber',
+      tags: ['newsletter', 'security'],
+    };
+
+    subscriberRepositoryMock.findBySubscriberId.resolves(mockedSubscriber);
+    getSubscriberGlobalPreferenceMock.execute.resolves(mockedGlobalPreferences);
+    notificationTemplateRepositoryMock.filterActive.resolves(workflowsWithTags);
+    getSubscriberWorkflowMock.execute.resolves(mockedWorkflowPreference);
+
+    const result = await getPreferences.execute(command);
+
+    expect(subscriberRepositoryMock.findBySubscriberId.calledOnce).to.be.true;
+    expect(subscriberRepositoryMock.findBySubscriberId.firstCall.args).to.deep.equal([
+      command.environmentId,
+      command.subscriberId,
+    ]);
+    expect(getSubscriberGlobalPreferenceMock.execute.calledOnce).to.be.true;
+    expect(getSubscriberGlobalPreferenceMock.execute.firstCall.args).to.deep.equal([
+      {
+        organizationId: command.organizationId,
+        environmentId: command.environmentId,
+        subscriberId: command.subscriberId,
+      },
+    ]);
+    expect(notificationTemplateRepositoryMock.filterActive.calledOnce).to.be.true;
+    expect(notificationTemplateRepositoryMock.filterActive.firstCall.args).to.deep.equal([
+      {
+        organizationId: command.organizationId,
+        environmentId: command.environmentId,
+        tags: command.tags,
+      },
+    ]);
+    expect(getSubscriberWorkflowMock.execute.calledTwice).to.be.true;
+    expect(getSubscriberWorkflowMock.execute.firstCall.args).to.deep.equal([
+      {
+        organizationId: command.organizationId,
+        subscriberId: command.subscriberId,
+        environmentId: command.environmentId,
+        template: workflowsWithTags[0],
+        subscriber: mockedSubscriber,
+      },
+    ]);
+    expect(getSubscriberWorkflowMock.execute.secondCall.args).to.deep.equal([
+      {
+        organizationId: command.organizationId,
+        subscriberId: command.subscriberId,
+        environmentId: command.environmentId,
+        template: workflowsWithTags[1],
+        subscriber: mockedSubscriber,
+      },
+    ]);
+
+    expect(analyticsServiceMock.mixpanelTrack.calledOnce).to.be.true;
+    expect(analyticsServiceMock.mixpanelTrack.firstCall.args).to.deep.equal([
+      AnalyticsEventsEnum.FETCH_PREFERENCES,
+      '',
+      {
+        _organization: command.organizationId,
+        subscriberId: command.subscriberId,
+        workflowSize: 2,
+      },
+    ]);
+
+    expect(result).to.deep.equal(response);
   });
 });

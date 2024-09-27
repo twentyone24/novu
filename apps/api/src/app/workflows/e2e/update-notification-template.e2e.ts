@@ -132,9 +132,7 @@ describe('Update workflow by id - /workflows/:workflowId (PUT)', async () => {
     const { body } = await session.testAgent.put(`/v1/workflows/${template2._id}`).send(update);
 
     expect(body.statusCode).to.equal(400);
-    expect(body.message).to.equal(
-      `Notification template with identifier ${template1.triggers[0].identifier} already exists`
-    );
+    expect(body.message).to.equal(`Workflow with identifier ${template1.triggers[0].identifier} already exists`);
     expect(body.error).to.equal('Bad Request');
   });
 
@@ -278,7 +276,7 @@ describe('Update workflow by id - /workflows/:workflowId (PUT)', async () => {
       ],
     };
     const { body } = await session.testAgent.put(`/v1/workflows/${template._id}`).send(update);
-    const steps = body.data.steps;
+    const { steps } = body.data;
 
     expect(steps[0].template?.contentType).to.equal('customHtml');
     expect(steps[0].template?.content).to.equal('');
@@ -350,7 +348,7 @@ describe('Update workflow by id - /workflows/:workflowId (PUT)', async () => {
 
     const { body: updated } = await session.testAgent.put(`/v1/workflows/${template._id}`).send(updateData);
 
-    const steps = updated.data.steps;
+    const { steps } = updated.data;
 
     expect(steps[0]._parentId).to.equal(null);
     expect(steps[0].template.preheader).to.equal('updated preheader');

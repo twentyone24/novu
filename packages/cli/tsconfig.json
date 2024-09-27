@@ -1,20 +1,21 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "module": "commonjs",
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": "./src",
     "declaration": false,
     "declarationMap": false,
-    "noImplicitAny": true,
-    "removeComments": true,
-    "allowSyntheticDefaultImports": true,
     "emitDecoratorMetadata": true,
-    "target": "es2017",
     "esModuleInterop": true,
-    "sourceMap": false,
+    "module": "commonjs",
+    "noImplicitAny": true,
     "outDir": "./dist",
-    "baseUrl": "./src",
+    "removeComments": true,
+    "resolveJsonModule": true,
+    "sourceMap": false,
+    "target": "es2017",
     "types": ["node"]
   },
   "include": ["src/**/*", "src/**/*.d.ts"],
-  "exclude": ["node_modules", "**/*.spec.ts", "src/commands/init/templates"]
+  "exclude": ["node_modules", "src/commands/init/templates"]
 }

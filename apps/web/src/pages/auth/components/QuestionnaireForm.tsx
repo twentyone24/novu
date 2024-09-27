@@ -16,12 +16,12 @@ import {
 } from '@novu/shared';
 import { Button, Input, inputStyles, Select } from '@novu/design-system';
 
+import styled from '@emotion/styled/macro';
 import { api } from '../../../api/api.client';
 import { useAuth } from '../../../hooks/useAuth';
 import { useEffectOnce, useEnvironment, useFeatureFlag, useVercelIntegration, useVercelParams } from '../../../hooks';
 import { ROUTES } from '../../../constants/routes';
 import { DynamicCheckBox } from './dynamic-checkbox/DynamicCheckBox';
-import styled from '@emotion/styled/macro';
 import { useSegment } from '../../../components/providers/SegmentProvider';
 import { BRIDGE_SYNC_SAMPLE_ENDPOINT } from '../../../config/index';
 import { QueryKeys } from '../../../api/query.keys';
@@ -32,7 +32,7 @@ export function QuestionnaireForm() {
   const queryClient = useQueryClient();
   const { initializeWebContainer } = useContainer();
   const { isSupported } = useWebContainerSupported();
-  const isV2Enabled = useFeatureFlag(FeatureFlagsKeysEnum.IS_V2_EXPERIENCE_ENABLED);
+  const isV2Enabled = useFeatureFlag(FeatureFlagsKeysEnum.IS_V2_ENABLED);
   const isPlaygroundOnboardingEnabled = useFeatureFlag(FeatureFlagsKeysEnum.IS_PLAYGROUND_ONBOARDING_ENABLED);
 
   useEffectOnce(() => {

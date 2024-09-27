@@ -1,4 +1,5 @@
 import io, { Socket as SocketIO } from 'socket.io-client';
+import { InboxService } from '../api';
 import { BaseModule } from '../base-module';
 
 import {
@@ -38,6 +39,7 @@ const mapToNotification = ({
   avatar,
   cta,
   tags,
+  data,
 }: TODO): InboxNotification => {
   const to: Subscriber = {
     id: subscriber?._id ?? '',
@@ -65,18 +67,32 @@ const mapToNotification = ({
     primaryAction: primaryCta && {
       label: primaryCta.content,
       isCompleted: actionType === ActionTypeEnum.PRIMARY && actionStatus === NotificationActionStatus.DONE,
+      redirect: primaryCta.url
+        ? {
+            target: primaryCta.target,
+            url: primaryCta.url,
+          }
+        : undefined,
     },
     secondaryAction: secondaryCta && {
       label: secondaryCta.content,
       isCompleted: actionType === ActionTypeEnum.SECONDARY && actionStatus === NotificationActionStatus.DONE,
+      redirect: secondaryCta.url
+        ? {
+            target: secondaryCta.target,
+            url: secondaryCta.url,
+          }
+        : undefined,
     },
     channelType: channel,
     tags,
     redirect: cta.data?.url
       ? {
           url: cta.data.url,
+          target: cta.data.target,
         }
       : undefined,
+    data,
   };
 };
 
@@ -86,9 +102,20 @@ export class Socket extends BaseModule {
   #socketIo: SocketIO | undefined;
   #socketUrl: string;
 
-  constructor({ socketUrl }: { socketUrl?: string }) {
-    super();
-    this.#emitter = NovuEventEmitter.getInstance();
+  constructor({
+    socketUrl,
+    inboxServiceInstance,
+    eventEmitterInstance,
+  }: {
+    socketUrl?: string;
+    inboxServiceInstance: InboxService;
+    eventEmitterInstance: NovuEventEmitter;
+  }) {
+    super({
+      eventEmitterInstance,
+      inboxServiceInstance,
+    });
+    this.#emitter = eventEmitterInstance;
     this.#socketUrl = socketUrl ?? PRODUCTION_SOCKET_URL;
   }
 
@@ -98,7 +125,7 @@ export class Socket extends BaseModule {
 
   #notificationReceived = ({ message }: { message: TODO }) => {
     this.#emitter.emit(NOTIFICATION_RECEIVED, {
-      result: new Notification(mapToNotification(message)),
+      result: new Notification(mapToNotification(message), this.#emitter, this._inboxService),
     });
   };
 
@@ -115,6 +142,7 @@ export class Socket extends BaseModule {
   };
 
   async #initializeSocket(): Promise<void> {
+    // eslint-disable-next-line no-extra-boolean-cast
     if (!!this.#socketIo) {
       return;
     }

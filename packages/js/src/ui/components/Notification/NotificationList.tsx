@@ -1,10 +1,10 @@
-import { createMemo, For, JSX, Show } from 'solid-js';
+import { createEffect, createMemo, For, JSX, Show } from 'solid-js';
 import type { NotificationFilter } from '../../../types';
 import { useNotificationsInfiniteScroll } from '../../api';
-import { useLocalization, useNewMessagesCount } from '../../context';
+import { DEFAULT_LIMIT, useInboxContext, useLocalization, useNewMessagesCount } from '../../context';
 import { useStyle } from '../../helpers';
 import { EmptyIcon } from '../../icons/EmptyIcon';
-import type { NotificationActionClickHandler, NotificationClickHandler, NotificationMounter } from '../../types';
+import type { NotificationActionClickHandler, NotificationClickHandler, NotificationRenderer } from '../../types';
 import { NewMessagesCta } from './NewMessagesCta';
 import { Notification } from './Notification';
 import { NotificationListSkeleton, NotificationSkeleton } from './NotificationListSkeleton';
@@ -20,14 +20,16 @@ const EmptyNotificationList = () => {
         'nt-absolute nt-inset-0 nt-flex nt-flex-col nt-items-center nt-m-auto nt-h-fit nt-w-full nt-text-foreground-alpha-100'
       )}
     >
-      <EmptyIcon />
-      <p class={style('notificationListEmptyNotice')}>{t('notifications.emptyNotice')}</p>
+      <EmptyIcon class={style('notificationListEmptyNoticeIcon')} />
+      <p class={style('notificationListEmptyNotice')} data-localization="notifications.emptyNotice">
+        {t('notifications.emptyNotice')}
+      </p>
     </div>
   );
 };
 
 type NotificationListProps = {
-  mountNotification?: NotificationMounter;
+  renderNotification?: NotificationRenderer;
   onNotificationClick?: NotificationClickHandler;
   onPrimaryActionClick?: NotificationActionClickHandler;
   onSecondaryActionClick?: NotificationActionClickHandler;
@@ -40,7 +42,13 @@ export const NotificationList = (props: NotificationListProps) => {
   const style = useStyle();
   const { data, setEl, end, refetch, initialLoading } = useNotificationsInfiniteScroll({ options });
   const { count, reset: resetNewMessagesCount } = useNewMessagesCount({ filter: { tags: props.filter?.tags ?? [] } });
+  const { setLimit } = useInboxContext();
+  const ids = createMemo(() => data().map((n) => n.id));
   let notificationListElement: HTMLDivElement;
+
+  createEffect(() => {
+    setLimit(props.limit || DEFAULT_LIMIT);
+  });
 
   const handleOnNewMessagesClick: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent> = async (e) => {
     e.stopPropagation();
@@ -60,16 +68,20 @@ export const NotificationList = (props: NotificationListProps) => {
       >
         <Show when={!initialLoading()} fallback={<NotificationListSkeleton count={8} />}>
           <Show when={data().length > 0} fallback={<EmptyNotificationList />}>
-            <For each={data()}>
-              {(notification) => (
-                <Notification
-                  notification={notification}
-                  mountNotification={props.mountNotification}
-                  onNotificationClick={props.onNotificationClick}
-                  onPrimaryActionClick={props.onPrimaryActionClick}
-                  onSecondaryActionClick={props.onSecondaryActionClick}
-                />
-              )}
+            <For each={ids()}>
+              {(_, index) => {
+                const notification = () => data()[index()];
+
+                return (
+                  <Notification
+                    notification={notification()}
+                    renderNotification={props.renderNotification}
+                    onNotificationClick={props.onNotificationClick}
+                    onPrimaryActionClick={props.onPrimaryActionClick}
+                    onSecondaryActionClick={props.onSecondaryActionClick}
+                  />
+                );
+              }}
             </For>
             <Show when={!end()}>
               <div ref={setEl}>
