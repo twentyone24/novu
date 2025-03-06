@@ -10,6 +10,7 @@ export interface IUserRepository extends IUserRepositoryMongo {
     token: string,
     resetTokenCount: IUserResetTokenCount
   ): Promise<{ matched: number; modified: number }>;
+  findUserSessions(userId: string): Promise<[]>;
 }
 
 /**
@@ -33,4 +34,5 @@ export interface IUserRepositoryMongo {
   upsertMany(data: any): Promise<any>;
   upsert(query: any, data: any): Promise<any>;
   bulkWrite(bulkOperations: any, ordered: boolean): Promise<any>;
+  estimatedDocumentCount(): Promise<number>;
 }

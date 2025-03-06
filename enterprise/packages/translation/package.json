@@ -1,6 +1,6 @@
 {
   "name": "@novu/ee-translation",
-  "version": "2.0.0",
+  "version": "2.0.6",
   "private": true,
   "main": "dist/index.js",
   "scripts": {
@@ -10,19 +10,19 @@
     "build:watch": "node_modules/.bin/tsc -w -p tsconfig.json",
     "test": "echo 'skip test in the ci'",
     "lint": "eslint src --no-error-on-unmatched-pattern",
-    "test-ee": "cross-env TS_NODE_COMPILER_OPTIONS='{\"strictNullChecks\": false}' NODE_ENV=test E2E_RUNNER=true mocha --timeout 10000 --require ts-node/register --exit --file tests/setup.ts src/**/**/*.spec.ts"
+    "test-ee": "cross-env TS_NODE_COMPILER_OPTIONS='{\"strictNullChecks\": false}' NODE_ENV=test mocha --timeout 10000 --require ts-node/register --exit --file tests/setup.ts src/**/**/*.spec.ts"
   },
   "dependencies": {
     "@handlebars/parser": "^2.1.0",
     "@novu/application-generic": "workspace:*",
     "@novu/ee-dal": "workspace:*",
+    "@novu/ee-auth": "workspace:*",
     "@novu/ee-shared-services": "workspace:*",
     "@novu/shared": "workspace:*",
     "class-transformer": "0.5.1",
     "class-validator": "0.14.1",
     "multer": "^1.4.5-lts.1",
-    "shortid": "^2.2.16",
-    "slugify": "^1.4.6"
+    "shortid": "^2.2.16"
   },
   "devDependencies": {
     "@types/chai": "^4.2.11",
@@ -39,12 +39,8 @@
   },
   "peerDependencies": {
     "@nestjs/common": "10.4.1",
-    "@nestjs/jwt": "10.2.0",
     "@nestjs/swagger": "7.4.0",
     "@nestjs/platform-express": "10.4.1",
     "@novu/dal": "workspace:*"
-  },
-  "optionalDependencies": {
-    "@novu/ee-auth": "workspace:*"
   }
 }

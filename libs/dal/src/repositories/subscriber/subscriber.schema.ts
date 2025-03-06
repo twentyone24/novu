@@ -30,6 +30,7 @@ const subscriberSchema = new Schema<SubscriberDBModel>(
     },
     lastOnlineAt: Schema.Types.Date,
     data: Schema.Types.Mixed,
+    timezone: Schema.Types.String,
   },
   schemaOptions
 );
@@ -175,13 +176,36 @@ subscriberSchema.index({
  *
  * We can not add `deleted` field to the index the client wont be able to delete twice subscriber with the same subscriberId.
  */
-index(
+subscriberSchema.index(
   {
     subscriberId: 1,
     _environmentId: 1,
   },
   { unique: true }
 );
+
+subscriberSchema.index({
+  _organizationId: 1,
+});
+
+subscriberSchema.index({
+  _environmentId: 1,
+  _organizationId: 1,
+  deleted: 1,
+});
+
+subscriberSchema.index({
+  _environmentId: 1,
+  _organizationId: 1,
+  updatedAt: 1,
+  _id: 1,
+});
+
+subscriberSchema.index({
+  _environmentId: 1,
+  _organizationId: 1,
+  _id: 1,
+});
 
 subscriberSchema.plugin(mongooseDelete, { deletedAt: true, deletedBy: true, overrideMethods: 'all' });
 

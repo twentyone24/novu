@@ -4,26 +4,46 @@ import {
   CreateMessageTemplate,
   CreateWorkflow,
   DeleteMessageTemplate,
+  DeleteWorkflowUseCase,
+  GetPreferences,
+  GetWorkflowByIdsUseCase,
   UpdateChange,
   UpdateMessageTemplate,
   UpdateWorkflow,
+  UpsertControlValuesUseCase,
   UpsertPreferences,
+  DeletePreferencesUseCase,
+  TierRestrictionsValidateUsecase,
 } from '@novu/application-generic';
-import { PreferencesRepository } from '@novu/dal';
+import { CommunityOrganizationRepository, PreferencesRepository } from '@novu/dal';
 import { SharedModule } from '../shared/shared.module';
 import { BridgeController } from './bridge.controller';
 import { USECASES } from './usecases';
+import { BuildVariableSchemaUsecase } from '../workflows-v2/usecases/build-variable-schema';
+import { ExtractVariables } from '../workflows-v2/usecases/extract-variables/extract-variables.usecase';
+import { BuildStepIssuesUsecase } from '../workflows-v2/usecases/build-step-issues/build-step-issues.usecase';
 
 const PROVIDERS = [
   CreateWorkflow,
   UpdateWorkflow,
+  GetWorkflowByIdsUseCase,
+  DeleteWorkflowUseCase,
+  UpsertControlValuesUseCase,
   CreateMessageTemplate,
   UpdateMessageTemplate,
   DeleteMessageTemplate,
   CreateChange,
   UpdateChange,
   PreferencesRepository,
+  GetPreferences,
   UpsertPreferences,
+  DeletePreferencesUseCase,
+  UpsertControlValuesUseCase,
+  BuildVariableSchemaUsecase,
+  TierRestrictionsValidateUsecase,
+  CommunityOrganizationRepository,
+  ExtractVariables,
+  BuildStepIssuesUsecase,
 ];
 
 @Module({

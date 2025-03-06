@@ -1,6 +1,6 @@
 import { AxiosError } from 'axios';
 import nock from 'nock';
-import { Novu, defaultRetryCondition } from '../index';
+import { defaultRetryCondition, Novu } from '../index';
 import { RETRYABLE_HTTP_CODES } from './retry';
 
 const BACKEND_URL = 'http://example.com';
@@ -49,7 +49,7 @@ describe('Novu Node.js package - Retries and idempotency-key', () => {
     nock(BACKEND_URL)
       .post(TRIGGER_PATH)
       .times(3)
-      .reply(function (_url, _body) {
+      .reply(function cb(_url, _body) {
         idempotencyKeys.push(this.req.getHeader('idempotency-key') as string);
 
         return [500, { message: 'Server Exception' }];
@@ -100,7 +100,7 @@ describe('Novu Node.js package - Retries and idempotency-key', () => {
     nock(BACKEND_URL)
       .post(TRIGGER_PATH)
       .times(3)
-      .reply(function () {
+      .reply(function cb() {
         idempotencyKeys.push(this.req.getHeader('idempotency-key') as string);
 
         return [422, { message: 'Unprocessable Content' }];

@@ -4,11 +4,10 @@ import { Notifications } from './notifications';
 import { Session } from './session';
 import { Preferences } from './preferences';
 import { Socket } from './ws';
-import { PRODUCTION_BACKEND_URL } from './utils/config';
 import type { NovuOptions } from './types';
 import { InboxService } from './api';
 
-export class Novu implements Pick<NovuEventEmitter, 'on' | 'off'> {
+export class Novu implements Pick<NovuEventEmitter, 'on'> {
   #emitter: NovuEventEmitter;
   #session: Session;
   #socket: Socket;
@@ -16,11 +15,18 @@ export class Novu implements Pick<NovuEventEmitter, 'on' | 'off'> {
 
   public readonly notifications: Notifications;
   public readonly preferences: Preferences;
-  public on: <Key extends EventNames>(eventName: Key, listener: EventHandler<Events[Key]>) => void;
+  public on: <Key extends EventNames>(eventName: Key, listener: EventHandler<Events[Key]>) => () => void;
+  /**
+   * @deprecated
+   * Use the cleanup function returned by the "on" method instead.
+   */
   public off: <Key extends EventNames>(eventName: Key, listener: EventHandler<Events[Key]>) => void;
 
   constructor(options: NovuOptions) {
-    this.#inboxService = new InboxService({ backendUrl: options.backendUrl ?? PRODUCTION_BACKEND_URL });
+    this.#inboxService = new InboxService({
+      apiUrl: options.apiUrl || options.backendUrl,
+      userAgent: options.__userAgent,
+    });
     this.#emitter = new NovuEventEmitter();
     this.#session = new Session(
       {
@@ -52,7 +58,11 @@ export class Novu implements Pick<NovuEventEmitter, 'on' | 'off'> {
       if (this.#socket.isSocketEvent(eventName)) {
         this.#socket.initialize();
       }
-      this.#emitter.on(eventName, listener);
+      const cleanup = this.#emitter.on(eventName, listener);
+
+      return () => {
+        cleanup();
+      };
     };
 
     this.off = (eventName, listener) => {

@@ -5,7 +5,6 @@ import { addBreadcrumb } from '@sentry/node';
 
 import {
   MessageRepository,
-  NotificationStepEntity,
   SubscriberRepository,
   EnvironmentRepository,
   IntegrationEntity,
@@ -19,7 +18,6 @@ import {
   ExecutionDetailsStatusEnum,
   IAttachmentOptions,
   IEmailOptions,
-  LogCodeEnum,
   FeatureFlagsKeysEnum,
 } from '@novu/shared';
 import {
@@ -36,9 +34,8 @@ import {
   GetFeatureFlag,
   GetFeatureFlagCommand,
 } from '@novu/application-generic';
-import { EmailOutput } from '@novu/framework';
+import { EmailOutput } from '@novu/framework/internal';
 
-import { CreateLog } from '../../../shared/logs';
 import { SendMessageCommand } from './send-message.command';
 import { SendMessageBase } from './send-message.base';
 import { PlatformException } from '../../../shared/utils';
@@ -54,7 +51,6 @@ export class SendMessageEmail extends SendMessageBase {
     protected subscriberRepository: SubscriberRepository,
     protected messageRepository: MessageRepository,
     protected layoutRepository: LayoutRepository,
-    protected createLogUsecase: CreateLog,
     protected executionLogRoute: ExecutionLogRoute,
     private compileEmailTemplateUsecase: CompileEmailTemplate,
     protected selectIntegration: SelectIntegration,
@@ -65,7 +61,6 @@ export class SendMessageEmail extends SendMessageBase {
   ) {
     super(
       messageRepository,
-      createLogUsecase,
       executionLogRoute,
       subscriberRepository,
       selectIntegration,
@@ -113,7 +108,7 @@ export class SendMessageEmail extends SendMessageBase {
     if (!step.template) throw new PlatformException('Email channel template not found');
 
     const { subscriber } = command.compileContext;
-    const email = command.payload.email || subscriber.email;
+    const email = command.overrides?.email?.toRecipient || subscriber.email;
 
     addBreadcrumb({
       message: 'Sending Email',
@@ -152,8 +147,8 @@ export class SendMessageEmail extends SendMessageBase {
     }
 
     const overrides: Record<string, any> = {
-      ...(command.overrides.email || {}),
-      ...(command.overrides[integration?.providerId] || {}),
+      ...(command.overrides?.email || {}),
+      ...(command.overrides?.[integration?.providerId] || {}),
     };
     const bridgeOutputs = command.bridgeData?.outputs;
 
@@ -384,14 +379,7 @@ export class SendMessageEmail extends SendMessageBase {
     if (!email) {
       const mailErrorMessage = `${errorMessage} email address`;
 
-      await this.sendErrorStatus(
-        message,
-        status,
-        errorId,
-        mailErrorMessage,
-        command,
-        LogCodeEnum.SUBSCRIBER_MISSING_EMAIL
-      );
+      await this.sendErrorStatus(message, status, errorId, mailErrorMessage, command);
 
       await this.executionLogRoute.execute(
         ExecutionLogRouteCommand.create({
@@ -411,14 +399,7 @@ export class SendMessageEmail extends SendMessageBase {
     if (!integration) {
       const integrationError = `${errorMessage} active email integration not found`;
 
-      await this.sendErrorStatus(
-        message,
-        status,
-        errorId,
-        integrationError,
-        command,
-        LogCodeEnum.MISSING_EMAIL_INTEGRATION
-      );
+      await this.sendErrorStatus(message, status, errorId, integrationError, command);
 
       await this.executionLogRoute.execute(
         ExecutionLogRouteCommand.create({
@@ -483,7 +464,7 @@ export class SendMessageEmail extends SendMessageBase {
         'mail_unexpected_error',
         error.message || error.name || 'Error while sending email with provider',
         command,
-        LogCodeEnum.MAIL_PROVIDER_DELIVERY_ERROR
+        error
       );
 
       /*

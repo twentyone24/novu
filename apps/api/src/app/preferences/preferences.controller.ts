@@ -4,41 +4,41 @@ import {
   Controller,
   Delete,
   Get,
-  NotFoundException,
   Post,
   Query,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import {
-  GetFeatureFlag,
-  GetFeatureFlagCommand,
+  DeletePreferencesCommand,
+  DeletePreferencesUseCase,
   GetPreferences,
   GetPreferencesCommand,
   UpsertPreferences,
-  UserAuthGuard,
-  UserSession,
   UpsertUserWorkflowPreferencesCommand,
+  UserSession,
 } from '@novu/application-generic';
-import { FeatureFlagsKeysEnum, UserSessionData } from '@novu/shared';
+import { PreferencesTypeEnum, UserSessionData } from '@novu/shared';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { UpsertPreferencesDto } from './dtos/upsert-preferences.dto';
+import { UserAuthentication } from '../shared/framework/swagger/api.key.security';
 
+/**
+ * @deprecated - set workflow preferences using the `/workflows` endpoint instead
+ */
 @Controller('/preferences')
 @UseInterceptors(ClassSerializerInterceptor)
+@UserAuthentication()
 @ApiExcludeController()
 export class PreferencesController {
   constructor(
     private upsertPreferences: UpsertPreferences,
     private getPreferences: GetPreferences,
-    private getFeatureFlag: GetFeatureFlag
+    private deletePreferences: DeletePreferencesUseCase
   ) {}
 
   @Get('/')
-  @UseGuards(UserAuthGuard)
   async get(@UserSession() user: UserSessionData, @Query('workflowId') workflowId: string) {
-    await this.verifyPreferencesApiAvailability(user);
-
     return this.getPreferences.execute(
       GetPreferencesCommand.create({
         templateId: workflowId,
@@ -49,10 +49,7 @@ export class PreferencesController {
   }
 
   @Post('/')
-  @UseGuards(UserAuthGuard)
   async upsert(@Body() data: UpsertPreferencesDto, @UserSession() user: UserSessionData) {
-    await this.verifyPreferencesApiAvailability(user);
-
     return this.upsertPreferences.upsertUserWorkflowPreferences(
       UpsertUserWorkflowPreferencesCommand.create({
         environmentId: user.environmentId,
@@ -65,33 +62,15 @@ export class PreferencesController {
   }
 
   @Delete('/')
-  @UseGuards(UserAuthGuard)
   async delete(@UserSession() user: UserSessionData, @Query('workflowId') workflowId: string) {
-    await this.verifyPreferencesApiAvailability(user);
-
-    return this.upsertPreferences.upsertUserWorkflowPreferences(
-      UpsertUserWorkflowPreferencesCommand.create({
-        environmentId: user.environmentId,
-        organizationId: user.organizationId,
-        userId: user._id,
+    return this.deletePreferences.execute(
+      DeletePreferencesCommand.create({
         templateId: workflowId,
-        preferences: null,
-      })
-    );
-  }
-
-  private async verifyPreferencesApiAvailability(user: UserSessionData) {
-    const isEnabled = await this.getFeatureFlag.execute(
-      GetFeatureFlagCommand.create({
-        userId: user._id,
         environmentId: user.environmentId,
         organizationId: user.organizationId,
-        key: FeatureFlagsKeysEnum.IS_WORKFLOW_PREFERENCES_ENABLED,
+        userId: user._id,
+        type: PreferencesTypeEnum.USER_WORKFLOW,
       })
     );
-
-    if (!isEnabled) {
-      throw new NotFoundException();
-    }
   }
 }

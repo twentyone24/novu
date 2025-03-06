@@ -6,10 +6,11 @@ export interface IEnvironment {
   _organizationId: string;
   _parentId?: string;
   identifier: string;
+  slug?: string;
   widget: IWidgetSettings;
   dns?: IDnsSettings;
   apiRateLimits?: IApiRateLimitMaximum;
-
+  color: string;
   branding?: {
     color: string;
     logo: string;
@@ -25,6 +26,9 @@ export interface IEnvironment {
   bridge?: {
     url?: string;
   };
+
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface IWidgetSettings {

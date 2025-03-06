@@ -2,7 +2,7 @@ FROM node:20-alpine3.19
 
 ENV NX_DAEMON=false
 
-RUN npm install -g pnpm@9.1.4 --loglevel notice
+RUN npm install -g pnpm@9.11.0 --loglevel notice
 RUN npm i pm2 -g
 RUN apk --no-cache add g++ make py3-pip
 
@@ -39,9 +39,10 @@ RUN --mount=type=secret,id=BULL_MQ_PRO_NPM_TOKEN,uid=1000 export BULL_MQ_PRO_NPM
 
 WORKDIR /usr/src/app/apps/ws
 
+RUN cp src/dotenvcreate.mjs dist/dotenvcreate.mjs
 RUN cp src/.example.env dist/.env
 RUN cp src/.env.test dist/.env.test
 RUN cp src/.env.development dist/.env.development
 RUN cp src/.env.production dist/.env.production
 
-CMD [ "pm2-runtime", "dist/main.js" ]
+ENTRYPOINT [ "sh", "-c", "node dist/dotenvcreate.mjs -s=novu/ws -r=$NOVU_REGION -e=$NOVU_ENTERPRISE -v=$NODE_ENV && pm2-runtime start dist/main.js" ]

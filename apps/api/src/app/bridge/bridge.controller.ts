@@ -14,13 +14,14 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 
-import { UserSessionData, ControlVariablesLevelEnum, WorkflowTypeEnum } from '@novu/shared';
-import { AnalyticsService, ExternalApiAccessible, UserAuthGuard, UserSession } from '@novu/application-generic';
-import { EnvironmentRepository, NotificationTemplateRepository, ControlVariablesRepository } from '@novu/dal';
+import { HttpHeaderKeysEnum } from '@novu/framework/internal';
+import { ControlValuesLevelEnum, UserSessionData, WorkflowOriginEnum, WorkflowTypeEnum } from '@novu/shared';
+import { AnalyticsService, ExternalApiAccessible, UserSession } from '@novu/application-generic';
+import { ControlValuesRepository, EnvironmentRepository, NotificationTemplateRepository } from '@novu/dal';
 
 import { ApiExcludeController } from '@nestjs/swagger';
 
-import { StoreControlVariables, StoreControlVariablesCommand } from './usecases/store-control-variables';
+import { StoreControlValuesCommand, StoreControlValuesUseCase } from './usecases/store-control-values';
 import { PreviewStep, PreviewStepCommand } from './usecases/preview-step';
 import { SyncCommand } from './usecases/sync';
 import { Sync } from './usecases/sync/sync.usecase';
@@ -30,45 +31,34 @@ import { GetBridgeStatus } from './usecases/get-bridge-status/get-bridge-status.
 import { GetBridgeStatusCommand } from './usecases/get-bridge-status/get-bridge-status.command';
 import { CreateBridgeRequestDto } from './dtos/create-bridge-request.dto';
 import { CreateBridgeResponseDto } from './dtos/create-bridge-response.dto';
+import { UserAuthentication } from '../shared/framework/swagger/api.key.security';
 
 @Controller('/bridge')
 @UseInterceptors(ClassSerializerInterceptor)
+@UserAuthentication()
 @ApiExcludeController()
 export class BridgeController {
   constructor(
     private syncUsecase: Sync,
-    private validateBridgeUrlUsecase: GetBridgeStatus,
+    private getBridgeStatus: GetBridgeStatus,
     private environmentRepository: EnvironmentRepository,
     private notificationTemplateRepository: NotificationTemplateRepository,
-    private controlVariablesRepository: ControlVariablesRepository,
-    private storeControlVariables: StoreControlVariables,
+    private controlValuesRepository: ControlValuesRepository,
+    private storeControlValuesUseCase: StoreControlValuesUseCase,
     private previewStep: PreviewStep,
     private analyticsService: AnalyticsService
   ) {}
 
   @Get('/status')
-  @UseGuards(UserAuthGuard)
   async health(@UserSession() user: UserSessionData) {
-    const environment = await this.environmentRepository.findOne({ _id: user.environmentId });
-    if (!environment?.echo?.url) {
-      throw new BadRequestException('Bridge URL not found');
-    }
-
-    const result = await this.validateBridgeUrlUsecase.execute(
+    return this.getBridgeStatus.execute(
       GetBridgeStatusCommand.create({
-        bridgeUrl: environment.echo.url,
+        environmentId: user.environmentId,
       })
     );
-
-    if (result.status !== 'ok') {
-      throw new Error('Bridge URL is not accessible');
-    }
-
-    return result;
   }
 
   @Post('/preview/:workflowId/:stepId')
-  @UseGuards(UserAuthGuard)
   async preview(
     @Param('workflowId') workflowId: string,
     @Param('stepId') stepId: string,
@@ -79,29 +69,25 @@ export class BridgeController {
       PreviewStepCommand.create({
         workflowId,
         stepId,
-        inputs: data.controls || data.inputs,
-        controls: data.controls || data.inputs,
-        data: data.payload,
-        bridgeUrl: data.bridgeUrl,
+        controls: data.controls,
+        payload: data.payload,
         environmentId: user.environmentId,
         organizationId: user.organizationId,
         userId: user._id,
+        workflowOrigin: WorkflowOriginEnum.EXTERNAL,
       })
     );
   }
 
   @Post('/sync')
   @ExternalApiAccessible()
-  @UseGuards(UserAuthGuard)
   async createBridgesByDiscovery(
-    @Headers('x-novu-anonymous') anonymousIdDeprecated: string,
-    @Headers('novu-anonymous') anonymousId: string,
+    @Headers(HttpHeaderKeysEnum.NOVU_ANONYMOUS) anonymousId: string,
     @UserSession() user: UserSessionData,
     @Body() body: CreateBridgeRequestDto,
     @Query('source') source?: string
   ): Promise<CreateBridgeResponseDto> {
-    const chosenAnonymousIdHeader = anonymousId ?? anonymousIdDeprecated;
-    if (chosenAnonymousIdHeader && chosenAnonymousIdHeader !== 'null') {
+    if (anonymousId) {
       this.analyticsService.alias(anonymousId, user._id);
     }
 
@@ -119,9 +105,8 @@ export class BridgeController {
 
   @Post('/diff')
   @ExternalApiAccessible()
-  @UseGuards(UserAuthGuard)
   async createDiscoverySoft(
-    @Headers('x-novu-anonymous') anonymousId: string,
+    @Headers(HttpHeaderKeysEnum.NOVU_ANONYMOUS) anonymousId: string,
     @UserSession() user: UserSessionData,
     @Body() body: CreateBridgeRequestDto
   ): Promise<CreateBridgeResponseDto> {
@@ -131,7 +116,7 @@ export class BridgeController {
       throw new BadRequestException('Bridge URL not found');
     }
 
-    if (anonymousId && anonymousId !== 'null') {
+    if (anonymousId) {
       this.analyticsService.alias(anonymousId, user._id);
     }
 
@@ -161,7 +146,6 @@ export class BridgeController {
 
   @Get('/controls/:workflowId/:stepId')
   @ExternalApiAccessible()
-  @UseGuards(UserAuthGuard)
   async getControls(
     @UserSession() user: UserSessionData,
     @Param('workflowId') workflowId: string,
@@ -174,13 +158,18 @@ export class BridgeController {
     if (!workflowExist) {
       throw new NotFoundException('Workflow not found');
     }
+    const step = workflowExist?.steps.find((item) => item.stepId === stepId);
 
-    const result = await this.controlVariablesRepository.findOne({
+    if (!step || !step._id) {
+      throw new NotFoundException('Step not found');
+    }
+
+    const result = await this.controlValuesRepository.findOne({
       _environmentId: user.environmentId,
       _organizationId: user.organizationId,
       _workflowId: workflowExist._id,
-      stepId,
-      level: ControlVariablesLevelEnum.STEP_CONTROLS,
+      _stepId: step._id,
+      level: ControlValuesLevelEnum.STEP_CONTROLS,
     });
 
     return result;
@@ -188,18 +177,17 @@ export class BridgeController {
 
   @Put('/controls/:workflowId/:stepId')
   @ExternalApiAccessible()
-  @UseGuards(UserAuthGuard)
   async createControls(
     @Param('workflowId') workflowId: string,
     @Param('stepId') stepId: string,
     @UserSession() user: UserSessionData,
     @Body() body: any
   ) {
-    return this.storeControlVariables.execute(
-      StoreControlVariablesCommand.create({
+    return this.storeControlValuesUseCase.execute(
+      StoreControlValuesCommand.create({
         stepId,
         workflowId,
-        variables: body.variables,
+        controlValues: body.variables,
         environmentId: user.environmentId,
         organizationId: user.organizationId,
         userId: user._id,
@@ -209,17 +197,21 @@ export class BridgeController {
 
   @Post('/validate')
   @ExternalApiAccessible()
-  async validateBridgeUrl(@Body() body: ValidateBridgeUrlRequestDto): Promise<ValidateBridgeUrlResponseDto> {
+  async validateBridgeUrl(
+    @UserSession() user: UserSessionData,
+    @Body() body: ValidateBridgeUrlRequestDto
+  ): Promise<ValidateBridgeUrlResponseDto> {
     try {
-      const result = await this.validateBridgeUrlUsecase.execute(
+      const result = await this.getBridgeStatus.execute(
         GetBridgeStatusCommand.create({
-          bridgeUrl: body.bridgeUrl,
+          environmentId: user.environmentId,
+          statelessBridgeUrl: body.bridgeUrl,
         })
       );
 
       return { isValid: result.status === 'ok' };
     } catch (err: any) {
-      return { isValid: false };
+      return { isValid: false, error: err.message };
     }
   }
 }

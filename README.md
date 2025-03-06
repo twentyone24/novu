@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="https://novu.co?utm_source=github" target="_blank">
+  <a href="https://go.novu.co/github" target="_blank">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://user-images.githubusercontent.com/2233092/213641039-220ac15f-f367-4d13-9eaf-56e79433b8c1.png">
     <img alt="Novu Logo" src="https://user-images.githubusercontent.com/2233092/213641043-3bbb3f21-3c53-4e67-afe5-755aeb222159.png" width="280"/>
@@ -16,9 +16,6 @@
   <a href="https://www.npmjs.com/package/@novu/node">
     <img src="https://img.shields.io/npm/dm/@novu/node" alt="npm downloads">
   </a>
-  <a href="https://github.com/novuhq/novu/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/novuhq/novu" alt="MIT">
-  </a>
 </p>
 
 <h1 align="center">
@@ -26,7 +23,7 @@
 </h1>
 
 <div align="center">
-  Novu is the easy button for developer teams that need to quickly integrate notifications into their application, and enable product teams to own notifications content and messaging.
+  Novu is the easy button for developer teams that need to quickly integrate notifications into their application, and enables product teams to own notifications content and messaging.
 </div>
 
 <p align="center">
@@ -35,7 +32,7 @@
   <br />
   or
   <br />
-  <a href="https://dashboard.novu.co?utm_campaign=github-readme" rel="dofollow"><strong>Create a free account »</strong></a>
+  <a href="https://go.novu.co/github" rel="dofollow"><strong>create a free account »</strong></a>
   <br />
 
 <br/>
@@ -71,19 +68,11 @@ With Novu, you can create custom workflows and define conditions for each channe
 
 ## 🚀 Getting Started
 
-There are two ways to get started:
-
-1. type the following command in your terminal.
-
-```bash
-npx novu@latest dev
-```
-2. [Create a free cloud account](https://dashboard.novu.co?utm_campaign=github-readme)
+[Create a free account](https://dashboard-v2.novu.co?utm_campaign=github-readme) and follow the instructions on the dashboard.
 
 ## 📚 Table of contents
 
 - [Getting Started](https://github.com/novuhq/novu#-getting-started)
-- [GitOps & React Email Integration](https://github.com/novuhq/novu#-gitops)
 - [Embeddable Inbox and Preferences](https://github.com/novuhq/novu#embeddable-notification-center)
 - [Providers](https://github.com/novuhq/novu#providers)
   - [Email](https://github.com/novuhq/novu#-email)
@@ -96,40 +85,6 @@ npx novu@latest dev
 - [Links](https://github.com/novuhq/novu#-links)
 - [License](https://github.com/novuhq/novu#%EF%B8%8F-license)
 
-## Notification workflows as code
-
-For API documentation and reference, please visit our [API Reference](https://docs.novu.co/api-reference/overview?utm_campaign=github-readme).
-
-```ts
-import { workflow, CronExpression } from '@novu/framework';
-import { z } from 'zod';
-import { render } from '@react-email/render';
-
-const commentWorkflow = workflow('comment-workflow', async (event) => {
-  const digest = await event.step.digest('digest-comments', (controls) => ({
-    cron: controls.schedule
-  }), { controlSchema: z.object({ schedule: z.nativeEnum(CronExpression) }) });
-
-  await event.step.email('digest-email', async (controls) => ({
-    subject: controls.subject,
-    body: render(<WeeklyDigestEmail { ...controls } events = { digest.events } />)
-  }), {
-    skip: () => !digest.events.length,
-    controlSchema: z.object({
-      subject: z.string().default('Hi {{subscriber.firstName}} - Acme Comments'),
-      openAiModel: z.enum(['gpt-3.5-turbo', 'gpt-4o']).default('gpt-4o'),
-      aiPrompt: z.string().default('Produce a concise comment digest'),
-    })
-  });
-}, { payloadSchema: z.object({ name: z.string(), comment: z.string() }) });
-
-await commentWorkflow.trigger({
-  payload: { name: 'John', comment: 'Are you free to give me a call?' },
-  to: 'jane@acme.com'
-});
-
-```
-
 ## Embeddable Inbox component
 
 Using the Novu API and admin panel, you can easily add a real-time notification center to your web app without building it yourself. You can use our [React](https://docs.novu.co/inbox/react/get-started?utm_campaign=github-readme), or build your own via our API and SDK. React native, Vue, and Angular are coming soon.
@@ -138,6 +93,7 @@ Using the Novu API and admin panel, you can easily add a real-time notification 
 <img width="762" alt="notification-center-912bb96e009fb3a69bafec23bcde00b0" src="https://novu.co/static/6e670ba56ed7a65c7f5ccff5d58c56fb/a9e85/inbox.webp" alt-text="GIF of Novu's Embeddable Notification Center">
 
 Read more about how to add a [notification center Inbox](https://docs.novu.co/inbox/react/get-started?utm_campaign=github-readme) to your app.
+
 </div>
 
 ## Providers
@@ -217,7 +173,13 @@ We are more than happy to help you. If you are getting any errors or facing prob
 
 ## 🛡️ License
 
-Novu is licensed under the MIT License - see the [LICENSE](https://github.com/novuhq/novu/blob/main/LICENSE) file for details.
+Novu is a commercial open source company, which means some parts of this open source repository require a commercial license. The concept is called "Open Core," where the core technology is fully open source, licensed under MIT license, and the enterprise code is covered under a commercial license ("/enterprise" Enterprise Edition). Enterprise features are built by the core engineering team of Novu which is hired in full-time.
+
+The following modules and folders are licensed under the enterprise license:
+
+- `enterprise` folder at the root of the project and all of their subfolders and modules
+- `apps/web/src/ee` folder and all of their subfolders and modules
+- `apps/dashboard/src/ee` folder and all of their subfolders and modules
 
 ## 💪 Thanks to all of our contributors
 

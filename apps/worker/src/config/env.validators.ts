@@ -1,11 +1,5 @@
-import { json, port, str, num, ValidatorSpec, makeValidator, bool, CleanedEnv, cleanEnv } from 'envalid';
-import {
-  DEFAULT_MESSAGE_GENERIC_RETENTION_DAYS,
-  DEFAULT_MESSAGE_IN_APP_RETENTION_DAYS,
-  DEFAULT_NOTIFICATION_RETENTION_DAYS,
-  FeatureFlagsKeysEnum,
-  StringifyEnv,
-} from '@novu/shared';
+import { DEFAULT_NOTIFICATION_RETENTION_DAYS, FeatureFlagsKeysEnum, StringifyEnv } from '@novu/shared';
+import { bool, CleanedEnv, cleanEnv, json, makeValidator, num, port, str, url, ValidatorSpec } from 'envalid';
 
 export function validateEnv() {
   return cleanEnv(process.env, envValidators);
@@ -37,7 +31,6 @@ export const envValidators = {
   MAX_NOVU_INTEGRATION_MAIL_REQUESTS: num({ default: 300 }),
   NOVU_EMAIL_INTEGRATION_API_KEY: str({ default: '' }),
   STORAGE_SERVICE: str({ default: undefined }),
-  METRICS_SERVICE: str({ default: '' }),
   REDIS_HOST: str(),
   REDIS_PORT: port(),
   REDIS_PASSWORD: str({ default: undefined }),
@@ -51,16 +44,19 @@ export const envValidators = {
   REDIS_CACHE_KEEP_ALIVE: str({ default: undefined }),
   REDIS_CACHE_FAMILY: str({ default: undefined }),
   REDIS_CACHE_KEY_PREFIX: str({ default: undefined }),
-  MONGO_URL: str(),
+  /** @deprecated - use `MONGO_AUTO_CREATE_INDEXES` instead */
+  AUTO_CREATE_INDEXES: bool({ default: false }),
+  MONGO_AUTO_CREATE_INDEXES: bool({ default: false }),
+  MONGO_MAX_IDLE_TIME_IN_MS: num({ default: 1000 * 30 }),
+  MONGO_MAX_POOL_SIZE: num({ default: 50 }),
   MONGO_MIN_POOL_SIZE: num({ default: 10 }),
-  MONGO_MAX_POOL_SIZE: num({ default: 500 }),
+  MONGO_URL: str(),
   SEGMENT_TOKEN: str({ default: undefined }),
   LAUNCH_DARKLY_SDK_KEY: str({ default: undefined }),
   STRIPE_API_KEY: str({ default: undefined }),
   NOTIFICATION_RETENTION_DAYS: num({ default: DEFAULT_NOTIFICATION_RETENTION_DAYS }),
-  MESSAGE_GENERIC_RETENTION_DAYS: num({ default: DEFAULT_MESSAGE_GENERIC_RETENTION_DAYS }),
-  MESSAGE_IN_APP_RETENTION_DAYS: num({ default: DEFAULT_MESSAGE_IN_APP_RETENTION_DAYS }),
-
+  API_ROOT_URL: url(),
+  SUBSCRIBER_WIDGET_JWT_EXPIRATION_TIME: str({ default: '15 days' }),
   // Feature Flags
   ...Object.keys(FeatureFlagsKeysEnum).reduce(
     (acc, key) => {

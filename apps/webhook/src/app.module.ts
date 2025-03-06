@@ -1,13 +1,7 @@
 import { Module } from '@nestjs/common';
-import { RavenInterceptor, RavenModule } from 'nest-raven';
-import { APP_INTERCEPTOR } from '@nestjs/core';
 
-import {
-  createNestLoggingModuleOptions,
-  LoggerModule,
-  ProfilingModule,
-  TracingModule,
-} from '@novu/application-generic';
+import { createNestLoggingModuleOptions, LoggerModule, TracingModule } from '@novu/application-generic';
+import { SentryModule } from '@sentry/nestjs/setup';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { SharedModule } from './shared/shared.module';
@@ -20,7 +14,6 @@ const modules = [
   HealthModule,
   WebhooksModule,
   TracingModule.register(packageJson.name, packageJson.version),
-  ProfilingModule.register(packageJson.name),
   LoggerModule.forRoot(
     createNestLoggingModuleOptions({
       serviceName: packageJson.name,
@@ -33,11 +26,7 @@ const modules = [
 const providers: any[] = [AppService];
 
 if (process.env.SENTRY_DSN) {
-  modules.push(RavenModule);
-  providers.push({
-    provide: APP_INTERCEPTOR,
-    useValue: new RavenInterceptor(),
-  });
+  modules.unshift(SentryModule.forRoot());
 }
 
 @Module({

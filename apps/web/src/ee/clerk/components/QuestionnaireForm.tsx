@@ -1,37 +1,29 @@
-import { useEffect, useState } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Controller, useForm } from 'react-hook-form';
-import { useMutation } from '@tanstack/react-query';
 import { Group, Input as MantineInput } from '@mantine/core';
-import { captureException } from '@sentry/react';
-import {
-  FeatureFlagsKeysEnum,
-  IResponseError,
-  UpdateExternalOrganizationDto,
-  JobTitleEnum,
-  jobTitleToLabelMapper,
-} from '@novu/shared';
 import { Button, inputStyles, Select } from '@novu/design-system';
+import { FeatureFlagsKeysEnum, JobTitleEnum, jobTitleToLabelMapper, UpdateExternalOrganizationDto } from '@novu/shared';
+import { useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import styled from '@emotion/styled/macro';
 import { api } from '../../../api/api.client';
-import { useAuth } from '../../../hooks/useAuth';
-import { useFeatureFlag, useVercelIntegration, useVercelParams, useEffectOnce, useContainer } from '../../../hooks';
-import { ROUTES } from '../../../constants/routes';
-import { useSegment } from '../../../components/providers/SegmentProvider';
-import { BRIDGE_SYNC_SAMPLE_ENDPOINT } from '../../../config/index';
-import { DynamicCheckBox } from '../../../pages/auth/components/dynamic-checkbox/DynamicCheckBox';
-import { useWebContainerSupported } from '../../../hooks/useWebContainerSupport';
 import { identifyUser } from '../../../api/telemetry';
+import { useSegment } from '../../../components/providers/SegmentProvider';
+import { ROUTES } from '../../../constants/routes';
+import { useFeatureFlag, useVercelIntegration } from '../../../hooks';
+import { useAuth } from '../../../hooks/useAuth';
+import { useWebContainerSupported } from '../../../hooks/useWebContainerSupport';
+import { DynamicCheckBox } from '../../../pages/auth/components/dynamic-checkbox/DynamicCheckBox';
 import { hubspotCookie } from '../../../utils';
 
 function updateClerkOrgMetadata(data: UpdateExternalOrganizationDto) {
   return api.post('/v1/clerk/organization', data);
 }
 
+const companySizeOptions = ['<20', '20-50', '51-100', '101-200', '200+'];
+
 export function QuestionnaireForm() {
   const { isSupported } = useWebContainerSupported();
-  const isV2Enabled = useFeatureFlag(FeatureFlagsKeysEnum.IS_V2_ENABLED);
   const isPlaygroundOnboardingEnabled = useFeatureFlag(FeatureFlagsKeysEnum.IS_PLAYGROUND_ONBOARDING_ENABLED);
   const [loading, setLoading] = useState<boolean>();
   const {
@@ -46,10 +38,6 @@ export function QuestionnaireForm() {
   const location = useLocation();
   const [_, setParams] = useSearchParams();
 
-  const { mutateAsync: updateOrganizationMutation } = useMutation<{ _id: string }, IResponseError, any>(
-    (data: UpdateExternalOrganizationDto) => updateClerkOrgMetadata(data)
-  );
-
   async function updateOrganization(data: UpdateExternalOrganizationDto) {
     const selectedLanguages = Object.keys(data.language || {}).filter((key) => data.language && data.language[key]);
 
@@ -57,8 +45,9 @@ export function QuestionnaireForm() {
       jobTitle: data.jobTitle,
       domain: data.domain,
       language: selectedLanguages,
+      companySize: data.companySize,
     };
-    await updateOrganizationMutation(updateClerkOrgDto);
+    await updateClerkOrgMetadata(updateClerkOrgDto);
 
     const hubspotContext = hubspotCookie.get();
 
@@ -69,12 +58,14 @@ export function QuestionnaireForm() {
       pageUri: window.location.href,
       pageName: 'Create Organization Form',
       hubspotContext: hubspotContext || '',
+      companySize: data.companySize,
     });
 
     segment.track('Create Organization Form Submitted', {
       location: (location.state as any)?.origin || 'web',
       language: selectedLanguages,
       jobTitle: data.jobTitle,
+      companySize: data.companySize,
     });
 
     // get updated organization data in session
@@ -85,17 +76,6 @@ export function QuestionnaireForm() {
     setLoading(true);
     await updateOrganization({ ...data });
     setLoading(false);
-
-    try {
-      await api.post(`/v1/bridge/sync?source=sample-workspace`, {
-        bridgeUrl: BRIDGE_SYNC_SAMPLE_ENDPOINT,
-      });
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error(e);
-
-      captureException(e);
-    }
 
     const vercelRedirectData = localStorage.getItem('vercel_redirect_data');
 
@@ -131,13 +111,7 @@ export function QuestionnaireForm() {
       }
     }
 
-    if (isV2Enabled) {
-      navigate(ROUTES.GET_STARTED);
-
-      return;
-    }
-
-    navigate(`${ROUTES.GET_STARTED}`);
+    navigate(ROUTES.GET_STARTED);
   };
 
   /**
@@ -151,16 +125,34 @@ export function QuestionnaireForm() {
     }
   `;
 
-  const trackRedirectionToOnboarding = () => {
-    if (isPlaygroundOnboardingEnabled && !isSupported) {
-      segment.track(
-        'Redirected to onboarding page because the playground was not supported on the browser - [Sign-Up]'
-      );
-    }
-  };
-
   return (
     <form noValidate name="create-app-form" onSubmit={handleSubmit(onUpdateOrganization)}>
+      <Controller
+        name="companySize"
+        control={control}
+        rules={{
+          required: 'Please specify your company size',
+        }}
+        render={({ field }) => {
+          return (
+            <StyledSelect
+              label="Company size"
+              data-test-id="questionnaire-company-size"
+              error={errors.companySize?.message}
+              {...field}
+              allowDeselect={false}
+              placeholder="Select an option"
+              data={companySizeOptions.map((item) => ({
+                label: item,
+                value: item,
+              }))}
+              required
+              mt={32}
+            />
+          );
+        }}
+      />
+
       <Controller
         name="jobTitle"
         control={control}
@@ -181,6 +173,7 @@ export function QuestionnaireForm() {
                 value: item,
               }))}
               required
+              mt={16}
             />
           );
         }}
@@ -207,7 +200,7 @@ export function QuestionnaireForm() {
               label="Choose your back-end stack"
               styles={inputStyles}
               error={fieldState.error?.message}
-              mt={32}
+              mt={16}
               required
             >
               <Group
@@ -247,10 +240,11 @@ const backendLanguages = [
 ];
 
 interface OrganizationUpdateForm {
-  jobTitle: JobTitleEnum;
+  companySize?: string;
   domain?: string;
-  language?: string[];
   frontendStack?: string[];
+  jobTitle: JobTitleEnum;
+  language?: string[];
 }
 
 function isJobTitleIsTech(jobTitle: JobTitleEnum) {

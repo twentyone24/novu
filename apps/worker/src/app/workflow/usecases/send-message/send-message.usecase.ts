@@ -6,6 +6,7 @@ import {
   ExecutionDetailsStatusEnum,
   IDigestRegularMetadata,
   IPreferenceChannels,
+  PreferencesTypeEnum,
   StepTypeEnum,
   WorkflowTypeEnum,
 } from '@novu/shared';
@@ -20,8 +21,6 @@ import {
   ExecutionLogRoute,
   ExecutionLogRouteCommand,
   GetPreferences,
-  GetSubscriberGlobalPreference,
-  GetSubscriberGlobalPreferenceCommand,
   GetSubscriberTemplatePreference,
   GetSubscriberTemplatePreferenceCommand,
   IConditionsFilterResponse,
@@ -40,7 +39,7 @@ import {
   TenantEntity,
   TenantRepository,
 } from '@novu/dal';
-import { ExecuteOutput } from '@novu/framework';
+import { ExecuteOutput } from '@novu/framework/internal';
 
 import { SendMessageCommand } from './send-message.command';
 import { SendMessageDelay } from './send-message-delay.usecase';
@@ -65,7 +64,6 @@ export class SendMessage {
     private digest: Digest,
     private executionLogRoute: ExecutionLogRoute,
     private getSubscriberTemplatePreferenceUsecase: GetSubscriberTemplatePreference,
-    private getSubscriberGlobalPreferenceUsecase: GetSubscriberGlobalPreference,
     private notificationTemplateRepository: NotificationTemplateRepository,
     private jobRepository: JobRepository,
     private sendMessageDelay: SendMessageDelay,
@@ -123,7 +121,12 @@ export class SendMessage {
           isRetry: false,
           raw: JSON.stringify({
             ...(stepCondition
-              ? { filter: { conditions: stepCondition?.conditions, passed: stepCondition?.passed } }
+              ? {
+                  filter: {
+                    conditions: stepCondition?.conditions,
+                    passed: stepCondition?.passed,
+                  },
+                }
               : {}),
             ...(channelPreference ? { preferences: { passed: channelPreference } } : {}),
             ...(isBridgeSkipped ? { skip: isBridgeSkipped } : {}),
@@ -198,9 +201,15 @@ export class SendMessage {
     bridgeSkip: boolean | undefined,
     command: SendMessageCommand,
     variables: IFilterVariables
-  ): Promise<{ stepCondition: IConditionsFilterResponse | null; channelPreference: boolean | null }> {
+  ): Promise<{
+    stepCondition: IConditionsFilterResponse | null;
+    channelPreference: boolean | null;
+  }> {
     if (bridgeSkip === true) {
-      return { stepCondition: { passed: true, conditions: [], variables: {} }, channelPreference: true };
+      return {
+        stepCondition: { passed: true, conditions: [], variables: {} },
+        channelPreference: true,
+      };
     }
 
     const [stepCondition, channelPreference] = await Promise.all([
@@ -239,6 +248,7 @@ export class SendMessage {
     });
 
     const { digest } = command.job;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let timedInfo: any = {};
 
     if (digest && digest.type === DigestTypeEnum.TIMED && digest.timed) {
@@ -282,18 +292,14 @@ export class SendMessage {
   private async evaluateChannelPreference(command: SendMessageCommand): Promise<boolean> {
     const { job } = command;
 
+    if (this.isActionStep(job)) {
+      return true;
+    }
+
     const workflow = await this.getWorkflow({
       _id: job._templateId,
       environmentId: job._environmentId,
     });
-
-    /*
-     * The `critical` flag check is needed here for backward-compatibility of V1 Workflow Preferences only.
-     * V2 Workflow Preferences are stored on the Preference entity instead.
-     */
-    if (workflow?.critical || this.isActionStep(job)) {
-      return true;
-    }
 
     const subscriber = await this.getSubscriberBySubscriberId({
       _environmentId: job._environmentId,
@@ -301,33 +307,8 @@ export class SendMessage {
     });
     if (!subscriber) throw new PlatformException(`Subscriber not found with id ${job._subscriberId}`);
 
-    const { preference: globalPreference } = await this.getSubscriberGlobalPreferenceUsecase.execute(
-      GetSubscriberGlobalPreferenceCommand.create({
-        organizationId: job._organizationId,
-        environmentId: job._environmentId,
-        subscriberId: job.subscriberId,
-      })
-    );
-
-    const globalPreferenceResult = this.stepPreferred(globalPreference, job);
-
-    if (!globalPreferenceResult) {
-      await this.executionLogRoute.execute(
-        ExecutionLogRouteCommand.create({
-          ...ExecutionLogRouteCommand.getDetailsFromJob(job),
-          detail: DetailEnum.STEP_FILTERED_BY_GLOBAL_PREFERENCES,
-          source: ExecutionDetailsSourceEnum.INTERNAL,
-          status: ExecutionDetailsStatusEnum.SUCCESS,
-          isTest: false,
-          isRetry: false,
-          raw: JSON.stringify(globalPreference),
-        })
-      );
-
-      return false;
-    }
-
     let subscriberPreference: { enabled: boolean; channels: IPreferenceChannels };
+    let subscriberPreferenceType: PreferencesTypeEnum;
     if (command.statelessPreferences) {
       /*
        * Stateless Workflow executions do not have their definitions stored in the database.
@@ -342,12 +323,13 @@ export class SendMessage {
         enabled: true,
         channels: workflowPreference,
       };
+      subscriberPreferenceType = PreferencesTypeEnum.WORKFLOW_RESOURCE;
     } else {
       if (!workflow) {
         throw new PlatformException(`Workflow with id '${job._templateId}' was not found`);
       }
 
-      const { preference } = await this.getSubscriberTemplatePreferenceUsecase.execute(
+      const { preference, type } = await this.getSubscriberTemplatePreferenceUsecase.execute(
         GetSubscriberTemplatePreferenceCommand.create({
           organizationId: job._organizationId,
           subscriberId: subscriber.subscriberId,
@@ -355,18 +337,27 @@ export class SendMessage {
           template: workflow,
           subscriber,
           tenant: job.tenant,
+          includeInactiveChannels: false,
         })
       );
       subscriberPreference = preference;
+      subscriberPreferenceType = type;
     }
 
     const result = this.stepPreferred(subscriberPreference, job);
+
+    const preferenceDetailFromPreferenceType: Record<PreferencesTypeEnum, DetailEnum> = {
+      [PreferencesTypeEnum.WORKFLOW_RESOURCE]: DetailEnum.STEP_FILTERED_BY_WORKFLOW_RESOURCE_PREFERENCES,
+      [PreferencesTypeEnum.SUBSCRIBER_WORKFLOW]: DetailEnum.STEP_FILTERED_BY_SUBSCRIBER_WORKFLOW_PREFERENCES,
+      [PreferencesTypeEnum.SUBSCRIBER_GLOBAL]: DetailEnum.STEP_FILTERED_BY_SUBSCRIBER_GLOBAL_PREFERENCES,
+      [PreferencesTypeEnum.USER_WORKFLOW]: DetailEnum.STEP_FILTERED_BY_USER_WORKFLOW_PREFERENCES,
+    };
 
     if (!result) {
       await this.executionLogRoute.execute(
         ExecutionLogRouteCommand.create({
           ...ExecutionLogRouteCommand.getDetailsFromJob(job),
-          detail: DetailEnum.STEP_FILTERED_BY_PREFERENCES,
+          detail: preferenceDetailFromPreferenceType[subscriberPreferenceType],
           source: ExecutionDetailsSourceEnum.INTERNAL,
           status: ExecutionDetailsStatusEnum.SUCCESS,
           isTest: false,

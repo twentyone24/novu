@@ -22,9 +22,8 @@ import {
   ExecutionLogRoute,
   ExecutionLogRouteCommand,
 } from '@novu/application-generic';
-import { SmsOutput } from '@novu/framework';
+import { SmsOutput } from '@novu/framework/internal';
 
-import { CreateLog } from '../../../shared/logs';
 import { SendMessageCommand } from './send-message.command';
 import { SendMessageBase } from './send-message.base';
 import { PlatformException } from '../../../shared/utils';
@@ -36,7 +35,6 @@ export class SendMessageSms extends SendMessageBase {
   constructor(
     protected subscriberRepository: SubscriberRepository,
     protected messageRepository: MessageRepository,
-    protected createLogUsecase: CreateLog,
     protected executionLogRoute: ExecutionLogRoute,
     private compileTemplate: CompileTemplate,
     protected selectIntegration: SelectIntegration,
@@ -46,7 +44,6 @@ export class SendMessageSms extends SendMessageBase {
   ) {
     super(
       messageRepository,
-      createLogUsecase,
       executionLogRoute,
       subscriberRepository,
       selectIntegration,
@@ -220,8 +217,7 @@ export class SendMessageSms extends SendMessageBase {
         'warning',
         'sms_missing_integration_error',
         'Subscriber does not have an active sms integration',
-        command,
-        LogCodeEnum.MISSING_SMS_INTEGRATION
+        command
       );
 
       await this.executionLogRoute.execute(
@@ -244,8 +240,7 @@ export class SendMessageSms extends SendMessageBase {
         'warning',
         'no_integration_from_phone',
         'Integration does not have from phone configured',
-        command,
-        LogCodeEnum.MISSING_SMS_PROVIDER
+        command
       );
 
       await this.executionLogRoute.execute(
@@ -321,7 +316,7 @@ export class SendMessageSms extends SendMessageBase {
         'unexpected_sms_error',
         e.message || e.name || 'Un-expect SMS provider error',
         command,
-        LogCodeEnum.SMS_ERROR
+        e
       );
 
       await this.executionLogRoute.execute(

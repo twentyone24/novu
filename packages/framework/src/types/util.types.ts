@@ -1,3 +1,8 @@
+/*
+ * THIS FILE SHOULD NOT DEPEND ON ANY OTHER FILES.
+ * IT SHOULD ONLY CONTAIN UTILITY TYPES.
+ */
+
 /**
  * A type that represents either `A` or `B`. Shared properties retain their
  * types and unique properties are marked as optional.
@@ -91,5 +96,14 @@ export type PickOptionalKeys<T, DEEP extends boolean = true> = keyof PickOptiona
 export type DeepPartial<T> = T extends object
   ? {
       [P in keyof T]?: DeepPartial<T[P]>;
+    }
+  : T;
+
+/**
+ * Recursively make all properties of type `T` required.
+ */
+export type DeepRequired<T> = T extends object
+  ? {
+      [P in keyof T]-?: DeepRequired<T[P]>;
     }
   : T;

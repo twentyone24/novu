@@ -1,22 +1,17 @@
-import './config/env.config';
-import 'newrelic';
-import '@sentry/tracing';
+import './instrument';
 
 import helmet from 'helmet';
-import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
+import { INestApplication, Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import bodyParser from 'body-parser';
-import { init, Integrations, Handlers } from '@sentry/node';
+
 import { BullMqService, getErrorInterceptor, Logger as PinoLogger } from '@novu/application-generic';
 import { ExpressAdapter } from '@nestjs/platform-express';
-
-import { validateEnv, CONTEXT_PATH, corsOptionsDelegate } from './config';
+import { CONTEXT_PATH, corsOptionsDelegate, validateEnv } from './config';
 import { AppModule } from './app.module';
-import { ResponseInterceptor } from './app/shared/framework/response.interceptor';
-import { SubscriberRouteGuard } from './app/auth/framework/subscriber-route.guard';
-
-import packageJson from '../package.json';
 import { setupSwagger } from './app/shared/framework/swagger/swagger.controller';
+import { ResponseInterceptor } from './app/shared/framework/response.interceptor';
+import { AllExceptionsFilter } from './exception-filter';
 
 const passport = require('passport');
 const compression = require('compression');
@@ -30,23 +25,15 @@ const extendedBodySizeRoutes = [
   '/v1/bridge/diff',
 ];
 
-if (process.env.SENTRY_DSN) {
-  init({
-    dsn: process.env.SENTRY_DSN,
-    environment: process.env.NODE_ENV,
-    release: `v${packageJson.version}`,
-    ignoreErrors: ['Non-Error exception captured'],
-    integrations: [
-      // enable HTTP calls tracing
-      new Integrations.Http({ tracing: true }),
-    ],
-  });
-}
-
 // Validate the ENV variables after launching SENTRY, so missing variables will report to sentry
 validateEnv();
-
-export async function bootstrap(expressApp?): Promise<INestApplication> {
+class BootstrapOptions {
+  expressApp?: any;
+  internalSdkGeneration?: boolean;
+}
+export async function bootstrap(
+  bootstrapOptions?: BootstrapOptions
+): Promise<{ app: INestApplication; document: any }> {
   BullMqService.haveProInstalled();
 
   let rawBodyBuffer: undefined | ((...args) => void);
@@ -66,11 +53,17 @@ export async function bootstrap(expressApp?): Promise<INestApplication> {
   }
 
   let app: INestApplication;
-  if (expressApp) {
-    app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp), nestOptions);
+  if (bootstrapOptions?.expressApp) {
+    app = await NestFactory.create(AppModule, new ExpressAdapter(bootstrapOptions?.expressApp), nestOptions);
   } else {
     app = await NestFactory.create(AppModule, { bufferLogs: true, ...nestOptions });
   }
+
+  app.enableVersioning({
+    type: VersioningType.URI,
+    prefix: `${CONTEXT_PATH}v`,
+    defaultVersion: '1',
+  });
 
   app.useLogger(app.get(PinoLogger));
   app.flushLogs();
@@ -82,15 +75,8 @@ export async function bootstrap(expressApp?): Promise<INestApplication> {
   server.headersTimeout = 65 * 1000;
   Logger.verbose(`Server headersTimeout: ${server.headersTimeout / 1000}s `);
 
-  if (process.env.SENTRY_DSN) {
-    app.use(Handlers.requestHandler());
-    app.use(Handlers.tracingHandler());
-  }
-
   app.use(helmet());
   app.enableCors(corsOptionsDelegate);
-
-  app.setGlobalPrefix(`${CONTEXT_PATH}v1`);
 
   app.use(passport.initialize());
 
@@ -104,8 +90,6 @@ export async function bootstrap(expressApp?): Promise<INestApplication> {
   app.useGlobalInterceptors(new ResponseInterceptor());
   app.useGlobalInterceptors(getErrorInterceptor());
 
-  app.useGlobalGuards(new SubscriberRouteGuard(app.get(Reflector), app.get(PinoLogger)));
-
   app.use(extendedBodySizeRoutes, bodyParser.json({ limit: '20mb' }));
   app.use(extendedBodySizeRoutes, bodyParser.urlencoded({ limit: '20mb', extended: true }));
 
@@ -114,19 +98,19 @@ export async function bootstrap(expressApp?): Promise<INestApplication> {
 
   app.use(compression());
 
-  await setupSwagger(app);
+  const document = await setupSwagger(app, bootstrapOptions?.internalSdkGeneration);
 
-  Logger.log('BOOTSTRAPPED SUCCESSFULLY');
+  app.useGlobalFilters(new AllExceptionsFilter(app.get(PinoLogger)));
 
-  if (expressApp) {
+  if (bootstrapOptions?.expressApp) {
     await app.init();
   } else {
-    await app.listen(process.env.PORT);
+    await app.listen(process.env.PORT || 3000);
   }
 
   app.enableShutdownHooks();
 
   Logger.log(`Started application in NODE_ENV=${process.env.NODE_ENV} on port ${process.env.PORT}`);
 
-  return app;
+  return { app, document };
 }

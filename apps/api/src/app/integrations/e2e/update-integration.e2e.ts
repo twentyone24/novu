@@ -12,7 +12,7 @@ import {
   PushProviderIdEnum,
 } from '@novu/shared';
 
-describe('Update Integration - /integrations/:integrationId (PUT)', function () {
+describe('Update Integration - /integrations/:integrationId (PUT) #novu-v2', function () {
   let session: UserSession;
   const integrationRepository = new IntegrationRepository();
   const envRepository = new EnvironmentRepository();
@@ -971,8 +971,6 @@ describe('Update Integration - /integrations/:integrationId (PUT)', function () 
       _environmentId: session.environment._id,
     });
 
-    process.env.IS_IMPROVED_BILLING_ENABLED = 'true';
-
     await communityOrganizationRepository.update(
       { _id: session.organization._id },
       { $set: { apiServiceLevel: ApiServiceLevelEnum.BUSINESS } }
@@ -1013,8 +1011,6 @@ describe('Update Integration - /integrations/:integrationId (PUT)', function () 
       _environmentId: session.environment._id,
     });
 
-    process.env.IS_IMPROVED_BILLING_ENABLED = 'true';
-
     await communityOrganizationRepository.update(
       { _id: session.organization._id },
       { $set: { apiServiceLevel: ApiServiceLevelEnum.FREE } }
@@ -1040,7 +1036,6 @@ describe('Update Integration - /integrations/:integrationId (PUT)', function () 
       body: { data },
     } = await session.testAgent.put(`/v1/integrations/${inAppIntegration._id}`).send(payload);
 
-    console.log('data', data);
     expect(data.removeNovuBranding).to.be.undefined;
 
     const updatedIntegration = await integrationRepository.findOne({

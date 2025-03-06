@@ -1,5 +1,7 @@
+import { MIXPANEL_KEY, SEGMENT_KEY } from '@/config';
+import type { IUserEntity } from '@novu/shared';
 import { AnalyticsBrowser } from '@segment/analytics-next';
-import { IUserEntity } from '@novu/shared';
+import * as Sentry from '@sentry/react';
 import * as mixpanel from 'mixpanel-browser';
 
 export class SegmentService {
@@ -8,20 +10,29 @@ export class SegmentService {
   public _mixpanelEnabled: boolean;
 
   constructor() {
-    this._segmentEnabled = !!import.meta.env.REACT_APP_SEGMENT_KEY;
-    this._mixpanelEnabled = !!import.meta.env.REACT_APP_MIXPANEL_KEY;
+    this._segmentEnabled = !!SEGMENT_KEY;
+    this._mixpanelEnabled = !!MIXPANEL_KEY;
 
     if (this._mixpanelEnabled) {
-      mixpanel.init(import.meta.env.REACT_APP_MIXPANEL_KEY as string, {
+      mixpanel.init(MIXPANEL_KEY as string, {
         //@ts-expect-error missing from types
         record_sessions_percent: 100,
       });
+
+      try {
+        //@ts-expect-error missing from types
+        mixpanel.start_session_recording();
+      } catch (e) {
+        Sentry.captureException(e);
+        console.error(e);
+      }
     }
 
     if (this._segmentEnabled) {
       this._segment = AnalyticsBrowser.load({
-        writeKey: import.meta.env.REACT_APP_SEGMENT_KEY as string,
+        writeKey: SEGMENT_KEY as string,
       });
+
       if (!this._mixpanelEnabled) {
         return;
       }
@@ -50,7 +61,7 @@ export class SegmentService {
     }
   }
 
-  identify(user: IUserEntity) {
+  identify(user: IUserEntity, extraProperties?: Record<string, unknown>) {
     if (!this.isSegmentEnabled()) {
       return;
     }
@@ -61,6 +72,19 @@ export class SegmentService {
       firstName: user.firstName,
       lastName: user.lastName,
       avatar: user.profilePicture,
+      ...(extraProperties || {}),
+    });
+  }
+
+  group(organization: { id: string; name: string; createdAt: string }, extraProperties?: Record<string, unknown>) {
+    if (!this.isSegmentEnabled()) {
+      return;
+    }
+
+    this._segment?.group(organization.id, {
+      name: organization.name,
+      createdAt: organization.createdAt,
+      ...(extraProperties || {}),
     });
   }
 
@@ -84,7 +108,6 @@ export class SegmentService {
     this._segment?.setAnonymousId(anonymousId);
   }
 
-  // @ts-expect-error event is unused at the moment until we do the /v1/telemetry/measure API call
   async track(event: string, data?: Record<string, unknown>) {
     if (!this.isSegmentEnabled()) {
       return;
@@ -95,18 +118,13 @@ export class SegmentService {
         //@ts-expect-error missing from types
         mixpanel.get_session_recording_properties();
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       data = {
         ...(data || {}),
         ...sessionReplayProperties,
       };
     }
 
-    // TODO: Add api call
-    // await api.post("/v1/telemetry/measure", {
-    //   event: `${event} - [WEB]`,
-    //   data,
-    // });
+    this._segment?.track(event, data);
   }
 
   pageView(url: string) {
@@ -123,6 +141,16 @@ export class SegmentService {
     }
 
     this._segment?.reset();
+  }
+
+  async getAnonymousId() {
+    if (!this.isSegmentEnabled()) {
+      return;
+    }
+
+    const user = await this._segment?.user();
+
+    return user?.anonymousId();
   }
 
   isSegmentEnabled(): boolean {

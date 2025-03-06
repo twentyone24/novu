@@ -1,6 +1,6 @@
 {
   "name": "@novu/stateless",
-  "version": "2.0.0",
+  "version": "2.0.3",
   "description": "Notification Management Framework",
   "main": "build/main/index.js",
   "typings": "build/main/index.d.ts",
@@ -72,5 +72,10 @@
   ],
   "prettier": {
     "singleQuote": true
+  },
+  "nx": {
+    "tags": [
+      "type:package"
+    ]
   }
 }

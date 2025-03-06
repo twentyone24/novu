@@ -176,7 +176,15 @@ export type NovuOptions = {
   applicationIdentifier: string;
   subscriberId: string;
   subscriberHash?: string;
+  // @deprecated use apiUrl instead
   backendUrl?: string;
+  apiUrl?: string;
   socketUrl?: string;
   useCache?: boolean;
+  /**
+   * @internal Should be used internally
+   */
+  __userAgent?: string;
 };
+
+export type Prettify<T> = { [K in keyof T]: T[K] } & {};

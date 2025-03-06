@@ -1,4 +1,3 @@
-import { ApiServiceLevelEnum } from '@novu/shared';
 import { Inject } from '@nestjs/common';
 import { IPartnerConfiguration, OrganizationEntity } from './organization.entity';
 import { IOrganizationRepository } from './organization-repository.interface';
@@ -20,10 +19,6 @@ export class OrganizationRepository implements IOrganizationRepository {
 
   renameOrganization(organizationId: string, payload: { name: string }) {
     return this.organizationRepository.renameOrganization(organizationId, payload);
-  }
-
-  updateServiceLevel(organizationId: string, apiServiceLevel: ApiServiceLevelEnum) {
-    return this.organizationRepository.updateServiceLevel(organizationId, apiServiceLevel);
   }
 
   updateDefaultLocale(organizationId: string, defaultLocale: string): Promise<{ matched: number; modified: number }> {
@@ -98,5 +93,9 @@ export class OrganizationRepository implements IOrganizationRepository {
 
   bulkWrite(bulkOperations: any, ordered: boolean): Promise<any> {
     return this.organizationRepository.bulkWrite(bulkOperations, ordered);
+  }
+
+  estimatedDocumentCount(): Promise<number> {
+    return this.organizationRepository.estimatedDocumentCount();
   }
 }

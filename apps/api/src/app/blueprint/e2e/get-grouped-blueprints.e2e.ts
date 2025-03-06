@@ -20,12 +20,12 @@ import {
 } from '@novu/application-generic';
 
 import { GroupedBlueprintResponse } from '../dto/grouped-blueprint.response.dto';
-import { CreateWorkflowRequestDto } from '../../workflows/dto';
 import { GetGroupedBlueprints, POPULAR_TEMPLATES_ID_LIST } from '../usecases/get-grouped-blueprints';
 // eslint-disable-next-line import/no-namespace
 import * as blueprintStaticModule from '../usecases/get-grouped-blueprints/consts';
+import { CreateWorkflowRequestDto } from '../../workflows-v1/dto';
 
-describe('Get grouped notification template blueprints - /blueprints/group-by-category (GET)', async () => {
+describe('Get grouped notification template blueprints - /blueprints/group-by-category (GET) #novu-v1', async () => {
   let session: UserSession;
   const notificationTemplateRepository: NotificationTemplateRepository = new NotificationTemplateRepository();
   const environmentRepository: EnvironmentRepository = new EnvironmentRepository();

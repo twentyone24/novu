@@ -1,6 +1,6 @@
 /**
  * This script publishes a preview package via https://pkg.pr.new/ for all affected packages between
- * the base branch of the repoand the current HEAD.
+ * the base branch and the current HEAD.
  *
  */
 
@@ -66,13 +66,17 @@ try {
 
     // Preview only affected public packages
     if (affectedPackageNames.has(pkg.name)) {
-      // Pnpm list returms absolute paths are absolute. Keep only the "./packages/{{package_folder}}" path
+      // Pnpm list returns absolute paths are absolute. Keep only the "./packages/{{package_folder}}" path
       const relativePath = pkg.path.match(/\/packages.*/)[0];
       memo.push(`'.${relativePath}'`);
     }
 
     return memo;
   }, []);
+
+  if (affectedPackagePaths.length === 0) {
+    process.exit(0);
+  }
 
   const command = `pnpx pkg-pr-new publish ${affectedPackagePaths.join(' ')}`;
   console.log(await myExec(command));

@@ -22,22 +22,13 @@ const buildCSS = async () => {
   fs.writeFileSync(destinationCssFilePath, processedCss);
 };
 
-const runAfterLast =
-  (commands: Array<string | false>) =>
-  (...configs: Options[]) => {
-    const [last, ...rest] = configs.reverse();
-
-    return [...rest.reverse(), { ...last, onSuccess: [last.onSuccess, ...commands].filter(Boolean).join(' && ') }];
-  };
-
-const isProd = process.env?.NODE_ENV === 'production';
+const isProd = process.env.NODE_ENV === 'production';
 
 const baseConfig: Options = {
   splitting: true,
   sourcemap: false,
   clean: true,
   esbuildPlugins: [solidPlugin()],
-  define: { PACKAGE_NAME: `"${name}"`, PACKAGE_VERSION: `"${version}"`, __DEV__: `${!isProd}` },
 };
 
 const baseModuleConfig: Options = {
@@ -48,12 +39,17 @@ const baseModuleConfig: Options = {
     index: './src/index.ts',
     'ui/index': './src/ui/index.ts',
     'themes/index': './src/ui/themes/index.ts',
+    'internal/index': './src/ui/internal/index.ts',
+  },
+  define: {
+    NOVU_API_VERSION: `"2024-06-26"`,
+    PACKAGE_NAME: `"${name}"`,
+    PACKAGE_VERSION: `"${version}"`,
+    __DEV__: `${isProd ? false : true}`,
   },
 };
 
 export default defineConfig((config: Options) => {
-  const copyPackageJson = (format: 'esm' | 'cjs') => `cp ./package.${format}.json ./dist/${format}/package.json`;
-
   const cjs: Options = {
     ...baseModuleConfig,
     format: 'cjs',
@@ -91,5 +87,5 @@ export default defineConfig((config: Options) => {
     onSuccess: async () => await buildCSS(),
   };
 
-  return runAfterLast([copyPackageJson('esm'), copyPackageJson('cjs')])(umd, esm, cjs);
+  return [cjs, esm, umd];
 });

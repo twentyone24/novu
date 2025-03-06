@@ -1,9 +1,8 @@
 import { InboxService } from '../api';
 import { NovuEventEmitter } from '../event-emitter';
 import { BaseModule } from '../base-module';
-import { updatePreference } from './helpers';
 import { Preference } from './preference';
-import type { ListPreferencesArgs, UpdatePreferencesArgs } from './types';
+import type { ListPreferencesArgs } from './types';
 import { Result } from '../types';
 import { PreferencesCache } from '../cache/preferences-cache';
 
@@ -44,6 +43,8 @@ export class Preferences extends BaseModule {
               new Preference(el, {
                 emitterInstance: this._emitter,
                 inboxServiceInstance: this._inboxService,
+                cache: this.cache,
+                useCache: this.#useCache,
               })
           );
 
@@ -61,11 +62,5 @@ export class Preferences extends BaseModule {
         throw error;
       }
     });
-  }
-
-  async update(args: UpdatePreferencesArgs): Result<Preference> {
-    return this.callWithSession(async () =>
-      updatePreference({ emitter: this._emitter, apiService: this._inboxService, args })
-    );
   }
 }
