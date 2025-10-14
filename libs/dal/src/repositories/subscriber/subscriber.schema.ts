@@ -1,8 +1,7 @@
 import mongoose, { IndexOptions, Schema } from 'mongoose';
-
+import { IndexDefinition } from '../../shared/types';
 import { schemaOptions } from '../schema-default.options';
 import { SubscriberDBModel, SubscriberEntity } from './subscriber.entity';
-import { IndexDefinition } from '../../shared/types';
 
 const mongooseDelete = require('mongoose-delete');
 
@@ -27,6 +26,7 @@ const subscriberSchema = new Schema<SubscriberDBModel>(
     isOnline: {
       type: Schema.Types.Boolean,
       required: false,
+      default: false,
     },
     lastOnlineAt: Schema.Types.Date,
     data: Schema.Types.Mixed,
@@ -177,13 +177,9 @@ subscriberSchema.index({
  * We can not add `deleted` field to the index the client wont be able to delete twice subscriber with the same subscriberId.
  */
 subscriberSchema.index(
-  {
-    subscriberId: 1,
-    _environmentId: 1,
-  },
-  { unique: true }
+  { subscriberId: 1, _environmentId: 1 },
+  { name: 'unique_subscriber_per_environment', unique: true, partialFilterExpression: { deleted: false } }
 );
-
 subscriberSchema.index({
   _organizationId: 1,
 });
@@ -206,6 +202,11 @@ subscriberSchema.index({
   _organizationId: 1,
   _id: 1,
 });
+
+subscriberSchema.index(
+  { _environmentId: 1, subscriberId: 1 },
+  { name: 'unique_subscriber_per_environment', unique: true, partialFilterExpression: { deleted: false } }
+);
 
 subscriberSchema.plugin(mongooseDelete, { deletedAt: true, deletedBy: true, overrideMethods: 'all' });
 

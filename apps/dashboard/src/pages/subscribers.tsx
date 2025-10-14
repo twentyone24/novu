@@ -1,9 +1,10 @@
+import { useEffect } from 'react';
+import { AnimatedOutlet } from '@/components/animated-outlet';
 import { DashboardLayout } from '@/components/dashboard-layout';
 import { PageMeta } from '@/components/page-meta';
 import { SubscriberList } from '@/components/subscribers/subscriber-list';
 import { useTelemetry } from '@/hooks/use-telemetry';
 import { TelemetryEvent } from '@/utils/telemetry';
-import { useEffect } from 'react';
 
 export const SubscribersPage = () => {
   const track = useTelemetry();
@@ -16,7 +17,8 @@ export const SubscribersPage = () => {
     <>
       <PageMeta title="Subscribers" />
       <DashboardLayout headerStartItems={<h1 className="text-foreground-950 flex items-center gap-1">Subscribers</h1>}>
-        <SubscriberList className="px-2.5" />
+        <SubscriberList />
+        <AnimatedOutlet />
       </DashboardLayout>
     </>
   );

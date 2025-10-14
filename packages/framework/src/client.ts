@@ -1,7 +1,6 @@
 import { Liquid } from 'liquidjs';
-import { digest } from './filters/digest';
 
-import { ChannelStepEnum, PostActionEnum } from './constants';
+import { PostActionEnum } from './constants';
 import {
   ExecutionEventControlsInvalidError,
   ExecutionEventPayloadInvalidError,
@@ -18,6 +17,8 @@ import {
   StepNotFoundError,
   WorkflowNotFoundError,
 } from './errors';
+import { mockSchema } from './jsonSchemaFaker';
+import { prettyPrintDiscovery } from './resources/workflow/pretty-print-discovery';
 import type {
   ActionStep,
   ClientOptions,
@@ -32,37 +33,25 @@ import type {
   Schema,
   Skip,
   State,
+  StepType,
   ValidationError,
   Workflow,
 } from './types';
 import { WithPassthrough } from './types/provider.types';
-import {
-  EMOJI,
-  log,
-  resolveApiUrl,
-  resolveSecretKey,
-  sanitizeHtmlInObject,
-  stringifyDataStructureWithSingleQuotes,
-} from './utils';
+import { EMOJI, log, resolveApiUrl, resolveSecretKey, sanitizeHtmlInObject } from './utils';
+import { createLiquidEngine } from './utils/liquid.utils';
+import { deepMerge } from './utils/object.utils';
 import { validateData } from './validators';
 
-import { mockSchema } from './jsonSchemaFaker';
-import { prettyPrintDiscovery } from './resources/workflow/pretty-print-discovery';
-import { deepMerge } from './utils/object.utils';
-
 function isRuntimeInDevelopment() {
-  return ['development', undefined].includes(process.env.NODE_ENV);
+  return ['development', undefined, 'dev'].includes(process.env.NODE_ENV);
 }
 
 export class Client {
   private discoveredWorkflows = new Map<string, DiscoverWorkflowOutput>();
   private discoverWorkflowPromises = new Map<string, Promise<void>>();
 
-  private templateEngine = new Liquid({
-    outputEscape: (output) => {
-      return stringifyDataStructureWithSingleQuotes(output);
-    },
-  });
+  private templateEngine: Liquid;
 
   public secretKey: string;
 
@@ -77,11 +66,7 @@ export class Client {
     this.apiUrl = builtOpts.apiUrl;
     this.secretKey = builtOpts.secretKey;
     this.strictAuthentication = builtOpts.strictAuthentication;
-
-    this.templateEngine.registerFilter('json', (value, spaces) =>
-      stringifyDataStructureWithSingleQuotes(value, spaces)
-    );
-    this.templateEngine.registerFilter('digest', digest);
+    this.templateEngine = createLiquidEngine();
   }
 
   private buildOptions(providedOptions?: ClientOptions) {
@@ -213,15 +198,12 @@ export class Client {
         case 'event':
           this.throwInvalidEvent(dataType, workflowId, result.errors);
 
-        // eslint-disable-next-line no-fallthrough
         case 'step':
           this.throwInvalidStep(stepId, dataType, workflowId, result.errors);
 
-        // eslint-disable-next-line no-fallthrough
         case 'provider':
           this.throwInvalidProvider(stepId, providerId, dataType, workflowId, result.errors);
 
-        // eslint-disable-next-line no-fallthrough
         default:
           throw new Error(`Invalid component: '${component}'`);
       }
@@ -330,7 +312,6 @@ export class Client {
            * Return an empty object for results when a step is skipped.
            * TODO: fix typings when `skip` is specified to return `Partial<T_Result>`
            */
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           return {} as any;
         }
       }
@@ -343,7 +324,6 @@ export class Client {
         ...step,
         providers: step.providers.map((provider) => {
           // TODO: Update return type to include ChannelStep and fix typings
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const providerResolve = (options as any)?.providers?.[provider.type] as typeof provider.resolve;
 
           if (!providerResolve) {
@@ -358,12 +338,7 @@ export class Client {
         resolve: stepResolve as typeof step.resolve,
       });
 
-      if (
-        Object.values(ChannelStepEnum).includes(step.type as ChannelStepEnum) &&
-        // TODO: Update return type to include ChannelStep and fix typings
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (options as any)?.disableOutputSanitization !== true
-      ) {
+      if (this.shouldSanitize({ stepType: step.type, options })) {
         // Sanitize the outputs to avoid XSS attacks via Channel content.
         stepResult = {
           ...stepResult,
@@ -382,6 +357,14 @@ export class Client {
 
       return stepResult.outputs;
     };
+  }
+
+  private shouldSanitize({ stepType, options }: { stepType: StepType; options: ChannelStepOption | undefined }) {
+    if (options?.disableOutputSanitization === true) {
+      return false;
+    }
+
+    return (['email', 'in_app'] as StepType[]).includes(stepType);
   }
 
   private async shouldSkip<T_Controls extends Record<string, unknown>>(
@@ -404,7 +387,6 @@ export class Client {
     const actionMessage = actionMessages[event.action];
 
     const actionMessageFormatted = `${actionMessage} workflowId:`;
-    // eslint-disable-next-line no-console
     console.log(`\n${log.bold(log.underline(actionMessageFormatted))} '${event.workflowId}'`);
     const workflow = this.getWorkflow(event.workflowId);
 
@@ -466,6 +448,7 @@ export class Client {
           environment: {},
           controls: {},
           subscriber: event.subscriber,
+          context: event.context,
           step: {
             email: this.executeStepFactory(validatedEvent, setResult, hasResult),
             sms: this.executeStepFactory(validatedEvent, setResult, hasResult),
@@ -475,6 +458,7 @@ export class Client {
             push: this.executeStepFactory(validatedEvent, setResult, hasResult),
             chat: this.executeStepFactory(validatedEvent, setResult, hasResult),
             custom: this.executeStepFactory(validatedEvent, setResult, hasResult),
+            throttle: this.executeStepFactory(validatedEvent, setResult, hasResult),
           },
         }),
       ]);
@@ -494,7 +478,6 @@ export class Client {
     } as const;
     const resultMessage = resultMessages[event.action];
 
-    // eslint-disable-next-line no-console
     console.log(`${emoji} ${resultMessage} workflowId: \`${event.workflowId}\``);
 
     this.prettyPrintExecute(event, elapsedTimeInMilliseconds, executionError);
@@ -547,13 +530,9 @@ export class Client {
     const message = error ? 'Failed to execute' : actionMessage;
     const executionLog = error ? log.error : log.success;
     const logMessage = `${successPrefix} ${message} workflowId: '${event.workflowId}`;
-    // eslint-disable-next-line no-console
     console.log(`\n  ${log.bold(executionLog(logMessage))}'`);
-    // eslint-disable-next-line no-console
     console.log(`  ├ ${EMOJI.STEP} stepId: '${event.stepId}'`);
-    // eslint-disable-next-line no-console
     console.log(`  ├ ${EMOJI.ACTION} action: '${event.action}'`);
-    // eslint-disable-next-line no-console
     console.log(`  └ ${EMOJI.DURATION} duration: '${duration.toFixed(2)}ms'\n`);
   }
 
@@ -587,7 +566,6 @@ export class Client {
 
     outputs: Record<string, unknown>
   ): Record<string, unknown> {
-    // eslint-disable-next-line no-console
     console.log(`  ${EMOJI.MOCK} Mocked provider: \`${provider.type}\``);
     const mockOutput = this.mock(provider.outputs.schema);
 
@@ -701,18 +679,39 @@ export class Client {
 
   private async compileControls(templateControls: Record<string, unknown>, event: Event) {
     try {
-      const templateString = this.templateEngine.parse(JSON.stringify(templateControls));
+      const templateString = this.preprocessTranslationPatterns(JSON.stringify(templateControls));
+      const parsedTemplate = this.templateEngine.parse(templateString);
+      const discoveredWorkflow = this.getWorkflow(event.workflowId);
 
-      const compiledString = await this.templateEngine.render(templateString, {
+      const renderVariables = {
+        workflow: {
+          workflowId: discoveredWorkflow.workflowId,
+          name: discoveredWorkflow.name,
+          description: discoveredWorkflow.description,
+          tags: discoveredWorkflow.tags,
+          severity: discoveredWorkflow.severity,
+        },
         payload: event.payload,
         subscriber: event.subscriber,
+        context: event.context,
         steps: buildSteps(event.state),
-      });
+        t: {}, // Empty object so t.* properties are undefined and trigger default filters
+      };
+
+      const compiledString = await this.templateEngine.render(parsedTemplate, renderVariables);
 
       return JSON.parse(compiledString);
     } catch (error) {
       throw new StepControlCompilationFailedError(event.workflowId, event.stepId, error);
     }
+  }
+
+  /**
+   * Preprocesses translation patterns to preserve them when values are undefined.
+   * Transforms {{t.key}} to {{t.key | default: "{{t.key}}"}}
+   */
+  private preprocessTranslationPatterns(template: string): string {
+    return template.replace(/\{\{\s*t\.([\p{L}\p{N}_.-]+)\s*\}\}/gu, '{{ t.$1 | default: "{{t.$1}}" }}');
   }
 
   /**
@@ -838,3 +837,8 @@ function buildSteps(stateArray: State[]) {
 
   return result;
 }
+
+type ChannelStepOption = {
+  disableOutputSanitization?: boolean;
+  [key: string]: unknown;
+};

@@ -1,5 +1,6 @@
 <div align="center">
-  <a href="https://go.novu.co/github" target="_blank">
+  <a href="https://go.novu.co/github" target="_blank" rel="noopener noreferrer"
+>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://user-images.githubusercontent.com/2233092/213641039-220ac15f-f367-4d13-9eaf-56e79433b8c1.png">
     <img alt="Novu Logo" src="https://user-images.githubusercontent.com/2233092/213641043-3bbb3f21-3c53-4e67-afe5-755aeb222159.png" width="280"/>
@@ -8,45 +9,61 @@
 </div>
 
 <br/>
-
 <p align="center">
-  <a href="https://www.npmjs.com/package/@novu/node">
-    <img src="https://img.shields.io/npm/v/@novu/node" alt="NPM">
+  <a href="https://www.producthunt.com/products/novu" target="_blank" rel="noopener noreferrer"
+>
+    <img src="https://img.shields.io/badge/Product%20Hunt-Golden%20Kitty%20Award%202023-yellow" alt="Product Hunt">
   </a>
-  <a href="https://www.npmjs.com/package/@novu/node">
+  <a href="https://news.ycombinator.com/item?id=38419513" target="_blank" rel="noopener noreferrer"
+><img src="https://img.shields.io/badge/Hacker%20News-%231-%23FF6600" alt="Hacker News"></a>
+  <a href="https://www.npmjs.com/package/@novu/react" target="_blank" rel="noopener noreferrer"
+>
+    <img src="https://img.shields.io/npm/v/@novu/react" alt="NPM">
+  </a>
+  <!-- TODO: Replace this with @novu/api as soon as the NPM download traffic switches to the new package -->
+  <a href="https://www.npmjs.com/package/@novu/node" target="_blank" rel="noopener noreferrer"
+>
     <img src="https://img.shields.io/npm/dm/@novu/node" alt="npm downloads">
   </a>
 </p>
 
 <h1 align="center">
-  The open source notifications framework that makes it easy for developers to empower product teams.
+ The &lt;Inbox /&gt; infrastructure for modern products
 </h1>
 
 <div align="center">
-  Novu is the easy button for developer teams that need to quickly integrate notifications into their application, and enables product teams to own notifications content and messaging.
+  The notification platform that turns complex multi-channel delivery into a single component. Built for developers, designed for growth, powered by open source.
 </div>
 
 <p align="center">
   <br />
-  <a href="https://docs.novu.co?utm_campaign=github-readme" rel="dofollow"><strong>Explore the docs »</strong></a>
-  <br />
-  or
-  <br />
-  <a href="https://go.novu.co/github" rel="dofollow"><strong>create a free account »</strong></a>
+  <a href="https://go.novu.co/github" rel="dofollow"><strong>Learn More »</strong></a>
   <br />
 
 <br/>
-  <a href="https://github.com/novuhq/novu/issues/new?assignees=&labels=type%3A+bug&template=bug_report.yml&title=%F0%9F%90%9B+Bug+Report%3A+">Report a bug</a>
+  <a href="https://github.com/novuhq/novu/issues/new?assignees=&labels=type%3A+bug&template=bug_report.yml&title=%F0%9F%90%9B+Bug+Report%3A+" target="_blank" rel="noopener noreferrer"
+>Report a bug</a>
   ·
-  <a href="https://github.com/novuhq/novu/issues/new?assignees=&labels=feature&template=feature_request.yml&title=%F0%9F%9A%80+Feature%3A+">Request a feature</a>
+  <a href="https://docs.novu.co" target="_blank" rel="noopener noreferrer"
+>Docs</a>
   ·
-<a href="https://bit.ly/novu-github-discord">Join our Discord</a>
+  <a href="https://go.novu.co/github" target="_blank" rel="noopener noreferrer"
+>Website</a>
   ·
-  <a href="https://bit.ly/novu-github-roadmap">Roadmap</a>
+  <a href="https://discord.novu.co" target="_blank" rel="noopener noreferrer"
+>Join our Discord</a>
   ·
-  <a href="https://twitter.com/novuhq">X</a>
+  <a href="https://go.novu.co/changelog" target="_blank" rel="noopener noreferrer"
+>Changelog</a>
   ·
-  <a href="https://novu.co/contact-us/?utm_campaign=github-readme">Contact us</a>
+  <a href="https://go.novu.co/roadmap" target="_blank" rel="noopener noreferrer"
+>Roadmap</a>
+  ·
+  <a href="https://twitter.com/novuhq" target="_blank" rel="noopener noreferrer"
+>X</a>
+  ·
+  <a href="https://novu.co/contact-us/?utm_campaign=github-readme" target="_blank" rel="noopener noreferrer"
+>Contact us</a>
 </p>
 
 ## ⭐️ Why Novu?
@@ -56,19 +73,17 @@ With Novu, you can create custom workflows and define conditions for each channe
 
 ## ✨ Features
 
-- 🌈 Single API for all messaging providers (Inbox/In-App, Email, SMS, Push, Chat)
-- 💅 Fully managed GitOps flow, deployed from your CI
-- 🔥 Define workflow and step controls with Zod or JSON Schema
-- 💌 Easily re-use existing content in various frameworks, including React Email, Vue-email, Maizzle, MJML, and more
-- 🚀 Equipped with a CMS for advanced layouts and design management
-- 🛡 Debug and analyze multi-channel messages in a single dashboard
-- 📦 Embeddable Inbox component with real-time updates
-- 📤 Embeddable user preferences component gives your subscribers control over their notifications
-- 👨‍💻 Community-driven
+- Embeddable Inbox component with real-time support
+- Single API for all messaging providers (Inbox/In-App, Email, SMS, Push, Chat)
+- Digest Engine to combine multiple notification in to a single E-mail
+- No-Code Block Editor for Email
+- Notification Workflow Engine
+- Embeddable user preferences component gives your subscribers control over their notifications
+- Community-driven
 
 ## 🚀 Getting Started
 
-[Create a free account](https://dashboard-v2.novu.co?utm_campaign=github-readme) and follow the instructions on the dashboard.
+[Create a free account](https://go.novu.co/dashboard?utm_campaign=github-readme) and follow the instructions on the dashboard.
 
 ## 📚 Table of contents
 
@@ -185,6 +200,7 @@ The following modules and folders are licensed under the enterprise license:
 
 Thanks a lot for spending your time helping Novu grow. Keep rocking 🥂
 
-<a href="https://novu.co/contributors?utm_source=github">
+<a href="https://novu.co/contributors?utm_source=github" target="_blank" rel="noopener noreferrer"
+>
   <img src="https://contributors-img.web.app/image?repo=novuhq/novu" alt="Contributors"/>
 </a>

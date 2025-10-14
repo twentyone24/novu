@@ -1,5 +1,5 @@
-import { expect, test } from 'vitest';
 import nock from 'nock';
+import { expect, test } from 'vitest';
 import { MailgunEmailProvider } from './mailgun.provider';
 
 const mockConfig = {
@@ -14,9 +14,7 @@ const mockNovuMessage = {
   to: ['test@test2.com'],
   subject: 'test subject',
   html: '<div> Mail Content </div>',
-  attachments: [
-    { mime: 'text/plain', file: Buffer.from('dGVzdA=='), name: 'test.txt' },
-  ],
+  attachments: [{ mime: 'text/plain', file: Buffer.from('dGVzdA=='), name: 'test.txt' }],
 };
 
 test('should trigger mailgun correctly', async () => {

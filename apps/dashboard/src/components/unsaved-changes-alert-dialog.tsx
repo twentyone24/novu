@@ -1,3 +1,4 @@
+import { RiAlertFill, RiArrowRightSLine } from 'react-icons/ri';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -9,20 +10,20 @@ import {
   AlertDialogTitle,
 } from '@/components/primitives/alert-dialog';
 import { Separator } from '@/components/primitives/separator';
-import { RiAlertFill, RiArrowRightSLine } from 'react-icons/ri';
-import { Blocker } from 'react-router-dom';
 import { Button } from './primitives/button';
 
 type UnsavedChangesAlertDialogProps = {
-  blocker: Blocker;
+  show?: boolean;
   description?: string;
+  onCancel?: () => void;
+  onProceed?: () => void;
 };
 
 export const UnsavedChangesAlertDialog = (props: UnsavedChangesAlertDialogProps) => {
-  const { blocker } = props;
+  const { show, description, onCancel, onProceed } = props;
 
   return (
-    <AlertDialog open={blocker.state === 'blocked'}>
+    <AlertDialog open={show}>
       <AlertDialogContent>
         <AlertDialogHeader className="flex flex-row items-start gap-4">
           <div className="bg-warning/10 rounded-lg p-3">
@@ -31,7 +32,7 @@ export const UnsavedChangesAlertDialog = (props: UnsavedChangesAlertDialogProps)
           <div className="space-y-1">
             <AlertDialogTitle>You might lose your progress</AlertDialogTitle>
             <AlertDialogDescription>
-              This form has some unsaved changes. Save progress before you leave.
+              {description || 'This form has some unsaved changes. Save progress before you leave.'}
             </AlertDialogDescription>
           </div>
         </AlertDialogHeader>
@@ -39,12 +40,10 @@ export const UnsavedChangesAlertDialog = (props: UnsavedChangesAlertDialogProps)
         <Separator />
 
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={() => blocker.reset?.()}>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={() => blocker.proceed?.()} asChild>
-            <Button trailingIcon={RiArrowRightSLine} variant="error" mode="ghost" size="xs">
-              Proceed anyway
-            </Button>
-          </AlertDialogAction>
+          <AlertDialogCancel onClick={onProceed} asChild>
+            <Button size="xs">Proceed anyway</Button>
+          </AlertDialogCancel>
+          <AlertDialogAction onClick={onCancel}>Cancel</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

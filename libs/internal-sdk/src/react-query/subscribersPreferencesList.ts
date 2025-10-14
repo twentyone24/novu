@@ -26,14 +26,18 @@ import {
 } from "./_types.js";
 
 export type SubscribersPreferencesListQueryData =
-  operations.SubscribersV1ControllerListSubscriberPreferencesResponse;
+  operations.SubscribersControllerGetSubscriberPreferencesResponse;
 
 /**
- * Get subscriber preferences
+ * Retrieve subscriber preferences
+ *
+ * @remarks
+ * Retrieve subscriber channel preferences by its unique key identifier **subscriberId**.
+ *     This API returns all five channels preferences for all workflows and global preferences.
  */
 export function useSubscribersPreferencesList(
   subscriberId: string,
-  includeInactiveChannels?: boolean | undefined,
+  criticality?: operations.Criticality | undefined,
   idempotencyKey?: string | undefined,
   options?: QueryHookOptions<SubscribersPreferencesListQueryData>,
 ): UseQueryResult<SubscribersPreferencesListQueryData, Error> {
@@ -42,7 +46,7 @@ export function useSubscribersPreferencesList(
     ...buildSubscribersPreferencesListQuery(
       client,
       subscriberId,
-      includeInactiveChannels,
+      criticality,
       idempotencyKey,
       options,
     ),
@@ -51,11 +55,15 @@ export function useSubscribersPreferencesList(
 }
 
 /**
- * Get subscriber preferences
+ * Retrieve subscriber preferences
+ *
+ * @remarks
+ * Retrieve subscriber channel preferences by its unique key identifier **subscriberId**.
+ *     This API returns all five channels preferences for all workflows and global preferences.
  */
 export function useSubscribersPreferencesListSuspense(
   subscriberId: string,
-  includeInactiveChannels?: boolean | undefined,
+  criticality?: operations.Criticality | undefined,
   idempotencyKey?: string | undefined,
   options?: SuspenseQueryHookOptions<SubscribersPreferencesListQueryData>,
 ): UseSuspenseQueryResult<SubscribersPreferencesListQueryData, Error> {
@@ -64,7 +72,7 @@ export function useSubscribersPreferencesListSuspense(
     ...buildSubscribersPreferencesListQuery(
       client,
       subscriberId,
-      includeInactiveChannels,
+      criticality,
       idempotencyKey,
       options,
     ),
@@ -76,14 +84,14 @@ export function prefetchSubscribersPreferencesList(
   queryClient: QueryClient,
   client$: NovuCore,
   subscriberId: string,
-  includeInactiveChannels?: boolean | undefined,
+  criticality?: operations.Criticality | undefined,
   idempotencyKey?: string | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildSubscribersPreferencesListQuery(
       client$,
       subscriberId,
-      includeInactiveChannels,
+      criticality,
       idempotencyKey,
     ),
   });
@@ -94,7 +102,7 @@ export function setSubscribersPreferencesListData(
   queryKeyBase: [
     subscriberId: string,
     parameters: {
-      includeInactiveChannels?: boolean | undefined;
+      criticality?: operations.Criticality | undefined;
       idempotencyKey?: string | undefined;
     },
   ],
@@ -111,7 +119,7 @@ export function invalidateSubscribersPreferencesList(
     [
       subscriberId: string,
       parameters: {
-        includeInactiveChannels?: boolean | undefined;
+        criticality?: operations.Criticality | undefined;
         idempotencyKey?: string | undefined;
       },
     ]
@@ -137,7 +145,7 @@ export function invalidateAllSubscribersPreferencesList(
 export function buildSubscribersPreferencesListQuery(
   client$: NovuCore,
   subscriberId: string,
-  includeInactiveChannels?: boolean | undefined,
+  criticality?: operations.Criticality | undefined,
   idempotencyKey?: string | undefined,
   options?: RequestOptions,
 ): {
@@ -148,7 +156,7 @@ export function buildSubscribersPreferencesListQuery(
 } {
   return {
     queryKey: queryKeySubscribersPreferencesList(subscriberId, {
-      includeInactiveChannels,
+      criticality,
       idempotencyKey,
     }),
     queryFn: async function subscribersPreferencesListQueryFn(
@@ -163,7 +171,7 @@ export function buildSubscribersPreferencesListQuery(
       return unwrapAsync(subscribersPreferencesList(
         client$,
         subscriberId,
-        includeInactiveChannels,
+        criticality,
         idempotencyKey,
         mergedOptions,
       ));
@@ -174,7 +182,7 @@ export function buildSubscribersPreferencesListQuery(
 export function queryKeySubscribersPreferencesList(
   subscriberId: string,
   parameters: {
-    includeInactiveChannels?: boolean | undefined;
+    criticality?: operations.Criticality | undefined;
     idempotencyKey?: string | undefined;
   },
 ): QueryKey {

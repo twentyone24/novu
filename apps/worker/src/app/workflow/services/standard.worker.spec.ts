@@ -1,11 +1,8 @@
-import { Test } from '@nestjs/testing';
-import { expect } from 'chai';
-import { formatISO } from 'date-fns';
-import { v4 as uuid } from 'uuid';
 import { faker } from '@faker-js/faker';
-import { setTimeout } from 'timers/promises';
-
+import { Test } from '@nestjs/testing';
+import { StandardQueueService, WorkflowInMemoryProviderService } from '@novu/application-generic';
 import {
+  CommunityOrganizationRepository,
   EnvironmentEntity,
   JobEntity,
   JobRepository,
@@ -21,25 +18,20 @@ import {
 import { StepTypeEnum } from '@novu/shared';
 import {
   EnvironmentService,
+  JobsService,
   NotificationTemplateService,
   OrganizationService,
   SubscribersService,
   UserService,
-  JobsService,
 } from '@novu/testing';
-import { BullMqService, StandardQueueService, WorkflowInMemoryProviderService } from '@novu/application-generic';
-
-import { StandardWorker } from './standard.worker';
-
-import { WorkflowModule } from '../workflow.module';
-import {
-  HandleLastFailedJob,
-  RunJob,
-  SetJobAsCompleted,
-  SetJobAsFailed,
-  WebhookFilterBackoffStrategy,
-} from '../usecases';
+import { expect } from 'chai';
+import { formatISO } from 'date-fns';
+import { setTimeout } from 'timers/promises';
+import { v4 as uuid } from 'uuid';
 import { SharedModule } from '../../shared/shared.module';
+import { HandleLastFailedJob, RunJob, SetJobAsFailed, WebhookFilterBackoffStrategy } from '../usecases';
+import { WorkflowModule } from '../workflow.module';
+import { StandardWorker } from './standard.worker';
 
 let standardQueueService: StandardQueueService;
 let standardWorker: StandardWorker;
@@ -64,10 +56,9 @@ describe('Standard Worker', () => {
 
     jobRepository = new JobRepository();
     notificationRepository = new NotificationRepository();
-
     jobsService = new JobsService();
-
     const userService = new UserService();
+
     const card = {
       firstName: faker.name.firstName(),
       lastName: faker.name.lastName(),
@@ -111,20 +102,21 @@ describe('Standard Worker', () => {
 
     const handleLastFailedJob = moduleRef.get<HandleLastFailedJob>(HandleLastFailedJob);
     const runJob = moduleRef.get<RunJob>(RunJob);
-    const setJobAsCompleted = moduleRef.get<SetJobAsCompleted>(SetJobAsCompleted);
     const setJobAsFailed = moduleRef.get<SetJobAsFailed>(SetJobAsFailed);
     const webhookFilterBackoffStrategy = moduleRef.get<WebhookFilterBackoffStrategy>(WebhookFilterBackoffStrategy);
     const workflowInMemoryProviderService = moduleRef.get<WorkflowInMemoryProviderService>(
       WorkflowInMemoryProviderService
     );
+    const organizationRepository = moduleRef.get<CommunityOrganizationRepository>(CommunityOrganizationRepository);
 
     standardWorker = new StandardWorker(
       handleLastFailedJob,
       runJob,
-      setJobAsCompleted,
       setJobAsFailed,
       webhookFilterBackoffStrategy,
-      workflowInMemoryProviderService
+      workflowInMemoryProviderService,
+      organizationRepository,
+      jobRepository
     );
   });
 
@@ -138,7 +130,7 @@ describe('Standard Worker', () => {
 
     expect(standardWorker.DEFAULT_ATTEMPTS).to.eql(3);
     expect(standardWorker.worker).to.deep.include({
-      _eventsCount: 1,
+      _eventsCount: 2,
       _maxListeners: undefined,
       name: 'standard',
     });
@@ -217,10 +209,9 @@ describe('Standard Worker', () => {
 
     await standardQueueService.add({ name: jobCreated._id, data: jobData, groupId: '0' });
 
-    await jobsService.awaitRunningJobs({
+    await jobsService.waitForJobCompletion({
       templateId: _templateId,
       organizationId: organization._id,
-      delay: false,
     });
 
     const jobs = await jobRepository.find({ _environmentId, _organizationId, _notificationId });
@@ -280,10 +271,9 @@ describe('Standard Worker', () => {
 
     await standardQueueService.add({ name: jobCreated._id, data: jobData, groupId: '0' });
 
-    await jobsService.awaitRunningJobs({
+    await jobsService.waitForJobCompletion({
       templateId: _templateId,
       organizationId: organization._id,
-      delay: false,
     });
 
     /**

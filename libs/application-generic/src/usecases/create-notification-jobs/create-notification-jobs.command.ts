@@ -1,14 +1,17 @@
-import { IsDefined, IsOptional, IsString } from 'class-validator';
 // TODO: We shouldn't be importing from DAL here. Needs big refactor throughout monorepo.
-import { NotificationTemplateEntity, SubscriberEntity } from '@novu/dal';
+import { NotificationTemplateEntity, SubscriberEntity, TopicEntity } from '@novu/dal';
 import {
   ChannelTypeEnum,
+  ContextKey,
   ISubscribersDefine,
   ITenantDefine,
   ProvidersIdEnum,
+  SeverityLevelEnum,
   StatelessControls,
+  TriggerOverrides,
   WorkflowPreferences,
 } from '@novu/shared';
+import { IsArray, IsDefined, IsOptional, IsString } from 'class-validator';
 
 import { EnvironmentWithUserCommand } from '../../commands';
 
@@ -18,10 +21,10 @@ export class CreateNotificationJobsCommand extends EnvironmentWithUserCommand {
   identifier: string;
 
   @IsDefined()
-  overrides: Record<string, Record<string, unknown>>;
+  overrides: TriggerOverrides;
 
   @IsDefined()
-  payload: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  payload: any;
 
   @IsDefined()
   subscriber: SubscriberEntity;
@@ -35,6 +38,9 @@ export class CreateNotificationJobsCommand extends EnvironmentWithUserCommand {
   @IsDefined()
   to: ISubscribersDefine;
 
+  @IsOptional()
+  topics?: Pick<TopicEntity, '_id' | 'key'>[];
+
   @IsString()
   @IsDefined()
   transactionId: string;
@@ -45,9 +51,20 @@ export class CreateNotificationJobsCommand extends EnvironmentWithUserCommand {
   @IsOptional()
   tenant?: ITenantDefine;
 
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  contextKeys?: ContextKey[];
+
   bridgeUrl?: string;
 
   controls?: StatelessControls;
 
   preferences?: WorkflowPreferences;
+
+  @IsDefined()
+  severity: SeverityLevelEnum;
+
+  @IsDefined()
+  critical: boolean;
 }

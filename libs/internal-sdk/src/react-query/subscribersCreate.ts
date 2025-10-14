@@ -19,18 +19,20 @@ import { MutationHookOptions } from "./_types.js";
 
 export type SubscribersCreateMutationVariables = {
   createSubscriberRequestDto: components.CreateSubscriberRequestDto;
+  failIfExists?: boolean | undefined;
   idempotencyKey?: string | undefined;
   options?: RequestOptions;
 };
 
 export type SubscribersCreateMutationData =
-  operations.SubscribersV1ControllerCreateSubscriberResponse;
+  operations.SubscribersControllerCreateSubscriberResponse;
 
 /**
- * Create subscriber
+ * Create a subscriber
  *
  * @remarks
- * Creates a subscriber entity, in the Novu platform. The subscriber will be later used to receive notifications, and access notification feeds. Communication credentials such as email, phone number, and 3 rd party credentials i.e slack tokens could be later associated to this entity.
+ * Create a subscriber with the subscriber attributes.
+ *       **subscriberId** is a required field, rest other fields are optional, if the subscriber already exists, it will be updated
  */
 export function useSubscribersCreateMutation(
   options?: MutationHookOptions<
@@ -67,6 +69,7 @@ export function buildSubscribersCreateMutation(
     mutationKey: mutationKeySubscribersCreate(),
     mutationFn: function subscribersCreateMutationFn({
       createSubscriberRequestDto,
+      failIfExists,
       idempotencyKey,
       options,
     }): Promise<SubscribersCreateMutationData> {
@@ -85,6 +88,7 @@ export function buildSubscribersCreateMutation(
       return unwrapAsync(subscribersCreate(
         client$,
         createSubscriberRequestDto,
+        failIfExists,
         idempotencyKey,
         mergedOptions,
       ));

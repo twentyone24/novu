@@ -1,8 +1,10 @@
+// @ts-expect-error inline import esbuild syntax
+import css from 'directcss:../index.directcss';
 import { For, onCleanup, onMount } from 'solid-js';
 import { MountableElement, Portal } from 'solid-js/web';
-import { NovuUI } from '..';
 import { Novu } from '../../novu';
 import type { NovuOptions } from '../../types';
+import { NovuUI } from '..';
 import {
   AppearanceProvider,
   CountProvider,
@@ -11,7 +13,16 @@ import {
   LocalizationProvider,
   NovuProvider,
 } from '../context';
-import type { Appearance, Localization, PreferencesFilter, RouterPush, Tab } from '../types';
+import { NOVU_DEFAULT_CSS_ID } from '../helpers/utils';
+import type {
+  Appearance,
+  Localization,
+  PreferenceGroups,
+  PreferencesFilter,
+  PreferencesSort,
+  RouterPush,
+  Tab,
+} from '../types';
 import { Bell, Root } from './elements';
 import { Inbox, InboxContent, InboxContentProps, InboxPage } from './Inbox';
 
@@ -19,12 +30,30 @@ export const novuComponents = {
   Inbox,
   InboxContent,
   Bell,
-  Notifications: (props: Omit<InboxContentProps, 'hideNav' | 'initialPage'>) => (
-    <InboxContent {...props} hideNav={true} initialPage={InboxPage.Notifications} />
-  ),
-  Preferences: (props: Omit<InboxContentProps, 'hideNav' | 'initialPage'>) => (
-    <InboxContent {...props} hideNav={true} initialPage={InboxPage.Preferences} />
-  ),
+  Notifications: (props: Omit<InboxContentProps, 'hideNav' | 'initialPage'>) => {
+    if (props.renderNotification) {
+      const { renderBody, renderSubject, renderAvatar, renderDefaultActions, renderCustomActions, ...otherProps } =
+        props;
+
+      return <InboxContent {...otherProps} hideNav={true} initialPage={InboxPage.Notifications} />;
+    }
+
+    const { renderNotification, ...propsWithoutRenderNotification } = props;
+
+    return <InboxContent {...propsWithoutRenderNotification} hideNav={true} initialPage={InboxPage.Notifications} />;
+  },
+  Preferences: (props: Omit<InboxContentProps, 'hideNav' | 'initialPage'>) => {
+    if (props.renderNotification) {
+      const { renderBody, renderSubject, renderAvatar, renderDefaultActions, renderCustomActions, ...otherProps } =
+        props;
+
+      return <InboxContent {...otherProps} hideNav={true} initialPage={InboxPage.Preferences} />;
+    }
+
+    const { renderNotification, ...propsWithoutRenderNotification } = props;
+
+    return <InboxContent {...propsWithoutRenderNotification} hideNav={true} initialPage={InboxPage.Preferences} />;
+  },
 };
 
 export type NovuComponent = { name: NovuComponentName; props?: any };
@@ -41,45 +70,55 @@ export type NovuComponentControls = {
 
 type RendererProps = {
   novuUI: NovuUI;
-  cssHref: string;
   appearance?: Appearance;
   nodes: Map<MountableElement, NovuComponent>;
   localization?: Localization;
   options: NovuOptions;
   tabs: Array<Tab>;
   preferencesFilter?: PreferencesFilter;
+  preferenceGroups?: PreferenceGroups;
+  preferencesSort?: PreferencesSort;
   routerPush?: RouterPush;
   novu?: Novu;
+  container?: Node | null | undefined;
 };
 
 export const Renderer = (props: RendererProps) => {
   const nodes = () => [...props.nodes.keys()];
 
   onMount(() => {
-    const id = 'novu-default-css';
-    const el = document.getElementById(id);
+    const id = NOVU_DEFAULT_CSS_ID;
+    const root = props.container instanceof ShadowRoot ? props.container : document;
+    const el = root.getElementById(id);
     if (el) {
       return;
     }
 
-    const link = document.createElement('link');
-    link.id = id;
-    link.rel = 'stylesheet';
-    link.href = props.cssHref;
-    document.head.insertBefore(link, document.head.firstChild);
+    const styleEl = document.createElement('style');
+    styleEl.id = id;
+    styleEl.innerHTML = css;
+
+    const stylesContainer = props.container ?? document.head;
+    stylesContainer.insertBefore(styleEl, stylesContainer.firstChild);
 
     onCleanup(() => {
-      const element = document.getElementById(id);
-      element?.remove();
+      styleEl.remove();
     });
   });
 
   return (
     <NovuProvider options={props.options} novu={props.novu}>
       <LocalizationProvider localization={props.localization}>
-        <AppearanceProvider id={props.novuUI.id} appearance={props.appearance}>
+        <AppearanceProvider id={props.novuUI.id} appearance={props.appearance} container={props.container}>
           <FocusManagerProvider>
-            <InboxProvider tabs={props.tabs} preferencesFilter={props.preferencesFilter} routerPush={props.routerPush}>
+            <InboxProvider
+              applicationIdentifier={props.options?.applicationIdentifier}
+              tabs={props.tabs}
+              preferencesFilter={props.preferencesFilter}
+              preferenceGroups={props.preferenceGroups}
+              preferencesSort={props.preferencesSort}
+              routerPush={props.routerPush}
+            >
               <CountProvider>
                 <For each={nodes()}>
                   {(node) => {
@@ -89,15 +128,18 @@ export const Renderer = (props: RendererProps) => {
 
                     onMount(() => {
                       /*
-                       * return here if not `<Notifications /> or `<Preferences />` since we only want to override some styles for those to work properly
-                       * due to the extra divs being introduces by the renderer/mounter
+                       ** return here if not `<Notifications /> or `<Preferences />`
+                       ** since we only want to override some styles for those to work properly
+                       ** due to the extra divs being introduced by the renderer/mounter
                        */
-                      if (!['Notifications', 'Preferences'].includes(novuComponent().name)) return;
+                      if (!['Notifications', 'Preferences', 'InboxContent'].includes(novuComponent().name)) return;
 
                       if (node instanceof HTMLElement) {
-                        node.classList.add('nt-h-full');
+                        node.style.height = '100%';
                       }
-                      portalDivElement.classList.add('nt-h-full');
+                      if (portalDivElement) {
+                        portalDivElement.style.height = '100%';
+                      }
                     });
 
                     return (

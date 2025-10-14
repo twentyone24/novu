@@ -7,16 +7,7 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-/**
- * Additional custom data for the subscriber
- */
-export type PatchSubscriberRequestDtoData = {};
-
 export type PatchSubscriberRequestDto = {
-  /**
-   * Unique identifier of the subscriber
-   */
-  subscriberId?: string | null | undefined;
   /**
    * First name of the subscriber
    */
@@ -48,58 +39,8 @@ export type PatchSubscriberRequestDto = {
   /**
    * Additional custom data for the subscriber
    */
-  data?: PatchSubscriberRequestDtoData | null | undefined;
+  data?: { [k: string]: any } | null | undefined;
 };
-
-/** @internal */
-export const PatchSubscriberRequestDtoData$inboundSchema: z.ZodType<
-  PatchSubscriberRequestDtoData,
-  z.ZodTypeDef,
-  unknown
-> = z.object({});
-
-/** @internal */
-export type PatchSubscriberRequestDtoData$Outbound = {};
-
-/** @internal */
-export const PatchSubscriberRequestDtoData$outboundSchema: z.ZodType<
-  PatchSubscriberRequestDtoData$Outbound,
-  z.ZodTypeDef,
-  PatchSubscriberRequestDtoData
-> = z.object({});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace PatchSubscriberRequestDtoData$ {
-  /** @deprecated use `PatchSubscriberRequestDtoData$inboundSchema` instead. */
-  export const inboundSchema = PatchSubscriberRequestDtoData$inboundSchema;
-  /** @deprecated use `PatchSubscriberRequestDtoData$outboundSchema` instead. */
-  export const outboundSchema = PatchSubscriberRequestDtoData$outboundSchema;
-  /** @deprecated use `PatchSubscriberRequestDtoData$Outbound` instead. */
-  export type Outbound = PatchSubscriberRequestDtoData$Outbound;
-}
-
-export function patchSubscriberRequestDtoDataToJSON(
-  patchSubscriberRequestDtoData: PatchSubscriberRequestDtoData,
-): string {
-  return JSON.stringify(
-    PatchSubscriberRequestDtoData$outboundSchema.parse(
-      patchSubscriberRequestDtoData,
-    ),
-  );
-}
-
-export function patchSubscriberRequestDtoDataFromJSON(
-  jsonString: string,
-): SafeParseResult<PatchSubscriberRequestDtoData, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => PatchSubscriberRequestDtoData$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'PatchSubscriberRequestDtoData' from JSON`,
-  );
-}
 
 /** @internal */
 export const PatchSubscriberRequestDto$inboundSchema: z.ZodType<
@@ -107,7 +48,6 @@ export const PatchSubscriberRequestDto$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  subscriberId: z.nullable(z.string()).optional(),
   firstName: z.nullable(z.string()).optional(),
   lastName: z.nullable(z.string()).optional(),
   email: z.nullable(z.string()).optional(),
@@ -115,13 +55,11 @@ export const PatchSubscriberRequestDto$inboundSchema: z.ZodType<
   avatar: z.nullable(z.string()).optional(),
   timezone: z.nullable(z.string()).optional(),
   locale: z.nullable(z.string()).optional(),
-  data: z.nullable(z.lazy(() => PatchSubscriberRequestDtoData$inboundSchema))
-    .optional(),
+  data: z.nullable(z.record(z.any())).optional(),
 });
 
 /** @internal */
 export type PatchSubscriberRequestDto$Outbound = {
-  subscriberId?: string | null | undefined;
   firstName?: string | null | undefined;
   lastName?: string | null | undefined;
   email?: string | null | undefined;
@@ -129,7 +67,7 @@ export type PatchSubscriberRequestDto$Outbound = {
   avatar?: string | null | undefined;
   timezone?: string | null | undefined;
   locale?: string | null | undefined;
-  data?: PatchSubscriberRequestDtoData$Outbound | null | undefined;
+  data?: { [k: string]: any } | null | undefined;
 };
 
 /** @internal */
@@ -138,7 +76,6 @@ export const PatchSubscriberRequestDto$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   PatchSubscriberRequestDto
 > = z.object({
-  subscriberId: z.nullable(z.string()).optional(),
   firstName: z.nullable(z.string()).optional(),
   lastName: z.nullable(z.string()).optional(),
   email: z.nullable(z.string()).optional(),
@@ -146,8 +83,7 @@ export const PatchSubscriberRequestDto$outboundSchema: z.ZodType<
   avatar: z.nullable(z.string()).optional(),
   timezone: z.nullable(z.string()).optional(),
   locale: z.nullable(z.string()).optional(),
-  data: z.nullable(z.lazy(() => PatchSubscriberRequestDtoData$outboundSchema))
-    .optional(),
+  data: z.nullable(z.record(z.any())).optional(),
 });
 
 /**

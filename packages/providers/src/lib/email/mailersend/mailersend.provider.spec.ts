@@ -1,6 +1,6 @@
-import { expect, test, vi } from 'vitest';
-import MailerSend, { Attachment, Recipient } from 'mailersend';
 import { CheckIntegrationResponseEnum } from '@novu/stateless';
+import MailerSend, { Attachment, Recipient } from 'mailersend';
+import { expect, test, vi } from 'vitest';
 import { MailersendEmailProvider } from './mailersend.provider';
 
 const mockConfig = {
@@ -14,9 +14,7 @@ const mockNovuMessage = {
   html: '<div> Mail Content </div>',
   text: 'Mail Content',
   from: 'test@tet.com',
-  attachments: [
-    { mime: 'text/plain', file: Buffer.from('dGVzdA=='), name: 'test.txt' },
-  ],
+  attachments: [{ mime: 'text/plain', file: Buffer.from('dGVzdA=='), name: 'test.txt' }],
   customData: {
     templateId: 'template-id',
     personalization: [{ email: 'test@test1.com', data: { name: 'test1' } }],
@@ -26,14 +24,13 @@ const mockNovuMessage = {
 test('should trigger mailerSend with expected parameters', async () => {
   const provider = new MailersendEmailProvider(mockConfig);
   const spy = vi.spyOn(provider, 'sendMessage').mockImplementation(async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return {} as any;
   });
 
   await provider.sendMessage(mockNovuMessage);
 
   expect(spy).toHaveBeenCalled();
-  expect(spy).toBeCalledWith({
+  expect(spy).toHaveBeenCalledWith({
     to: mockNovuMessage.to,
     subject: mockNovuMessage.subject,
     html: mockNovuMessage.html,
@@ -52,24 +49,18 @@ test('should trigger mailerSend with expected parameters', async () => {
 
 test('should trigger mailerSend correctly', async () => {
   const provider = new MailersendEmailProvider(mockConfig);
-  const spy = vi
-    .spyOn(MailerSend.prototype, 'request')
-    .mockImplementation(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return {} as any;
-    });
+  const spy = vi.spyOn(MailerSend.prototype, 'request').mockImplementation(async () => {
+    return {} as any;
+  });
 
-  const attachment = new Attachment(
-    Buffer.from('ZEdWemRBPT0=').toString(),
-    'test.txt',
-  );
+  const attachment = new Attachment(Buffer.from('ZEdWemRBPT0=').toString(), 'test.txt');
   const recipient1 = new Recipient('test@test1.com', undefined);
   const recipient2 = new Recipient('test@test2.com', undefined);
 
   await provider.sendMessage(mockNovuMessage);
 
   expect(spy).toHaveBeenCalled();
-  expect(spy).toBeCalledWith('/email', {
+  expect(spy).toHaveBeenCalledWith('/email', {
     method: 'POST',
     body: {
       from: { email: mockNovuMessage.from, name: mockConfig.senderName },
@@ -95,12 +86,10 @@ test('should trigger mailerSend correctly', async () => {
 
 test('should check provider integration when success', async () => {
   const provider = new MailersendEmailProvider(mockConfig);
-  const spy = vi
-    .spyOn(MailerSend.prototype, 'request')
-    .mockImplementation(async () => ({
-      ok: true,
-      status: 200,
-    }));
+  const spy = vi.spyOn(MailerSend.prototype, 'request').mockImplementation(async () => ({
+    ok: true,
+    status: 200,
+  }));
 
   const messageResponse = await provider.checkIntegration(mockNovuMessage);
 
@@ -116,15 +105,13 @@ test('should check provider integration when bad credentials', async () => {
   const provider = new MailersendEmailProvider(mockConfig);
   const serverMessage = 'Bad credentials';
 
-  const spy = vi
-    .spyOn(MailerSend.prototype, 'request')
-    .mockImplementation(async () => ({
-      ok: false,
-      json: async () => ({
-        message: serverMessage,
-      }),
-      status: 401,
-    }));
+  const spy = vi.spyOn(MailerSend.prototype, 'request').mockImplementation(async () => ({
+    ok: false,
+    json: async () => ({
+      message: serverMessage,
+    }),
+    status: 401,
+  }));
 
   const messageResponse = await provider.checkIntegration(mockNovuMessage);
 
@@ -140,15 +127,13 @@ test('should check provider integration when failed', async () => {
   const provider = new MailersendEmailProvider(mockConfig);
   const serverMessage = 'Server is under maintenance';
 
-  const spy = vi
-    .spyOn(MailerSend.prototype, 'request')
-    .mockImplementation(async () => ({
-      ok: false,
-      json: async () => ({
-        message: serverMessage,
-      }),
-      status: 500,
-    }));
+  const spy = vi.spyOn(MailerSend.prototype, 'request').mockImplementation(async () => ({
+    ok: false,
+    json: async () => ({
+      message: serverMessage,
+    }),
+    status: 500,
+  }));
 
   const messageResponse = await provider.checkIntegration(mockNovuMessage);
 

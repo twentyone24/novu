@@ -1,5 +1,5 @@
-import { expect, test, vi } from 'vitest';
 import apn from '@parse/node-apn';
+import { expect, test, vi } from 'vitest';
 import { APNSPushProvider } from './apns.provider';
 
 test('should trigger apns library correctly', async () => {
@@ -44,7 +44,7 @@ test('should trigger apns library correctly', async () => {
     subscriber: {},
   });
 
-  expect(mockSend).toBeCalledWith(
+  expect(mockSend).toHaveBeenCalledWith(
     {
       encoding: 'utf8',
       payload: { data: 'data' },
@@ -59,7 +59,7 @@ test('should trigger apns library correctly', async () => {
       priority: 10,
       topic: 'bundleId',
     },
-    ['target'],
+    ['target']
   );
 });
 
@@ -112,10 +112,10 @@ test('should trigger apns library correctly with _passthrough', async () => {
           topic: '_passthrough',
         },
       },
-    },
+    }
   );
 
-  expect(mockSend).toBeCalledWith(
+  expect(mockSend).toHaveBeenCalledWith(
     {
       encoding: 'utf8',
       payload: { data: 'data' },
@@ -131,6 +131,6 @@ test('should trigger apns library correctly with _passthrough', async () => {
       topic: '_passthrough',
       'url-args': ['target'],
     },
-    ['target'],
+    ['target']
   );
 });

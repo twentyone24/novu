@@ -1,21 +1,18 @@
 import { EmailProviderIdEnum } from '@novu/shared';
 import {
   ChannelTypeEnum,
-  ISendMessageSuccessResponse,
+  CheckIntegrationResponseEnum,
+  ICheckIntegrationResponse,
   IEmailOptions,
   IEmailProvider,
-  ICheckIntegrationResponse,
-  CheckIntegrationResponseEnum,
+  ISendMessageSuccessResponse,
 } from '@novu/stateless';
 
-import MailerSend, { EmailParams, Recipient, Attachment } from 'mailersend';
+import MailerSend, { Attachment, EmailParams, Recipient } from 'mailersend';
 import { BaseProvider, CasingEnum } from '../../../base.provider';
 import { WithPassthrough } from '../../../utils/types';
 
-export class MailersendEmailProvider
-  extends BaseProvider
-  implements IEmailProvider
-{
+export class MailersendEmailProvider extends BaseProvider implements IEmailProvider {
   readonly id = EmailProviderIdEnum.MailerSend;
   protected casing: CasingEnum = CasingEnum.SNAKE_CASE;
   readonly channelType = ChannelTypeEnum.EMAIL as ChannelTypeEnum.EMAIL;
@@ -26,7 +23,7 @@ export class MailersendEmailProvider
       apiKey: string;
       from?: string;
       senderName?: string;
-    },
+    }
   ) {
     super();
     this.mailerSend = new MailerSend({ api_key: this.config.apiKey });
@@ -38,12 +35,15 @@ export class MailersendEmailProvider
       : [new Recipient(recipients)];
   }
 
-  private getAttachments(
-    attachments: IEmailOptions['attachments'],
-  ): Attachment[] | null {
+  private getAttachments(attachments: IEmailOptions['attachments']): Attachment[] | null {
     return attachments?.map(
       (attachment) =>
-        new Attachment(attachment.file.toString('base64'), attachment.name),
+        new Attachment(
+          attachment.file.toString('base64'),
+          attachment.name,
+          attachment.disposition ?? (attachment.cid ? 'inline' : 'attachment'),
+          attachment.cid
+        )
     );
   }
 
@@ -79,12 +79,9 @@ export class MailersendEmailProvider
 
   async sendMessage(
     options: IEmailOptions,
-    bridgeProviderData: WithPassthrough<Record<string, unknown>> = {},
+    bridgeProviderData: WithPassthrough<Record<string, unknown>> = {}
   ): Promise<ISendMessageSuccessResponse> {
-    const emailParams = this.transform(
-      bridgeProviderData,
-      this.createMailData(options),
-    ).body;
+    const emailParams = this.transform(bridgeProviderData, this.createMailData(options)).body;
     const response = await this.mailerSend.send(emailParams);
 
     return {
@@ -93,9 +90,7 @@ export class MailersendEmailProvider
     };
   }
 
-  async checkIntegration(
-    options: IEmailOptions,
-  ): Promise<ICheckIntegrationResponse> {
+  async checkIntegration(options: IEmailOptions): Promise<ICheckIntegrationResponse> {
     const emailParams = this.createMailData(options);
     const emailSendResponse = await this.mailerSend.send(emailParams);
     const code = this.mapResponse(emailSendResponse.status);

@@ -29,7 +29,7 @@ export function clearEnvironmentId() {
 
 type EnvironmentContextValue = {
   currentEnvironment?: IEnvironment | null;
-  // @deprecated use currentEnvironment instead;
+  /** @deprecated use currentEnvironment instead */
   environment?: IEnvironment | null;
   environments?: IEnvironment[];
   refetchEnvironments: () => Promise<void>;
@@ -107,7 +107,8 @@ export function EnvironmentProvider({ children }: { children: React.ReactNode })
        */
       setCurrentEnvironment(selectEnvironment(environments, environmentId));
 
-      if (currentEnvironment?._id === environmentId) {
+      // Don't redirect if environmentId is empty/undefined (loading state) or if environments match
+      if (!environmentId || currentEnvironment?._id === environmentId) {
         return;
       }
 
@@ -118,6 +119,7 @@ export function EnvironmentProvider({ children }: { children: React.ReactNode })
 
       if (redirectUrl) {
         navigate(redirectUrl);
+        return;
       }
 
       // if we are in a specific workflow detail when switching the env, redirect to workflows
@@ -202,7 +204,7 @@ export function useEnvironment({ bridge }: { bridge?: boolean } = {}) {
   return {
     ...rest,
     readOnly: readOnly || (!IS_SELF_HOSTED && bridge) || false,
-    // @deprecated use readOnly instead
+    /** @deprecated Use readOnly instead */
     readonly: readOnly || (!IS_SELF_HOSTED && bridge) || false,
     bridge: (!IS_SELF_HOSTED && bridge) || false,
   };

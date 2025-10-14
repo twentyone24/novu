@@ -1,18 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
-
-import { ObservabilityBackgroundTransactionEnum } from '@novu/shared';
 import {
-  getSubscriberProcessWorkerOptions,
-  SubscriberProcessWorkerService,
-  PinoLogger,
-  storage,
-  Store,
-  WorkerOptions,
   BullMqService,
-  WorkflowInMemoryProviderService,
+  getSubscriberProcessWorkerOptions,
   IProcessSubscriberDataDto,
+  PinoLogger,
+  Store,
+  SubscriberProcessWorkerService,
+  storage,
+  WorkerOptions,
+  WorkflowInMemoryProviderService,
 } from '@novu/application-generic';
-
+import { CommunityOrganizationRepository } from '@novu/dal';
+import { ObservabilityBackgroundTransactionEnum } from '@novu/shared';
 import { SubscriberJobBound } from '../usecases/subscriber-job-bound/subscriber-job-bound.usecase';
 
 const nr = require('newrelic');
@@ -23,7 +22,8 @@ const LOG_CONTEXT = 'SubscriberProcessWorker';
 export class SubscriberProcessWorker extends SubscriberProcessWorkerService {
   constructor(
     private subscriberJobBoundUsecase: SubscriberJobBound,
-    public workflowInMemoryProviderService: WorkflowInMemoryProviderService
+    public workflowInMemoryProviderService: WorkflowInMemoryProviderService,
+    private organizationRepository: CommunityOrganizationRepository
   ) {
     super(new BullMqService(workflowInMemoryProviderService));
 
@@ -32,6 +32,14 @@ export class SubscriberProcessWorker extends SubscriberProcessWorkerService {
 
   public getWorkerProcessor() {
     return async ({ data }: { data: IProcessSubscriberDataDto }) => {
+      const organizationExists = await this.organizationExist(data);
+
+      if (!organizationExists) {
+        Logger.log(`Organization not found for organizationId ${data.organizationId}. Skipping job.`, LOG_CONTEXT);
+
+        return;
+      }
+
       return await new Promise((resolve, reject) => {
         const _this = this;
 
@@ -63,5 +71,13 @@ export class SubscriberProcessWorker extends SubscriberProcessWorkerService {
 
   private getWorkerOpts(): WorkerOptions {
     return getSubscriberProcessWorkerOptions();
+  }
+
+  private async organizationExist(data: IProcessSubscriberDataDto): Promise<boolean> {
+    const { organizationId } = data;
+
+    const organization = await this.organizationRepository.findOne({ _id: organizationId });
+
+    return !!organization;
   }
 }

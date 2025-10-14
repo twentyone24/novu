@@ -1,19 +1,21 @@
-import { defaultSubscribersFilter, SubscribersFilter } from '@/hooks/use-subscribers-url-state';
-import { cn } from '@/utils/ui';
 import { HTMLAttributes, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
-import { Button } from '../primitives/button';
-import { FacetedFormFilter } from '../primitives/form/faceted-filter/facated-form-filter';
-import { Form, FormField, FormItem } from '../primitives/form/form';
+import { RiLoader4Line } from 'react-icons/ri';
+import { Button } from '@/components/primitives/button';
+import { FacetedFormFilter } from '@/components/primitives/form/faceted-filter/facated-form-filter';
+import { Form, FormField, FormItem, FormRoot } from '@/components/primitives/form/form';
+import { defaultSubscribersFilter, SubscribersFilter } from '@/components/subscribers/hooks/use-subscribers-url-state';
+import { cn } from '@/utils/ui';
 
 export type SubscribersFiltersProps = HTMLAttributes<HTMLFormElement> & {
   onFiltersChange: (filter: SubscribersFilter) => void;
   filterValues: SubscribersFilter;
   onReset?: () => void;
+  isFetching?: boolean;
 };
 
 export function SubscribersFilters(props: SubscribersFiltersProps) {
-  const { onFiltersChange, filterValues, onReset, className, ...rest } = props;
+  const { onFiltersChange, filterValues, onReset, className, isFetching, ...rest } = props;
 
   const form = useForm<SubscribersFilter>({
     values: {
@@ -44,7 +46,7 @@ export function SubscribersFilters(props: SubscribersFiltersProps) {
 
   return (
     <Form {...form}>
-      <form className={cn('flex items-center gap-2', className)} {...rest}>
+      <FormRoot className={cn('flex items-center gap-2', className)} {...rest}>
         <FormField
           control={form.control}
           name="email"
@@ -114,11 +116,14 @@ export function SubscribersFilters(props: SubscribersFiltersProps) {
         />
 
         {filterHasValue && (
-          <Button variant="secondary" mode="ghost" size="2xs" onClick={handleReset}>
-            Reset
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="secondary" mode="ghost" size="2xs" onClick={handleReset}>
+              Reset
+            </Button>
+            {isFetching && <RiLoader4Line className="h-3 w-3 animate-spin text-neutral-400" />}
+          </div>
         )}
-      </form>
+      </FormRoot>
     </Form>
   );
 }

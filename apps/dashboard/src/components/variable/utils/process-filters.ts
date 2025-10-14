@@ -1,7 +1,7 @@
-import { Liquid } from 'liquidjs';
+import { createLiquidEngine } from '@novu/framework/internal';
 import { FilterWithParam } from '../types';
 
-const engine = new Liquid();
+const engine = createLiquidEngine();
 
 function parseInputValue(value: string): any {
   try {
@@ -23,6 +23,7 @@ export async function processFilters(value: string, filters: FilterWithParam[]):
       if (!filter.params?.length) {
         return filter.value;
       }
+
       return `${filter.value}: ${filter.params.map((param) => `"${param}"`).join(', ')}`;
     })
     .join(' | ');

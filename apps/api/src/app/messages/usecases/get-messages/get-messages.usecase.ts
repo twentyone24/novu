@@ -1,17 +1,16 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { MessageEntity, MessageRepository, SubscriberEntity } from '@novu/dal';
+import { FeatureFlagsService } from '@novu/application-generic';
+import { MessageEntity, MessageRepository, OrganizationEntity, SubscriberEntity } from '@novu/dal';
 import { ActorTypeEnum, FeatureFlagsKeysEnum } from '@novu/shared';
-
-import { GetFeatureFlag, GetFeatureFlagCommand } from '@novu/application-generic';
-import { GetMessagesCommand } from './get-messages.command';
 import { GetSubscriber, GetSubscriberCommand } from '../../../subscribers/usecases/get-subscriber';
+import { GetMessagesCommand } from './get-messages.command';
 
 @Injectable()
 export class GetMessages {
   constructor(
     private messageRepository: MessageRepository,
     private getSubscriberUseCase: GetSubscriber,
-    private getFeatureFlag: GetFeatureFlag
+    private featureFlagService: FeatureFlagsService
   ) {}
 
   async execute(command: GetMessagesCommand) {
@@ -59,14 +58,11 @@ export class GetMessages {
       }
     }
 
-    const isEnabled = await this.getFeatureFlag.execute(
-      GetFeatureFlagCommand.create({
-        key: FeatureFlagsKeysEnum.IS_NEW_MESSAGES_API_RESPONSE_ENABLED,
-        organizationId: command.organizationId,
-        userId: 'system',
-        environmentId: 'system',
-      })
-    );
+    const isEnabled = await this.featureFlagService.getFlag({
+      key: FeatureFlagsKeysEnum.IS_NEW_MESSAGES_API_RESPONSE_ENABLED,
+      organization: { _id: command.organizationId } as OrganizationEntity,
+      defaultValue: false,
+    });
 
     if (isEnabled) {
       return {

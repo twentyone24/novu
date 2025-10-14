@@ -18,40 +18,78 @@ import {
   UnexpectedClientError,
 } from "../models/errors/httpclienterrors.js";
 import * as errors from "../models/errors/index.js";
-import { SDKError } from "../models/errors/sdkerror.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
+import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * Get subscriber preferences
+ * Retrieve subscriber preferences
+ *
+ * @remarks
+ * Retrieve subscriber channel preferences by its unique key identifier **subscriberId**.
+ *     This API returns all five channels preferences for all workflows and global preferences.
  */
-export async function subscribersPreferencesList(
+export function subscribersPreferencesList(
   client: NovuCore,
   subscriberId: string,
-  includeInactiveChannels?: boolean | undefined,
+  criticality?: operations.Criticality | undefined,
+  idempotencyKey?: string | undefined,
+  options?: RequestOptions,
+): APIPromise<
+  Result<
+    operations.SubscribersControllerGetSubscriberPreferencesResponse,
+    | errors.ErrorDto
+    | errors.ValidationErrorDto
+    | NovuError
+    | ResponseValidationError
+    | ConnectionError
+    | RequestAbortedError
+    | RequestTimeoutError
+    | InvalidRequestError
+    | UnexpectedClientError
+    | SDKValidationError
+  >
+> {
+  return new APIPromise($do(
+    client,
+    subscriberId,
+    criticality,
+    idempotencyKey,
+    options,
+  ));
+}
+
+async function $do(
+  client: NovuCore,
+  subscriberId: string,
+  criticality?: operations.Criticality | undefined,
   idempotencyKey?: string | undefined,
   options?: RequestOptions,
 ): Promise<
-  Result<
-    operations.SubscribersV1ControllerListSubscriberPreferencesResponse,
-    | errors.ErrorDto
-    | errors.ErrorDto
-    | errors.ValidationErrorDto
-    | errors.ErrorDto
-    | SDKError
-    | SDKValidationError
-    | UnexpectedClientError
-    | InvalidRequestError
-    | RequestAbortedError
-    | RequestTimeoutError
-    | ConnectionError
-  >
+  [
+    Result<
+      operations.SubscribersControllerGetSubscriberPreferencesResponse,
+      | errors.ErrorDto
+      | errors.ValidationErrorDto
+      | NovuError
+      | ResponseValidationError
+      | ConnectionError
+      | RequestAbortedError
+      | RequestTimeoutError
+      | InvalidRequestError
+      | UnexpectedClientError
+      | SDKValidationError
+    >,
+    APICall,
+  ]
 > {
-  const input:
-    operations.SubscribersV1ControllerListSubscriberPreferencesRequest = {
+  const input: operations.SubscribersControllerGetSubscriberPreferencesRequest =
+    {
       subscriberId: subscriberId,
-      includeInactiveChannels: includeInactiveChannels,
+      criticality: criticality,
       idempotencyKey: idempotencyKey,
     };
 
@@ -59,12 +97,12 @@ export async function subscribersPreferencesList(
     input,
     (value) =>
       operations
-        .SubscribersV1ControllerListSubscriberPreferencesRequest$outboundSchema
+        .SubscribersControllerGetSubscriberPreferencesRequest$outboundSchema
         .parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
-    return parsed;
+    return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
   const body = null;
@@ -76,12 +114,12 @@ export async function subscribersPreferencesList(
     }),
   };
 
-  const path = pathToFunc("/v1/subscribers/{subscriberId}/preferences")(
+  const path = pathToFunc("/v2/subscribers/{subscriberId}/preferences")(
     pathParams,
   );
 
   const query = encodeFormQuery({
-    "includeInactiveChannels": payload.includeInactiveChannels,
+    "criticality": payload.criticality,
   });
 
   const headers = new Headers(compactMap({
@@ -97,7 +135,9 @@ export async function subscribersPreferencesList(
   const requestSecurity = resolveGlobalSecurity(securityInput);
 
   const context = {
-    operationID: "SubscribersV1Controller_listSubscriberPreferences",
+    options: client._options,
+    baseURL: options?.serverURL ?? client._baseURL ?? "",
+    operationID: "SubscribersController_getSubscriberPreferences",
     oAuth2Scopes: [],
 
     resolvedSecurity: requestSecurity,
@@ -127,10 +167,11 @@ export async function subscribersPreferencesList(
     headers: headers,
     query: query,
     body: body,
+    userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
   }, options);
   if (!requestRes.ok) {
-    return requestRes;
+    return [requestRes, { status: "invalid" }];
   }
   const req = requestRes.value;
 
@@ -157,7 +198,7 @@ export async function subscribersPreferencesList(
     retryCodes: context.retryCodes,
   });
   if (!doResult.ok) {
-    return doResult;
+    return [doResult, { status: "request-error", request: req }];
   }
   const response = doResult.value;
 
@@ -166,23 +207,22 @@ export async function subscribersPreferencesList(
   };
 
   const [result] = await M.match<
-    operations.SubscribersV1ControllerListSubscriberPreferencesResponse,
-    | errors.ErrorDto
+    operations.SubscribersControllerGetSubscriberPreferencesResponse,
     | errors.ErrorDto
     | errors.ValidationErrorDto
-    | errors.ErrorDto
-    | SDKError
-    | SDKValidationError
-    | UnexpectedClientError
-    | InvalidRequestError
+    | NovuError
+    | ResponseValidationError
+    | ConnectionError
     | RequestAbortedError
     | RequestTimeoutError
-    | ConnectionError
+    | InvalidRequestError
+    | UnexpectedClientError
+    | SDKValidationError
   >(
     M.json(
       200,
       operations
-        .SubscribersV1ControllerListSubscriberPreferencesResponse$inboundSchema,
+        .SubscribersControllerGetSubscriberPreferencesResponse$inboundSchema,
       { hdrs: true, key: "Result" },
     ),
     M.jsonErr(414, errors.ErrorDto$inboundSchema),
@@ -197,10 +237,10 @@ export async function subscribersPreferencesList(
     M.fail(503),
     M.fail("4XX"),
     M.fail("5XX"),
-  )(response, { extraFields: responseFields });
+  )(response, req, { extraFields: responseFields });
   if (!result.ok) {
-    return result;
+    return [result, { status: "complete", request: req, response }];
   }
 
-  return result;
+  return [result, { status: "complete", request: req, response }];
 }

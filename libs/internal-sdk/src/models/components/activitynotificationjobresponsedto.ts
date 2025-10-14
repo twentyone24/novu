@@ -44,6 +44,7 @@ export const ActivityNotificationJobResponseDtoType = {
   Digest: "digest",
   Trigger: "trigger",
   Delay: "delay",
+  Throttle: "throttle",
   Custom: "custom",
 } as const;
 /**
@@ -56,7 +57,7 @@ export type ActivityNotificationJobResponseDtoType = ClosedEnum<
 /**
  * Optional payload for the job
  */
-export type Payload = {};
+export type ActivityNotificationJobResponseDtoPayload = {};
 
 export type ActivityNotificationJobResponseDto = {
   /**
@@ -80,9 +81,13 @@ export type ActivityNotificationJobResponseDto = {
    */
   step: ActivityNotificationStepResponseDto;
   /**
+   * Optional context object for additional error details.
+   */
+  overrides?: { [k: string]: any } | undefined;
+  /**
    * Optional payload for the job
    */
-  payload?: Payload | undefined;
+  payload?: ActivityNotificationJobResponseDtoPayload | undefined;
   /**
    * Provider ID of the job
    */
@@ -95,6 +100,10 @@ export type ActivityNotificationJobResponseDto = {
    * Updated time of the notification
    */
   updatedAt?: string | undefined;
+  /**
+   * The number of times the digest/delay job has been extended to align with the subscribers schedule
+   */
+  scheduleExtensionsCount?: number | undefined;
 };
 
 /** @internal */
@@ -122,43 +131,62 @@ export namespace ActivityNotificationJobResponseDtoType$ {
 }
 
 /** @internal */
-export const Payload$inboundSchema: z.ZodType<Payload, z.ZodTypeDef, unknown> =
-  z.object({});
-
-/** @internal */
-export type Payload$Outbound = {};
-
-/** @internal */
-export const Payload$outboundSchema: z.ZodType<
-  Payload$Outbound,
+export const ActivityNotificationJobResponseDtoPayload$inboundSchema: z.ZodType<
+  ActivityNotificationJobResponseDtoPayload,
   z.ZodTypeDef,
-  Payload
+  unknown
 > = z.object({});
+
+/** @internal */
+export type ActivityNotificationJobResponseDtoPayload$Outbound = {};
+
+/** @internal */
+export const ActivityNotificationJobResponseDtoPayload$outboundSchema:
+  z.ZodType<
+    ActivityNotificationJobResponseDtoPayload$Outbound,
+    z.ZodTypeDef,
+    ActivityNotificationJobResponseDtoPayload
+  > = z.object({});
 
 /**
  * @internal
  * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
  */
-export namespace Payload$ {
-  /** @deprecated use `Payload$inboundSchema` instead. */
-  export const inboundSchema = Payload$inboundSchema;
-  /** @deprecated use `Payload$outboundSchema` instead. */
-  export const outboundSchema = Payload$outboundSchema;
-  /** @deprecated use `Payload$Outbound` instead. */
-  export type Outbound = Payload$Outbound;
+export namespace ActivityNotificationJobResponseDtoPayload$ {
+  /** @deprecated use `ActivityNotificationJobResponseDtoPayload$inboundSchema` instead. */
+  export const inboundSchema =
+    ActivityNotificationJobResponseDtoPayload$inboundSchema;
+  /** @deprecated use `ActivityNotificationJobResponseDtoPayload$outboundSchema` instead. */
+  export const outboundSchema =
+    ActivityNotificationJobResponseDtoPayload$outboundSchema;
+  /** @deprecated use `ActivityNotificationJobResponseDtoPayload$Outbound` instead. */
+  export type Outbound = ActivityNotificationJobResponseDtoPayload$Outbound;
 }
 
-export function payloadToJSON(payload: Payload): string {
-  return JSON.stringify(Payload$outboundSchema.parse(payload));
+export function activityNotificationJobResponseDtoPayloadToJSON(
+  activityNotificationJobResponseDtoPayload:
+    ActivityNotificationJobResponseDtoPayload,
+): string {
+  return JSON.stringify(
+    ActivityNotificationJobResponseDtoPayload$outboundSchema.parse(
+      activityNotificationJobResponseDtoPayload,
+    ),
+  );
 }
 
-export function payloadFromJSON(
+export function activityNotificationJobResponseDtoPayloadFromJSON(
   jsonString: string,
-): SafeParseResult<Payload, SDKValidationError> {
+): SafeParseResult<
+  ActivityNotificationJobResponseDtoPayload,
+  SDKValidationError
+> {
   return safeParse(
     jsonString,
-    (x) => Payload$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'Payload' from JSON`,
+    (x) =>
+      ActivityNotificationJobResponseDtoPayload$inboundSchema.parse(
+        JSON.parse(x),
+      ),
+    `Failed to parse 'ActivityNotificationJobResponseDtoPayload' from JSON`,
   );
 }
 
@@ -175,10 +203,13 @@ export const ActivityNotificationJobResponseDto$inboundSchema: z.ZodType<
     ActivityNotificationExecutionDetailResponseDto$inboundSchema,
   ),
   step: ActivityNotificationStepResponseDto$inboundSchema,
-  payload: z.lazy(() => Payload$inboundSchema).optional(),
+  overrides: z.record(z.any()).optional(),
+  payload: z.lazy(() => ActivityNotificationJobResponseDtoPayload$inboundSchema)
+    .optional(),
   providerId: ProvidersIdEnum$inboundSchema,
   status: z.string(),
   updatedAt: z.string().optional(),
+  scheduleExtensionsCount: z.number().optional(),
 }).transform((v) => {
   return remap$(v, {
     "_id": "id",
@@ -194,10 +225,12 @@ export type ActivityNotificationJobResponseDto$Outbound = {
     ActivityNotificationExecutionDetailResponseDto$Outbound
   >;
   step: ActivityNotificationStepResponseDto$Outbound;
-  payload?: Payload$Outbound | undefined;
+  overrides?: { [k: string]: any } | undefined;
+  payload?: ActivityNotificationJobResponseDtoPayload$Outbound | undefined;
   providerId: string;
   status: string;
   updatedAt?: string | undefined;
+  scheduleExtensionsCount?: number | undefined;
 };
 
 /** @internal */
@@ -213,10 +246,14 @@ export const ActivityNotificationJobResponseDto$outboundSchema: z.ZodType<
     ActivityNotificationExecutionDetailResponseDto$outboundSchema,
   ),
   step: ActivityNotificationStepResponseDto$outboundSchema,
-  payload: z.lazy(() => Payload$outboundSchema).optional(),
+  overrides: z.record(z.any()).optional(),
+  payload: z.lazy(() =>
+    ActivityNotificationJobResponseDtoPayload$outboundSchema
+  ).optional(),
   providerId: ProvidersIdEnum$outboundSchema,
   status: z.string(),
   updatedAt: z.string().optional(),
+  scheduleExtensionsCount: z.number().optional(),
 }).transform((v) => {
   return remap$(v, {
     id: "_id",

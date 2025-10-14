@@ -1,6 +1,23 @@
 import { ToastIcon } from '@/components/primitives/sonner';
 import { showToast } from '@/components/primitives/sonner-helpers';
 
+const DETAILED_ERROR_MESSAGES = [
+  'Workflow steps limit exceeded',
+  'Workflow limit exceeded',
+  'Insufficient permissions',
+] as const;
+
+function getErrorMessage(error?: unknown): string {
+  if (!error || typeof error !== 'object' || error === null || !('message' in error)) {
+    return 'Failed to save';
+  }
+
+  const message = (error as { message?: unknown }).message;
+  const messageText = typeof message === 'string' ? message : '';
+
+  return DETAILED_ERROR_MESSAGES.some((detailed) => messageText.includes(detailed)) ? messageText : 'Failed to save';
+}
+
 export const showSavingToast = (setToastId: (toastId: string | number) => void) => {
   setToastId(
     showToast({
@@ -20,7 +37,7 @@ export const showSavingToast = (setToastId: (toastId: string | number) => void) 
   );
 };
 
-export const showSuccessToast = (toastId: string | number) => {
+export const showSuccessToast = (toastId?: string | number) => {
   showToast({
     children: () => (
       <>
@@ -38,12 +55,14 @@ export const showSuccessToast = (toastId: string | number) => {
   });
 };
 
-export const showErrorToast = (toastId: string | number) => {
+export const showErrorToast = (toastId?: string | number, error?: unknown) => {
+  const message = getErrorMessage(error);
+
   showToast({
     children: () => (
       <>
         <ToastIcon variant="error" />
-        <span className="text-sm">Failed to save</span>
+        <span className="text-sm">{message}</span>
       </>
     ),
     options: {

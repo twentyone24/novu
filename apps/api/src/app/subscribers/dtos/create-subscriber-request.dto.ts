@@ -1,17 +1,20 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ChatProviderIdEnum, IChannelCredentials, PushProviderIdEnum, SubscriberCustomData } from '@novu/shared';
+import { Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsArray,
   IsDefined,
   IsEmail,
   IsLocale,
+  IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
+  IsTimeZone,
+  Matches,
   ValidateNested,
 } from 'class-validator';
-import { ChatProviderIdEnum, IChannelCredentials, PushProviderIdEnum, SubscriberCustomData } from '@novu/shared';
-import { Type } from 'class-transformer';
 
 export class ChannelCredentialsDto implements IChannelCredentials {
   @ApiPropertyOptional({
@@ -61,6 +64,9 @@ export class CreateSubscriberRequestDto {
   })
   @IsString()
   @IsDefined()
+  @IsNotEmpty({
+    message: 'SubscriberId is required',
+  })
   subscriberId: string;
 
   @ApiPropertyOptional({
@@ -131,6 +137,14 @@ export class CreateSubscriberRequestDto {
   @ValidateNested({ each: true })
   @Type(() => SubscriberChannelDto)
   channels?: SubscriberChannelDto[];
+
+  @ApiPropertyOptional({
+    type: 'string',
+    description: 'The timezone of the subscriber.',
+  })
+  @IsOptional()
+  @IsTimeZone()
+  timezone?: string;
 }
 
 export class BulkSubscriberCreateDto {

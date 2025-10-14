@@ -29,8 +29,8 @@ test('should trigger resend library correctly', async () => {
 
   await provider.sendMessage(mockNovuMessage);
 
-  expect(spy).toBeCalled();
-  expect(spy).toBeCalledWith({
+  expect(spy).toHaveBeenCalled();
+  expect(spy).toHaveBeenCalledWith({
     from: mockNovuMessage.from,
     to: mockNovuMessage.to,
     html: mockNovuMessage.html,
@@ -47,11 +47,9 @@ test('should trigger resend email with From Name', async () => {
   };
 
   const provider = new ResendEmailProvider(mockConfigWithSenderName);
-  const spy = vi
-    .spyOn((provider as any).resendClient.emails, 'send')
-    .mockImplementation(async () => {
-      return {};
-    });
+  const spy = vi.spyOn((provider as any).resendClient.emails, 'send').mockImplementation(async () => {
+    return {};
+  });
 
   await provider.sendMessage(mockNovuMessage);
 
@@ -78,11 +76,9 @@ test('should trigger resend email correctly with _passthrough', async () => {
   };
 
   const provider = new ResendEmailProvider(mockConfigWithSenderName);
-  const spy = vi
-    .spyOn((provider as any).resendClient.emails, 'send')
-    .mockImplementation(async () => {
-      return {};
-    });
+  const spy = vi.spyOn((provider as any).resendClient.emails, 'send').mockImplementation(async () => {
+    return {};
+  });
 
   await provider.sendMessage(mockNovuMessage, {
     _passthrough: {

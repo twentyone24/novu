@@ -4,16 +4,6 @@ import { IsEmail, IsLocale, IsObject, IsOptional, IsString, IsTimeZone, Validate
 export class PatchSubscriberRequestDto {
   @ApiPropertyOptional({
     type: String,
-    description: 'Unique identifier of the subscriber',
-    nullable: true,
-  })
-  @IsOptional()
-  @ValidateIf((obj) => obj.subscriberId !== null)
-  @IsString()
-  subscriberId: string | null;
-
-  @ApiPropertyOptional({
-    type: String,
     description: 'First name of the subscriber',
     nullable: true,
   })
@@ -83,9 +73,10 @@ export class PatchSubscriberRequestDto {
   locale?: string | null;
 
   @ApiPropertyOptional({
-    type: Object,
+    type: 'object',
     description: 'Additional custom data for the subscriber',
     nullable: true,
+    additionalProperties: true,
   })
   @IsOptional()
   @ValidateIf((obj) => obj.data !== null)

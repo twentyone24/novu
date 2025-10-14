@@ -8,6 +8,7 @@ export function mapSubscriberEntityToDto(subscriber: SubscriberEntity): Subscrib
     lastName: subscriber.lastName,
     email: subscriber.email,
     phone: subscriber.phone,
+    avatar: subscriber.avatar,
     subscriberId: subscriber.subscriberId,
     createdAt: subscriber.createdAt,
     updatedAt: subscriber.updatedAt,
@@ -19,5 +20,7 @@ export function mapSubscriberEntityToDto(subscriber: SubscriberEntity): Subscrib
     isOnline: subscriber.isOnline,
     topics: subscriber.topics,
     channels: subscriber.channels,
+    locale: subscriber.locale,
+    timezone: subscriber.timezone,
   };
 }

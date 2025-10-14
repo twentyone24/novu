@@ -32,15 +32,17 @@ const Textarea = React.forwardRef<
               // hover
               'hover:[&:not(:focus)]:ring-transparent',
               // focus
-              'focus:shadow-button-important-focus focus:ring-stroke-strong',
+              'focus:border-stroke-soft focus:ring-stroke-soft/50 focus:ring-[3px]',
             ],
             hasError && [
               // base
               'ring-error-base',
               // focus
-              'focus:shadow-button-error-focus focus:ring-error-base',
+              'focus:border-destructive focus:ring-destructive/20 dark:focus:ring-destructive/40',
             ],
             disabled && ['bg-bg-weak ring-transparent'],
+            // aria-invalid
+            'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
           ],
           !disabled && [
             // placeholder
@@ -76,6 +78,7 @@ function ResizeHandle() {
     </div>
   );
 }
+
 ResizeHandle.displayName = TEXTAREA_RESIZE_HANDLE_NAME;
 
 type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement> &
@@ -114,16 +117,18 @@ const TextareaRoot = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
             'hover:[&:not(:focus-within)]:bg-bg-weak',
             // disabled
             'has-[[disabled]]:bg-bg-weak has-[[disabled]]:pointer-events-none has-[[disabled]]:ring-transparent',
+            // aria-invalid
+            'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
           ],
           !hasError && [
             // focus
-            'focus-within:shadow-button-important-focus focus-within:ring-stroke-strong',
+            'focus-within:border-stroke-soft focus-within:ring-stroke-soft/50 focus-within:ring-[3px]',
           ],
           hasError && [
             // base
             'ring-error-base',
             // focus
-            'focus-within:shadow-button-error-focus focus-within:ring-error-base',
+            'focus-within:border-destructive focus-within:ring-destructive/20 dark:focus-within:ring-destructive/40',
           ],
           containerClassName
         )}
@@ -172,6 +177,7 @@ function CharCounter({
     </span>
   );
 }
+
 CharCounter.displayName = TEXTAREA_COUNTER_NAME;
 
 export { TextareaRoot as Textarea, CharCounter as TextareaCounter };

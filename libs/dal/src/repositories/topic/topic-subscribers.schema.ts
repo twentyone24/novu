@@ -1,8 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
-
-import { TopicSubscribersDBModel } from './topic-subscribers.entity';
-
 import { schemaOptions } from '../schema-default.options';
+import { TopicSubscribersDBModel } from './topic-subscribers.entity';
 
 const topicSubscribersSchema = new Schema<TopicSubscribersDBModel>(
   {
@@ -42,10 +40,6 @@ const topicSubscribersSchema = new Schema<TopicSubscribersDBModel>(
 
 topicSubscribersSchema.index({
   _environmentId: 1,
-});
-
-topicSubscribersSchema.index({
-  _organizationId: 1,
 });
 
 topicSubscribersSchema.index({

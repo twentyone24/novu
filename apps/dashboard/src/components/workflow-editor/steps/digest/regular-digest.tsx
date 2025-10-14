@@ -7,13 +7,14 @@ import { useSaveForm } from '@/components/workflow-editor/steps/save-form-contex
 import { TIME_UNIT_OPTIONS } from '@/components/workflow-editor/steps/time-units';
 import { useWorkflow } from '@/components/workflow-editor/workflow-provider';
 
-export const RegularDigest = () => {
+export const RegularDigest = ({ isReadOnly }: { isReadOnly: boolean }) => {
   const { step } = useWorkflow();
   const { saveForm } = useSaveForm();
   const { dataSchema } = step?.controls ?? {};
 
   const minAmountValue = useMemo(() => {
     const fixedDurationSchema = dataSchema?.anyOf?.[0];
+
     if (typeof fixedDurationSchema === 'object') {
       const amountField = fixedDurationSchema.properties?.amount;
 
@@ -36,6 +37,8 @@ export const RegularDigest = () => {
         onValueChange={() => saveForm()}
         showError={false}
         min={minAmountValue}
+        dataTestId="regular-digest-amount-input"
+        isReadOnly={isReadOnly}
       />
     </div>
   );

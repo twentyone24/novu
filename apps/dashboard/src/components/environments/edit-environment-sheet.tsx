@@ -1,3 +1,9 @@
+import { zodResolver } from '@hookform/resolvers/zod';
+import { IEnvironment } from '@novu/shared';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { RiArrowRightSLine } from 'react-icons/ri';
+import { z } from 'zod';
 import { Button } from '@/components/primitives/button';
 import {
   Form,
@@ -7,6 +13,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormRoot,
 } from '@/components/primitives/form/form';
 import { Separator } from '@/components/primitives/separator';
 import {
@@ -20,19 +27,13 @@ import {
 } from '@/components/primitives/sheet';
 import { ExternalLink } from '@/components/shared/external-link';
 import { useUpdateEnvironment } from '@/hooks/use-environments';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { IEnvironment } from '@novu/shared';
-import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { RiArrowRightSLine } from 'react-icons/ri';
-import { z } from 'zod';
 import { ColorPicker } from '../primitives/color-picker';
 import { showErrorToast, showSuccessToast } from '../primitives/sonner-helpers';
 
 // TODO: Merge with CreateEnvironmentButton
 const editEnvironmentSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  color: z.string().regex(/^\#[0-9a-fA-F]{6}$/, 'Enter a valid hex color, like #123456.'),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Enter a valid hex color, like #123456.'),
 });
 
 type EditEnvironmentFormData = z.infer<typeof editEnvironmentSchema>;
@@ -89,14 +90,14 @@ export const EditEnvironmentSheet = ({ environment, isOpen, onOpenChange }: Edit
           <div>
             <SheetDescription>
               Update your environment settings.{' '}
-              <ExternalLink href="https://docs.novu.co/concepts/environments">Learn more</ExternalLink>
+              <ExternalLink href="https://docs.novu.co/platform/concepts/environments">Learn more</ExternalLink>
             </SheetDescription>
           </div>
         </SheetHeader>
         <Separator />
         <SheetMain>
           <Form {...form}>
-            <form
+            <FormRoot
               id="edit-environment"
               autoComplete="off"
               noValidate
@@ -135,7 +136,7 @@ export const EditEnvironmentSheet = ({ environment, isOpen, onOpenChange }: Edit
                   </FormItem>
                 )}
               />
-            </form>
+            </FormRoot>
           </Form>
         </SheetMain>
         <Separator />

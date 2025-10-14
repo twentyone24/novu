@@ -1,11 +1,13 @@
+import { StepTypeEnum } from '@novu/shared';
 import { motion } from 'motion/react';
+import { useCallback, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
-
+import { PageMeta } from '@/components/page-meta';
 import { Sheet, SheetContentBase, SheetDescription, SheetPortal, SheetTitle } from '@/components/primitives/sheet';
 import { VisuallyHidden } from '@/components/primitives/visually-hidden';
-import { PageMeta } from '@/components/page-meta';
 import { useWorkflow } from '@/components/workflow-editor/workflow-provider';
-import { StepTypeEnum } from '@novu/shared';
+import { useEscapeKeyManager } from '@/context/escape-key-manager/hooks';
+import { EscapeKeyManagerPriority } from '@/context/escape-key-manager/priority';
 import { cn } from '@/utils/ui';
 
 const transitionSetting = { ease: [0.29, 0.83, 0.57, 0.99], duration: 0.4 };
@@ -15,14 +17,18 @@ const stepTypeToClassname: Record<string, string | undefined> = {
 };
 
 export const StepDrawer = ({ children, title }: { children: React.ReactNode; title?: string }) => {
+  const id = useId();
   const navigate = useNavigate();
   const { workflow, step } = useWorkflow();
-  const handleCloseSheet = () => {
+
+  const handleCloseSheet = useCallback(() => {
     if (step) {
       // Do not use relative path here, calling twice will result in moving further back
       navigate(`../steps/${step.slug}`);
     }
-  };
+  }, [navigate, step]);
+
+  useEscapeKeyManager(id, handleCloseSheet, EscapeKeyManagerPriority.SHEET);
 
   if (!workflow || !step) {
     return null;
@@ -44,19 +50,18 @@ export const StepDrawer = ({ children, title }: { children: React.ReactNode; tit
           }}
           className="fixed inset-0 z-50 h-screen w-screen bg-black/20"
           transition={transitionSetting}
+          onClick={handleCloseSheet}
         />
         <SheetPortal>
           <SheetContentBase
             asChild
             onInteractOutside={(e) => {
-              // IMPORTANT: do not close the sheet if the interact outside is from the maily variable list
-              if (e.target instanceof HTMLDivElement && e.target.className.includes('tippy-box')) {
-                return;
-              }
-
-              handleCloseSheet();
+              // IMPORTANT DO NOT REMOVE
+              // we don’t want to close the sheet if interacting outside,
+              // happens on the dropdowns, elements that are rendered outside the component tree
+              // for example maily variable list, the conditions operators
+              e.preventDefault();
             }}
-            onEscapeKeyDown={handleCloseSheet}
           >
             <motion.div
               initial={{

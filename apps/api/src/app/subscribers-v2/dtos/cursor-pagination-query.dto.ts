@@ -1,6 +1,7 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DirectionEnum } from '@novu/shared';
+import { Transform, Type } from 'class-transformer';
+import { IsOptional, IsString } from 'class-validator';
 
 export class CursorPaginationQueryDto<T, K extends keyof T> {
   @ApiProperty({
@@ -21,7 +22,34 @@ export class CursorPaginationQueryDto<T, K extends keyof T> {
   @IsOptional()
   before?: string;
 
+  @ApiPropertyOptional({
+    description: 'Limit the number of items to return',
+    type: Number,
+  })
+  @IsOptional()
+  @Type(() => Number)
   limit?: number;
+
+  @ApiPropertyOptional({
+    description: 'Direction of sorting',
+    enum: DirectionEnum,
+  })
+  @IsOptional()
   orderDirection?: DirectionEnum;
+
+  @ApiPropertyOptional({
+    description: 'Field to order by',
+    type: String,
+  })
+  @IsString()
+  @IsOptional()
   orderBy?: K;
+
+  @ApiPropertyOptional({
+    description: 'Include cursor item in response',
+    type: Boolean,
+  })
+  @Transform(({ value }) => value === 'true')
+  @IsOptional()
+  includeCursor?: boolean;
 }

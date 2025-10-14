@@ -1,9 +1,11 @@
 import { ChatProviderIdEnum } from '@novu/shared';
 import {
   ChannelTypeEnum,
-  ISendMessageSuccessResponse,
+  ENDPOINT_TYPES,
   IChatOptions,
   IChatProvider,
+  ISendMessageSuccessResponse,
+  isChannelDataOfType,
 } from '@novu/stateless';
 import axios from 'axios';
 import { BaseProvider, CasingEnum } from '../../../base.provider';
@@ -21,8 +23,13 @@ export class MsTeamsProvider extends BaseProvider implements IChatProvider {
 
   async sendMessage(
     data: IChatOptions,
-    bridgeProviderData: WithPassthrough<Record<string, unknown>> = {},
+    bridgeProviderData: WithPassthrough<Record<string, unknown>> = {}
   ): Promise<ISendMessageSuccessResponse> {
+    if (!isChannelDataOfType(data.channelData, ENDPOINT_TYPES.WEBHOOK)) {
+      throw new Error('Invalid channel data for MsTeams provider');
+    }
+
+    const { endpoint } = data.channelData;
     let payload;
 
     try {
@@ -33,7 +40,7 @@ export class MsTeamsProvider extends BaseProvider implements IChatProvider {
 
     payload = this.transform(bridgeProviderData, payload).body;
 
-    const response = await this.axiosInstance.post(data.webhookUrl, payload);
+    const response = await this.axiosInstance.post(endpoint.url, payload);
 
     return {
       id: response.headers['request-id'],

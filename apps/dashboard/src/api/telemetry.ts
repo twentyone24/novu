@@ -12,12 +12,11 @@ export const measure = async (event: string, data?: Record<string, unknown>): Pr
 };
 
 interface IdentifyUserProps {
-  hubspotContext: string;
   pageUri: string;
   pageName: string;
   jobTitle: JobTitleEnum;
   organizationType: OrganizationTypeEnum;
-  companySize?: CompanySizeEnum;
+  companySize?: CompanySizeEnum | string;
   anonymousId?: string | null;
 }
 

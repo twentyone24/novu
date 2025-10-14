@@ -1,10 +1,8 @@
-'use client';
-
+import { Command } from 'cmdk';
+import { forwardRef, useEffect, useMemo, useState } from 'react';
 import { CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/primitives/command';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/primitives/popover';
 import { cn } from '@/utils/ui';
-import { Command } from 'cmdk';
-import { forwardRef, useEffect, useMemo, useState } from 'react';
 import { Tag } from './tag';
 
 type TagInputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> & {
@@ -30,11 +28,13 @@ const TagInput = forwardRef<HTMLInputElement, TagInputProps>((props, ref) => {
 
   const addTag = (tag: string) => {
     const newTag = tag.trim();
+
     if (newTag === '') {
       return;
     }
 
     const newTags = [...tags, tag];
+
     if (new Set(newTags).size !== newTags.length) {
       return;
     }
@@ -47,9 +47,11 @@ const TagInput = forwardRef<HTMLInputElement, TagInputProps>((props, ref) => {
   const removeTag = (tag: string) => {
     const newTags = [...tags];
     const index = newTags.indexOf(tag);
+
     if (index !== -1) {
       newTags.splice(index, 1);
     }
+
     onChange(newTags);
     setInputValue('');
   };
@@ -67,6 +69,7 @@ const TagInput = forwardRef<HTMLInputElement, TagInputProps>((props, ref) => {
               placeholder="Type a tag and press Enter"
               onValueChange={(value) => {
                 setInputValue(value);
+
                 if (value) {
                   setIsOpen(true);
                 }
@@ -82,8 +85,26 @@ const TagInput = forwardRef<HTMLInputElement, TagInputProps>((props, ref) => {
           </PopoverAnchor>
           <div className="flex flex-wrap gap-2">
             {tags.map((tag, index) => (
-              <Tag key={index} variant="stroke" onDismiss={() => removeTag(tag)}>
-                <span style={{ wordBreak: 'break-all' }}>{tag}</span>
+              <Tag
+                key={index}
+                variant="stroke"
+                className="max-w-[12rem] shrink-0"
+                onDismiss={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+
+                  removeTag(tag);
+                }}
+                dismissTestId={`tags-badge-remove-${tag}`}
+              >
+                <span
+                  className="block max-w-full truncate"
+                  style={{ wordBreak: 'break-all' }}
+                  data-testid="tags-badge-value"
+                  title={tag}
+                >
+                  {tag}
+                </span>
               </Tag>
             ))}
           </div>
@@ -116,7 +137,7 @@ const TagInput = forwardRef<HTMLInputElement, TagInputProps>((props, ref) => {
                     className="gap-1"
                     disabled={inputValue === '' || tags.includes(inputValue)}
                   >
-                    {inputValue}
+                    <span className="truncate">{inputValue}</span>
                   </CommandItem>
                 )}
 
@@ -130,7 +151,7 @@ const TagInput = forwardRef<HTMLInputElement, TagInputProps>((props, ref) => {
                       addTag(tag);
                     }}
                   >
-                    {tag}
+                    <span className="truncate">{tag}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>

@@ -1,3 +1,9 @@
+import { zodResolver } from '@hookform/resolvers/zod';
+import { type IEnvironment, PermissionsEnum } from '@novu/shared';
+import { type ComponentProps, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { RiAddLine, RiArrowRightSLine, RiDatabase2Line } from 'react-icons/ri';
+import { z } from 'zod';
 import { Button } from '@/components/primitives/button';
 import {
   Form,
@@ -7,7 +13,9 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormRoot,
 } from '@/components/primitives/form/form';
+import { PermissionButton } from '@/components/primitives/permission-button';
 import { Separator } from '@/components/primitives/separator';
 import {
   Sheet,
@@ -22,15 +30,10 @@ import { ExternalLink } from '@/components/shared/external-link';
 import { useAuth } from '@/context/auth/hooks';
 import { useFetchEnvironments } from '@/context/environment/hooks';
 import { useCreateEnvironment } from '@/hooks/use-environments';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { IEnvironment } from '@novu/shared';
-import { ComponentProps, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { RiAddLine, RiArrowRightSLine } from 'react-icons/ri';
-import { z } from 'zod';
 import { useTelemetry } from '../../hooks/use-telemetry';
 import { TelemetryEvent } from '../../utils/telemetry';
 import { ColorPicker } from '../primitives/color-picker';
+import { InlineToast } from '../primitives/inline-toast';
 import { showErrorToast, showSuccessToast } from '../primitives/sonner-helpers';
 
 const ENVIRONMENT_COLORS = [
@@ -58,7 +61,7 @@ function getRandomColor(existingEnvironments: IEnvironment[] = []) {
 
 const createEnvironmentSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  color: z.string().regex(/^\#[0-9a-fA-F]{6}$/, 'Enter a valid hex color, like #123456.'),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Enter a valid hex color, like #123456.'),
 });
 
 type CreateEnvironmentFormData = z.infer<typeof createEnvironmentSchema>;
@@ -103,70 +106,83 @@ export const CreateEnvironmentButton = (props: CreateEnvironmentButtonProps) => 
 
   const handleClick = () => {
     track(TelemetryEvent.CREATE_ENVIRONMENT_CLICK);
-
     setIsOpen(true);
   };
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <Button mode="gradient" variant="primary" size="xs" leadingIcon={RiAddLine} onClick={handleClick} {...props}>
+      <PermissionButton
+        permission={PermissionsEnum.ENVIRONMENT_WRITE}
+        mode="gradient"
+        variant="primary"
+        size="xs"
+        leadingIcon={RiAddLine}
+        onClick={handleClick}
+        {...props}
+      >
         Create environment
-      </Button>
+      </PermissionButton>
 
       <SheetContent onOpenAutoFocus={(e) => e.preventDefault()}>
-        <SheetHeader>
-          <SheetTitle>Create environment</SheetTitle>
-          <div>
-            <SheetDescription>
-              Create a new environment to manage your notifications.{' '}
-              <ExternalLink href="https://docs.novu.co/concepts/environments">Learn more</ExternalLink>
-            </SheetDescription>
-          </div>
+        <SheetHeader className="py-3.5 px-3">
+          <SheetTitle className="text-label-sm font-medium flex items-center gap-2">
+            <RiDatabase2Line /> Create live environment
+          </SheetTitle>
         </SheetHeader>
         <Separator />
-        <SheetMain>
-          <Form {...form}>
-            <form
-              id="create-environment"
-              autoComplete="off"
-              noValidate
-              onSubmit={form.handleSubmit(onSubmit)}
-              className="flex flex-col gap-4"
-            >
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel required>Name</FormLabel>
-                    <FormControl>
-                      <FormInput
-                        {...field}
-                        autoFocus
-                        onChange={(e) => {
-                          field.onChange(e);
-                        }}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="color"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel required>Color</FormLabel>
-                    <FormControl>
-                      <ColorPicker pureInput={false} value={field.value} onChange={field.onChange} />
-                    </FormControl>
-                    <FormMessage>Will be used to identify the environment in the UI.</FormMessage>
-                  </FormItem>
-                )}
-              />
-            </form>
-          </Form>
+        <SheetMain className="px-0">
+          <div className="px-3">
+            <Form {...form}>
+              <FormRoot
+                id="create-environment"
+                autoComplete="off"
+                noValidate
+                onSubmit={form.handleSubmit(onSubmit)}
+                className="flex flex-col gap-4"
+              >
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel required>Name</FormLabel>
+                      <FormControl>
+                        <FormInput
+                          {...field}
+                          autoFocus
+                          onChange={(e) => {
+                            field.onChange(e);
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="color"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel required>Color</FormLabel>
+                      <FormControl>
+                        <ColorPicker pureInput={false} value={field.value} onChange={field.onChange} />
+                      </FormControl>
+                      <FormMessage>Will be used to identify the environment in the UI.</FormMessage>
+                    </FormItem>
+                  )}
+                />
+              </FormRoot>
+            </Form>
+          </div>
+          <Separator className="my-[20px]" />
+          <div className="px-3">
+            <InlineToast
+              variant={'tip'}
+              title="Live environments are read-only"
+              description={`Use them for staging, QA, previews. Great for safe reviews and testing!`}
+            />
+          </div>
         </SheetMain>
         <Separator />
         <SheetFooter>

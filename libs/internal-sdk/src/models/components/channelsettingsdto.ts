@@ -5,7 +5,6 @@
 import * as z from "zod";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -14,41 +13,17 @@ import {
   ChannelCredentials$Outbound,
   ChannelCredentials$outboundSchema,
 } from "./channelcredentials.js";
-
-/**
- * The provider identifier for the credentials
- */
-export const ChannelSettingsDtoProviderId = {
-  Slack: "slack",
-  Discord: "discord",
-  Msteams: "msteams",
-  Mattermost: "mattermost",
-  Ryver: "ryver",
-  Zulip: "zulip",
-  GrafanaOnCall: "grafana-on-call",
-  Getstream: "getstream",
-  RocketChat: "rocket-chat",
-  WhatsappBusiness: "whatsapp-business",
-  Fcm: "fcm",
-  Apns: "apns",
-  Expo: "expo",
-  OneSignal: "one-signal",
-  Pushpad: "pushpad",
-  PushWebhook: "push-webhook",
-  PusherBeams: "pusher-beams",
-} as const;
-/**
- * The provider identifier for the credentials
- */
-export type ChannelSettingsDtoProviderId = ClosedEnum<
-  typeof ChannelSettingsDtoProviderId
->;
+import {
+  ChatOrPushProviderEnum,
+  ChatOrPushProviderEnum$inboundSchema,
+  ChatOrPushProviderEnum$outboundSchema,
+} from "./chatorpushproviderenum.js";
 
 export type ChannelSettingsDto = {
   /**
    * The provider identifier for the credentials
    */
-  providerId: ChannelSettingsDtoProviderId;
+  providerId: ChatOrPushProviderEnum;
   /**
    * The integration identifier
    */
@@ -64,33 +39,12 @@ export type ChannelSettingsDto = {
 };
 
 /** @internal */
-export const ChannelSettingsDtoProviderId$inboundSchema: z.ZodNativeEnum<
-  typeof ChannelSettingsDtoProviderId
-> = z.nativeEnum(ChannelSettingsDtoProviderId);
-
-/** @internal */
-export const ChannelSettingsDtoProviderId$outboundSchema: z.ZodNativeEnum<
-  typeof ChannelSettingsDtoProviderId
-> = ChannelSettingsDtoProviderId$inboundSchema;
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace ChannelSettingsDtoProviderId$ {
-  /** @deprecated use `ChannelSettingsDtoProviderId$inboundSchema` instead. */
-  export const inboundSchema = ChannelSettingsDtoProviderId$inboundSchema;
-  /** @deprecated use `ChannelSettingsDtoProviderId$outboundSchema` instead. */
-  export const outboundSchema = ChannelSettingsDtoProviderId$outboundSchema;
-}
-
-/** @internal */
 export const ChannelSettingsDto$inboundSchema: z.ZodType<
   ChannelSettingsDto,
   z.ZodTypeDef,
   unknown
 > = z.object({
-  providerId: ChannelSettingsDtoProviderId$inboundSchema,
+  providerId: ChatOrPushProviderEnum$inboundSchema,
   integrationIdentifier: z.string().optional(),
   credentials: ChannelCredentials$inboundSchema,
   _integrationId: z.string(),
@@ -114,7 +68,7 @@ export const ChannelSettingsDto$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ChannelSettingsDto
 > = z.object({
-  providerId: ChannelSettingsDtoProviderId$outboundSchema,
+  providerId: ChatOrPushProviderEnum$outboundSchema,
   integrationIdentifier: z.string().optional(),
   credentials: ChannelCredentials$outboundSchema,
   integrationId: z.string(),

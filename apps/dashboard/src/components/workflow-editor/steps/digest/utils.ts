@@ -123,6 +123,7 @@ function replaceAlternatives(str: string, min: number, alt?: string[]) {
       str = str.replace(alt[i], `${i + min}`);
     }
   }
+
   return str;
 }
 
@@ -131,7 +132,7 @@ function replaceAlternatives(str: string, min: number, alt?: string[]) {
  */
 function fixSunday(values: number[], unit: Unit) {
   if (unit.type === PeriodValues.WEEK) {
-    values = values.map(function (value) {
+    values = values.map((value) => {
       if (value === 7) {
         return 0;
       }
@@ -236,7 +237,7 @@ function parsePartString(str: string, unit: Unit) {
       fixSunday(
         replaceAlternatives(str, unit.min, unit.alt)
           .split(',')
-          .map((value) => {
+          .flatMap((value) => {
             const valueParts = value.split('/');
 
             if (valueParts.length > 2) {
@@ -257,8 +258,7 @@ function parsePartString(str: string, unit: Unit) {
             const intervalValues = applyInterval(parsedValues, step);
 
             return intervalValues;
-          })
-          .flat(),
+          }),
         unit
       )
     )
@@ -310,6 +310,7 @@ export function getPeriodFromCronParts(cronParts: number[][]): PeriodValues {
   } else if (cronParts[0].length > 0) {
     return PeriodValues.HOUR;
   }
+
   return PeriodValues.MINUTE;
 }
 
@@ -347,6 +348,7 @@ export function getCronBasedOnPeriod(
   { minute, hour, dayOfWeek, dayOfMonth, month }: UiCronFields
 ) {
   let cron = EVERY_MINUTE_CRON;
+
   if (period === PeriodValues.HOUR) {
     const cronFields = toCronFields({
       second: [...EVERY_SECOND],

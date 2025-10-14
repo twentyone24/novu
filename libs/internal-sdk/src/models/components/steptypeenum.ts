@@ -6,7 +6,7 @@ import * as z from "zod";
 import { ClosedEnum } from "../../types/enums.js";
 
 /**
- * Channels of the notification
+ * Type of the step
  */
 export const StepTypeEnum = {
   InApp: "in_app",
@@ -17,10 +17,11 @@ export const StepTypeEnum = {
   Digest: "digest",
   Trigger: "trigger",
   Delay: "delay",
+  Throttle: "throttle",
   Custom: "custom",
 } as const;
 /**
- * Channels of the notification
+ * Type of the step
  */
 export type StepTypeEnum = ClosedEnum<typeof StepTypeEnum>;
 

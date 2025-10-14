@@ -1,6 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { ChannelTypeEnum } from '@novu/shared';
-import { IsOptional } from 'class-validator';
+import { ChannelTypeEnum, SeverityLevelEnum } from '@novu/shared';
+import { Type } from 'class-transformer';
+import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsEnumOrArray } from '../../shared/validators/is-enum-or-array';
 
 export class ActivitiesRequestDto {
   @ApiPropertyOptional({
@@ -45,30 +47,64 @@ export class ActivitiesRequestDto {
   subscriberIds?: string | string[];
 
   @ApiPropertyOptional({
+    type: String,
+    isArray: true,
+    description: 'Array of severity levels or a single severity level',
+  })
+  @IsOptional()
+  @IsEnumOrArray(SeverityLevelEnum)
+  severity?: SeverityLevelEnum[] | SeverityLevelEnum;
+
+  @ApiPropertyOptional({
     type: Number,
     default: 0,
     description: 'Page number for pagination',
   })
   @IsOptional()
-  page?: number;
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  page: number = 0;
 
   @ApiPropertyOptional({
-    type: String,
-    description: 'Transaction ID for filtering',
+    type: Number,
+    default: 10,
+    minimum: 1,
+    maximum: 50,
+    description: 'Limit for pagination',
   })
   @IsOptional()
-  transactionId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit: number = 10;
 
   @ApiPropertyOptional({
     type: String,
-    description: 'Date filter for records after this timestamp',
+    description: 'The transaction ID to filter by',
+  })
+  @IsOptional()
+  transactionId?: string[] | string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Topic Key for filtering notifications by topic',
+  })
+  @IsOptional()
+  @IsString()
+  topicKey?: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    description: 'Date filter for records after this timestamp. Defaults to earliest date allowed by subscription plan',
   })
   @IsOptional()
   after?: string;
 
   @ApiPropertyOptional({
     type: String,
-    description: 'Date filter for records before this timestamp',
+    description: 'Date filter for records before this timestamp. Defaults to current time of request (now)',
   })
   @IsOptional()
   before?: string;

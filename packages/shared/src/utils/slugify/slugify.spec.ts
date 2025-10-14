@@ -1,12 +1,13 @@
+// @ts-nocheck
 /* cspell:disable */
-/* eslint-disable guard-for-in */
-import { it, describe, expect } from 'vitest';
+
+import { describe, expect, it } from 'vitest';
 import { slugify } from './slugify';
 
 describe('slugify', () => {
   it('throws', () => {
     try {
-      slugify(undefined as any);
+      slugify(undefined);
     } catch (err) {
       expect(err.message).toBe('Expected a string, got `undefined`');
     }

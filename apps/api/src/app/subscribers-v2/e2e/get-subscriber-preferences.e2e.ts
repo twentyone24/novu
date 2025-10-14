@@ -1,9 +1,9 @@
+import { Novu } from '@novu/api';
+import { SubscriberResponseDto } from '@novu/api/models/components';
+import { NotificationTemplateEntity } from '@novu/dal';
+import { UserSession } from '@novu/testing';
 import { expect } from 'chai';
 import { randomBytes } from 'crypto';
-import { UserSession } from '@novu/testing';
-import { NotificationTemplateEntity } from '@novu/dal';
-import { SubscriberResponseDto } from '@novu/api/models/components';
-import { Novu } from '@novu/api';
 import { expectSdkExceptionGeneric, initNovuClassSdk } from '../../shared/helpers/e2e/sdk/e2e-sdk.helper';
 
 let session: UserSession;
@@ -25,7 +25,7 @@ describe('Get Subscriber Preferences - /subscribers/:subscriberId/preferences (G
   });
 
   it('should fetch subscriber preferences with default values', async () => {
-    const response = await novuClient.subscribers.preferences.retrieve(subscriber.subscriberId);
+    const response = await novuClient.subscribers.preferences.list(subscriber.subscriberId);
 
     const { global, workflows } = response.result;
 
@@ -37,7 +37,7 @@ describe('Get Subscriber Preferences - /subscribers/:subscriberId/preferences (G
   it('should return 404 if subscriber does not exist', async () => {
     const invalidSubscriberId = `non-existent-${randomBytes(2).toString('hex')}`;
     const { error } = await expectSdkExceptionGeneric(() =>
-      novuClient.subscribers.preferences.retrieve(invalidSubscriberId)
+      novuClient.subscribers.preferences.list(invalidSubscriberId)
     );
 
     expect(error?.statusCode).to.equal(404);
@@ -48,7 +48,7 @@ describe('Get Subscriber Preferences - /subscribers/:subscriberId/preferences (G
     const workflow2 = await session.createTemplate({ noFeedId: true });
     const workflow3 = await session.createTemplate({ noFeedId: true });
 
-    const response = await novuClient.subscribers.preferences.retrieve(subscriber.subscriberId);
+    const response = await novuClient.subscribers.preferences.list(subscriber.subscriberId);
 
     const { workflows } = response.result;
 
@@ -75,7 +75,7 @@ describe('Get Subscriber Preferences - /subscribers/:subscriberId/preferences (G
     const newWorkflow = await session.createTemplate({ noFeedId: true });
 
     // Check preferences
-    const response = await novuClient.subscribers.preferences.retrieve(subscriber.subscriberId);
+    const response = await novuClient.subscribers.preferences.list(subscriber.subscriberId);
 
     const { workflows } = response.result;
 
