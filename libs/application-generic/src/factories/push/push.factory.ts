@@ -1,6 +1,7 @@
 import { IntegrationEntity } from '@novu/dal';
 import {
   APNSHandler,
+  AppIOHandler,
   ExpoHandler,
   FCMHandler,
   OneSignalHandler,
@@ -19,6 +20,7 @@ export class PushFactory implements IPushFactory {
     new PushpadHandler(),
     new PushWebhookHandler(),
     new PusherBeamsHandler(),
+    new AppIOHandler(),
   ];
 
   getHandler(

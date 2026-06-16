@@ -1,4 +1,13 @@
-import { LayoutControlType } from '@novu/application-generic';
+import {
+  ControlValueSanitizerService,
+  CreateVariablesObject,
+  GetLayoutUseCase,
+  LayoutControlType,
+  PayloadMergerService,
+  PreviewPayloadProcessorService,
+  PreviewStep,
+} from '@novu/application-generic';
+import { EnvironmentRepository, EnvironmentVariableRepository } from '@novu/dal';
 import {
   ChannelTypeEnum,
   LAYOUT_PREVIEW_EMAIL_STEP,
@@ -7,12 +16,6 @@ import {
 } from '@novu/shared';
 import { expect } from 'chai';
 import sinon from 'sinon';
-import { PreviewStep } from '../../../bridge/usecases/preview-step';
-import { ControlValueSanitizerService } from '../../../shared/services/control-value-sanitizer.service';
-import { CreateVariablesObject } from '../../../shared/usecases/create-variables-object';
-import { PayloadMergerService } from '../../../workflows-v2/usecases/preview/services/payload-merger.service';
-import { PreviewPayloadProcessorService } from '../../../workflows-v2/usecases/preview/services/preview-payload-processor.service';
-import { GetLayoutUseCase } from '../get-layout';
 import { PreviewLayoutCommand } from './preview-layout.command';
 import { PreviewLayoutUsecase } from './preview-layout.usecase';
 import { enhanceBodyForPreview } from './preview-utils';
@@ -24,6 +27,8 @@ describe('PreviewLayoutUsecase', () => {
   let payloadProcessorMock: sinon.SinonStubbedInstance<PreviewPayloadProcessorService>;
   let payloadMergerMock: sinon.SinonStubbedInstance<PayloadMergerService>;
   let previewStepUsecaseMock: sinon.SinonStubbedInstance<PreviewStep>;
+  let environmentVariableRepositoryMock: sinon.SinonStubbedInstance<EnvironmentVariableRepository>;
+  let environmentRepositoryMock: sinon.SinonStubbedInstance<EnvironmentRepository>;
 
   let previewLayoutUsecase: PreviewLayoutUsecase;
 
@@ -114,6 +119,8 @@ describe('PreviewLayoutUsecase', () => {
     payloadProcessorMock = sinon.createStubInstance(PreviewPayloadProcessorService);
     payloadMergerMock = sinon.createStubInstance(PayloadMergerService);
     previewStepUsecaseMock = sinon.createStubInstance(PreviewStep);
+    environmentVariableRepositoryMock = sinon.createStubInstance(EnvironmentVariableRepository);
+    environmentRepositoryMock = sinon.createStubInstance(EnvironmentRepository);
 
     previewLayoutUsecase = new PreviewLayoutUsecase(
       getLayoutUseCaseMock as any,
@@ -121,7 +128,9 @@ describe('PreviewLayoutUsecase', () => {
       controlValueSanitizerMock as any,
       payloadProcessorMock as any,
       payloadMergerMock as any,
-      previewStepUsecaseMock as any
+      previewStepUsecaseMock as any,
+      environmentVariableRepositoryMock as any,
+      environmentRepositoryMock as any
     );
 
     // Default mocks setup
@@ -135,6 +144,11 @@ describe('PreviewLayoutUsecase', () => {
     payloadMergerMock.mergePayloadExample.resolves(mockPayloadExample);
     payloadProcessorMock.cleanPreviewExamplePayload.returns(mockCleanedPayloadExample);
     previewStepUsecaseMock.execute.resolves(mockPreviewStepOutput as any);
+    environmentVariableRepositoryMock.findByEnvironment.resolves([]);
+    environmentRepositoryMock.findByIdAndOrganization.resolves({
+      name: 'Development',
+      type: 'dev',
+    } as any);
   });
 
   afterEach(() => {
@@ -154,13 +168,14 @@ describe('PreviewLayoutUsecase', () => {
 
       const result = await previewLayoutUsecase.execute(command);
 
-      expect(result).to.deep.equal({
-        result: {
-          preview: { body: '<html>Final rendered content</html>' },
-          type: ChannelTypeEnum.EMAIL,
-        },
-        previewPayloadExample: mockPayloadExample,
+      expect(result.result).to.deep.equal({
+        preview: { body: '<html>Final rendered content</html>' },
+        type: ChannelTypeEnum.EMAIL,
       });
+      expect(result.previewPayloadExample).to.deep.equal(mockPayloadExample);
+      expect(result.schema).to.exist;
+      expect(result.schema?.type).to.equal('object');
+      expect(result.schema?.properties).to.have.keys(['subscriber', 'context']);
     });
 
     it('should use layout control values when command control values are not provided', async () => {
@@ -387,7 +402,7 @@ describe('PreviewLayoutUsecase', () => {
             },
           });
 
-          const result = await previewLayoutUsecase.execute(command);
+          await previewLayoutUsecase.execute(command);
         } catch (error) {
           expect(error.message).to.equal('Layout not found');
         }
@@ -412,6 +427,7 @@ describe('PreviewLayoutUsecase', () => {
             type: ChannelTypeEnum.EMAIL,
           },
           previewPayloadExample: {},
+          schema: null,
         });
       });
 
@@ -434,6 +450,7 @@ describe('PreviewLayoutUsecase', () => {
             type: ChannelTypeEnum.EMAIL,
           },
           previewPayloadExample: {},
+          schema: null,
         });
       });
 
@@ -456,6 +473,7 @@ describe('PreviewLayoutUsecase', () => {
             type: ChannelTypeEnum.EMAIL,
           },
           previewPayloadExample: {},
+          schema: null,
         });
       });
 
@@ -478,6 +496,7 @@ describe('PreviewLayoutUsecase', () => {
             type: ChannelTypeEnum.EMAIL,
           },
           previewPayloadExample: {},
+          schema: null,
         });
       });
 
@@ -500,6 +519,7 @@ describe('PreviewLayoutUsecase', () => {
             type: ChannelTypeEnum.EMAIL,
           },
           previewPayloadExample: {},
+          schema: null,
         });
       });
 

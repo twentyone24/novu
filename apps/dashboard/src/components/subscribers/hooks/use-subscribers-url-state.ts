@@ -1,9 +1,14 @@
 import { DirectionEnum } from '@novu/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useEnvironment } from '@/context/environment/hooks';
+import { getPersistedPageSize, usePersistedPageSize } from '@/hooks/use-persisted-page-size';
 import { QueryKeys } from '@/utils/query-keys';
+import { buildRoute, ROUTES } from '@/utils/routes';
 import { useDebounce } from '../../../hooks/use-debounce';
+
+const SUBSCRIBERS_TABLE_ID = 'subscribers-list';
 
 export type SubscribersSortableColumn = '_id' | 'updatedAt';
 export interface SubscribersFilter {
@@ -23,7 +28,7 @@ export const defaultSubscribersFilter: Required<SubscribersFilter> = {
   phone: '',
   name: '',
   subscriberId: '',
-  limit: 10,
+  limit: getPersistedPageSize(SUBSCRIBERS_TABLE_ID, 10),
   after: '',
   before: '',
   orderBy: '_id',
@@ -39,6 +44,7 @@ export interface SubscribersUrlState {
   handlePrevious: () => void;
   handleFirst: () => void;
   handleNavigationAfterDelete: (afterCursor: string) => void;
+  handlePageSizeChange: (newSize: number) => void;
 }
 
 type UseSubscribersUrlStateProps = {
@@ -52,6 +58,12 @@ export function useSubscribersUrlState(props: UseSubscribersUrlStateProps = {}):
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { setPageSize: setPersistedPageSize } = usePersistedPageSize({
+    tableId: SUBSCRIBERS_TABLE_ID,
+    defaultPageSize: 10,
+  });
+  const { currentEnvironment } = useEnvironment();
+  const location = useLocation();
   const filterValues = useMemo(
     () => ({
       email: searchParams.get('email') || '',
@@ -68,6 +80,11 @@ export function useSubscribersUrlState(props: UseSubscribersUrlStateProps = {}):
     [searchParams]
   );
 
+  const isUnderSubscribersPage = useMemo(() => {
+    const mainSubscribersRoute = buildRoute(ROUTES.SUBSCRIBERS, { environmentSlug: currentEnvironment?.slug ?? '' });
+    return location.pathname.startsWith(mainSubscribersRoute);
+  }, [location.pathname, currentEnvironment?.slug]);
+
   const updateSearchParams = useCallback(
     (data: SubscribersFilter) => {
       const newParams = new URLSearchParams(searchParams.toString());
@@ -79,6 +96,7 @@ export function useSubscribersUrlState(props: UseSubscribersUrlStateProps = {}):
         'name',
         'orderBy',
         'orderDirection',
+        'limit',
       ];
 
       const isResetPaginationFilterChanged = resetPaginationFilterKeys.some((key) => data[key] !== filterValues[key]);
@@ -226,8 +244,25 @@ export function useSubscribersUrlState(props: UseSubscribersUrlStateProps = {}):
      */
     newParams.delete('before');
 
-    navigate(`${location.pathname}?${newParams}`, { replace: true });
+    if (isUnderSubscribersPage) {
+      navigate(`${buildRoute(ROUTES.SUBSCRIBERS, { environmentSlug: currentEnvironment?.slug ?? '' })}?${newParams}`, {
+        replace: true,
+      });
+    } else {
+      navigate(`${location.pathname}?${newParams}`, { replace: true });
+    }
   };
+
+  const handlePageSizeChange = useCallback(
+    (newSize: number) => {
+      setPersistedPageSize(newSize);
+      updateSearchParams({
+        ...filterValues,
+        limit: newSize,
+      });
+    },
+    [updateSearchParams, filterValues, setPersistedPageSize]
+  );
 
   return {
     filterValues,
@@ -238,5 +273,6 @@ export function useSubscribersUrlState(props: UseSubscribersUrlStateProps = {}):
     handlePrevious,
     handleFirst,
     handleNavigationAfterDelete,
+    handlePageSizeChange,
   };
 }

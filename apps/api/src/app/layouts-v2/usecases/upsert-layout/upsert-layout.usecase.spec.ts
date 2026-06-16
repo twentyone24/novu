@@ -1,11 +1,18 @@
 import { BadRequestException } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import {
   AnalyticsService,
   GetLayoutUseCase,
+  GetLayoutUseCase as GetLayoutUseCaseV0,
+  JSONSchemaDto,
+  LayoutCreationSourceEnum,
+  LayoutDtoV0,
   layoutControlSchema,
+  mapLayoutToResponseDto,
+  PinoLogger,
   UpsertControlValuesUseCase,
 } from '@novu/application-generic';
-import { ControlValuesRepository, LayoutRepository } from '@novu/dal';
+import { ControlValuesRepository, JsonSchemaTypeEnum, LayoutRepository } from '@novu/dal';
 import {
   ChannelTypeEnum,
   ContentIssueEnum,
@@ -18,11 +25,8 @@ import {
 } from '@novu/shared';
 import { expect } from 'chai';
 import sinon from 'sinon';
-import { LayoutDto } from '../../../layouts-v1/dtos';
 import { CreateLayoutUseCase, UpdateLayoutUseCase } from '../../../layouts-v1/usecases';
-import { LayoutCreationSourceEnum } from '../../types';
 import { BuildLayoutIssuesUsecase } from '../build-layout-issues/build-layout-issues.usecase';
-import { LayoutVariablesSchemaUseCase } from '../layout-variables-schema';
 import { UpsertLayoutCommand } from './upsert-layout.command';
 import { UpsertLayout } from './upsert-layout.usecase';
 
@@ -31,19 +35,31 @@ const isStringifiedMailyJSONContentStub = sinon.stub();
 
 // Mock modules using require to ensure proper stubbing
 sinon
-  .stub(require('../../../shared/helpers/maily-utils'), 'isStringifiedMailyJSONContent')
+  .stub(require('@novu/application-generic'), 'isStringifiedMailyJSONContent')
   .callsFake(isStringifiedMailyJSONContentStub);
 
+function setupTranslationMocks(moduleRef: sinon.SinonStubbedInstance<ModuleRef>): sinon.SinonStub {
+  const manageTranslationsExecuteStub = sinon.stub().resolves();
+
+  (moduleRef as any).get = sinon.stub().returns({
+    execute: manageTranslationsExecuteStub,
+  });
+
+  return manageTranslationsExecuteStub;
+}
+
 describe('UpsertLayoutUseCase', () => {
-  let getLayoutUseCaseMock: sinon.SinonStubbedInstance<GetLayoutUseCase>;
+  let getLayoutUseV0CaseMock: sinon.SinonStubbedInstance<GetLayoutUseCaseV0>;
   let createLayoutUseCaseMock: sinon.SinonStubbedInstance<CreateLayoutUseCase>;
   let updateLayoutUseCaseMock: sinon.SinonStubbedInstance<UpdateLayoutUseCase>;
   let controlValuesRepositoryMock: sinon.SinonStubbedInstance<ControlValuesRepository>;
   let upsertControlValuesUseCaseMock: sinon.SinonStubbedInstance<UpsertControlValuesUseCase>;
-  let layoutVariablesSchemaUseCaseMock: sinon.SinonStubbedInstance<LayoutVariablesSchemaUseCase>;
   let layoutRepositoryMock: sinon.SinonStubbedInstance<LayoutRepository>;
   let analyticsServiceMock: sinon.SinonStubbedInstance<AnalyticsService>;
   let buildLayoutIssuesUsecaseMock: sinon.SinonStubbedInstance<BuildLayoutIssuesUsecase>;
+  let getLayoutUseCaseMock: sinon.SinonStubbedInstance<GetLayoutUseCase>;
+  let moduleRefMock: sinon.SinonStubbedInstance<ModuleRef>;
+  let pinoLoggerMock: sinon.SinonStubbedInstance<PinoLogger>;
 
   let upsertLayoutUseCase: UpsertLayout;
 
@@ -64,7 +80,7 @@ describe('UpsertLayoutUseCase', () => {
     } as LayoutControlValuesDto,
   };
 
-  const mockExistingLayout: LayoutDto & { _id: string } = {
+  const mockExistingLayout: LayoutDtoV0 & { _id: string } = {
     _id: 'existing_layout_id',
     identifier: 'existing_layout_identifier',
     name: 'Existing Layout',
@@ -84,7 +100,7 @@ describe('UpsertLayoutUseCase', () => {
     },
   };
 
-  const mockCreatedLayout: LayoutDto & { _id: string } = {
+  const mockCreatedLayout: LayoutDtoV0 & { _id: string } = {
     _id: 'new_layout_id',
     identifier: 'test-layout',
     name: 'Test Layout',
@@ -114,48 +130,53 @@ describe('UpsertLayoutUseCase', () => {
     },
   };
 
-  const mockLayoutVariablesSchema = {
-    type: 'object',
+  const mockLayoutVariablesSchema: JSONSchemaDto = {
+    type: JsonSchemaTypeEnum.OBJECT,
     properties: {
       subscriber: {
-        type: 'object',
+        type: JsonSchemaTypeEnum.OBJECT,
         properties: {
-          email: { type: 'string' },
-          firstName: { type: 'string' },
+          email: { type: JsonSchemaTypeEnum.STRING },
+          firstName: { type: JsonSchemaTypeEnum.STRING },
         },
       },
-      content: { type: 'string' },
+      content: { type: JsonSchemaTypeEnum.STRING },
     },
   };
 
   beforeEach(() => {
-    getLayoutUseCaseMock = sinon.createStubInstance(GetLayoutUseCase);
+    getLayoutUseV0CaseMock = sinon.createStubInstance(GetLayoutUseCaseV0);
     createLayoutUseCaseMock = sinon.createStubInstance(CreateLayoutUseCase);
     updateLayoutUseCaseMock = sinon.createStubInstance(UpdateLayoutUseCase);
     controlValuesRepositoryMock = sinon.createStubInstance(ControlValuesRepository);
     upsertControlValuesUseCaseMock = sinon.createStubInstance(UpsertControlValuesUseCase);
-    layoutVariablesSchemaUseCaseMock = sinon.createStubInstance(LayoutVariablesSchemaUseCase);
     layoutRepositoryMock = sinon.createStubInstance(LayoutRepository);
     analyticsServiceMock = sinon.createStubInstance(AnalyticsService);
     buildLayoutIssuesUsecaseMock = sinon.createStubInstance(BuildLayoutIssuesUsecase);
+    getLayoutUseCaseMock = sinon.createStubInstance(GetLayoutUseCase);
+    moduleRefMock = sinon.createStubInstance(ModuleRef);
+    pinoLoggerMock = sinon.createStubInstance(PinoLogger);
+
+    setupTranslationMocks(moduleRefMock as any);
 
     upsertLayoutUseCase = new UpsertLayout(
-      getLayoutUseCaseMock as any,
+      getLayoutUseV0CaseMock as any,
       createLayoutUseCaseMock as any,
       updateLayoutUseCaseMock as any,
       controlValuesRepositoryMock as any,
       upsertControlValuesUseCaseMock as any,
-      layoutVariablesSchemaUseCaseMock as any,
       layoutRepositoryMock as any,
       analyticsServiceMock as any,
-      buildLayoutIssuesUsecaseMock as any
+      buildLayoutIssuesUsecaseMock as any,
+      getLayoutUseCaseMock as any,
+      moduleRefMock as any,
+      pinoLoggerMock as any
     );
 
     // Default mocks setup
     isStringifiedMailyJSONContentStub.returns(false);
     buildLayoutIssuesUsecaseMock.execute.resolves({} as LayoutIssuesDto);
     upsertControlValuesUseCaseMock.execute.resolves(mockControlValues as any);
-    layoutVariablesSchemaUseCaseMock.execute.resolves(mockLayoutVariablesSchema as any);
     layoutRepositoryMock.findOne.resolves(undefined);
   });
 
@@ -167,8 +188,15 @@ describe('UpsertLayoutUseCase', () => {
   describe('execute', () => {
     describe('create layout path', () => {
       beforeEach(() => {
-        getLayoutUseCaseMock.execute.resolves(undefined);
+        getLayoutUseV0CaseMock.execute.resolves(undefined);
         createLayoutUseCaseMock.execute.resolves(mockCreatedLayout);
+        getLayoutUseCaseMock.execute.resolves(
+          mapLayoutToResponseDto({
+            layout: mockCreatedLayout,
+            controlValues: mockControlValues,
+            variables: mockLayoutVariablesSchema,
+          })
+        );
       });
 
       it('should successfully create a new layout when no existing layout found', async () => {
@@ -273,8 +301,15 @@ describe('UpsertLayoutUseCase', () => {
 
     describe('update layout path', () => {
       beforeEach(() => {
-        getLayoutUseCaseMock.execute.resolves(mockExistingLayout);
+        getLayoutUseV0CaseMock.execute.resolves(mockExistingLayout);
         updateLayoutUseCaseMock.execute.resolves(mockExistingLayout);
+        getLayoutUseCaseMock.execute.resolves(
+          mapLayoutToResponseDto({
+            layout: mockExistingLayout,
+            controlValues: mockControlValues,
+            variables: mockLayoutVariablesSchema,
+          })
+        );
       });
 
       it('should successfully update an existing layout when layoutIdOrInternalId provided', async () => {
@@ -305,8 +340,8 @@ describe('UpsertLayoutUseCase', () => {
 
         await upsertLayoutUseCase.execute(command);
 
-        expect(getLayoutUseCaseMock.execute.calledOnce).to.be.true;
-        const getCommand = getLayoutUseCaseMock.execute.firstCall.args[0];
+        expect(getLayoutUseV0CaseMock.execute.calledOnce).to.be.true;
+        const getCommand = getLayoutUseV0CaseMock.execute.firstCall.args[0];
         expect(getCommand.layoutIdOrInternalId).to.equal('existing_layout_id');
         expect(getCommand.environmentId).to.equal(mockUser.environmentId);
         expect(getCommand.organizationId).to.equal(mockUser.organizationId);
@@ -361,8 +396,15 @@ describe('UpsertLayoutUseCase', () => {
 
     describe('control values handling', () => {
       beforeEach(() => {
-        getLayoutUseCaseMock.execute.resolves(undefined);
+        getLayoutUseV0CaseMock.execute.resolves(undefined);
         createLayoutUseCaseMock.execute.resolves(mockCreatedLayout);
+        getLayoutUseCaseMock.execute.resolves(
+          mapLayoutToResponseDto({
+            layout: mockCreatedLayout,
+            controlValues: mockControlValues,
+            variables: mockLayoutVariablesSchema,
+          })
+        );
       });
 
       it('should upsert control values when provided', async () => {
@@ -427,56 +469,20 @@ describe('UpsertLayoutUseCase', () => {
         expect(upsertCommand.newControlValues).to.deep.equal({});
       });
     });
-
-    describe('layout variables schema', () => {
-      beforeEach(() => {
-        getLayoutUseCaseMock.execute.resolves(undefined);
-        createLayoutUseCaseMock.execute.resolves(mockCreatedLayout);
-      });
-
-      it('should call layoutVariablesSchemaUseCase with correct parameters', async () => {
-        const command = UpsertLayoutCommand.create({
-          userId: mockUser._id,
-          environmentId: mockUser.environmentId,
-          organizationId: mockUser.organizationId,
-          layoutDto: mockLayoutDto,
-        });
-
-        await upsertLayoutUseCase.execute(command);
-
-        expect(layoutVariablesSchemaUseCaseMock.execute.calledOnce).to.be.true;
-        const schemaCommand = layoutVariablesSchemaUseCaseMock.execute.firstCall.args[0];
-        expect(schemaCommand.environmentId).to.equal(mockUser.environmentId);
-        expect(schemaCommand.organizationId).to.equal(mockUser.organizationId);
-        expect(schemaCommand.controlValues).to.deep.equal(mockLayoutDto.controlValues);
-      });
-
-      it('should handle empty control values in schema generation', async () => {
-        const layoutDtoWithEmptyControls = {
-          ...mockLayoutDto,
-          controlValues: undefined,
-        };
-
-        const command = UpsertLayoutCommand.create({
-          userId: mockUser._id,
-          environmentId: mockUser.environmentId,
-          organizationId: mockUser.organizationId,
-          layoutDto: layoutDtoWithEmptyControls,
-        });
-
-        await upsertLayoutUseCase.execute(command);
-
-        const schemaCommand = layoutVariablesSchemaUseCaseMock.execute.firstCall.args[0];
-        expect(schemaCommand.controlValues).to.deep.equal({});
-      });
-    });
   });
 
   describe('validation', () => {
     describe('email content validation', () => {
       beforeEach(() => {
-        getLayoutUseCaseMock.execute.resolves(undefined);
+        getLayoutUseV0CaseMock.execute.resolves(undefined);
         createLayoutUseCaseMock.execute.resolves(mockCreatedLayout);
+        getLayoutUseCaseMock.execute.resolves(
+          mapLayoutToResponseDto({
+            layout: mockCreatedLayout,
+            controlValues: mockControlValues,
+            variables: mockLayoutVariablesSchema,
+          })
+        );
       });
 
       it('should validate HTML content correctly', async () => {
@@ -633,8 +639,15 @@ describe('UpsertLayoutUseCase', () => {
 
     describe('layout issues validation', () => {
       beforeEach(() => {
-        getLayoutUseCaseMock.execute.resolves(undefined);
+        getLayoutUseV0CaseMock.execute.resolves(undefined);
         createLayoutUseCaseMock.execute.resolves(mockCreatedLayout);
+        getLayoutUseCaseMock.execute.resolves(
+          mapLayoutToResponseDto({
+            layout: mockCreatedLayout,
+            controlValues: mockControlValues,
+            variables: mockLayoutVariablesSchema,
+          })
+        );
       });
 
       it('should call buildLayoutIssuesUsecase with correct parameters', async () => {
@@ -705,8 +718,7 @@ describe('UpsertLayoutUseCase', () => {
           expect.fail('Should have thrown BadRequestException');
         } catch (error) {
           expect(error).to.be.instanceOf(BadRequestException);
-          // The BadRequestException constructor converts the issues object to a string message
-          expect(error.response).to.deep.equal(mockIssues);
+          expect(error.response).to.deep.equal({ message: 'Layout has validation issues', ...mockIssues });
         }
       });
     });
@@ -715,7 +727,7 @@ describe('UpsertLayoutUseCase', () => {
   describe('error handling', () => {
     it('should propagate errors from getLayoutUseCase', async () => {
       const error = new Error('Failed to get layout');
-      getLayoutUseCaseMock.execute.rejects(error);
+      getLayoutUseV0CaseMock.execute.rejects(error);
 
       const command = UpsertLayoutCommand.create({
         userId: mockUser._id,
@@ -735,7 +747,7 @@ describe('UpsertLayoutUseCase', () => {
 
     it('should propagate errors from createLayoutUseCase', async () => {
       const error = new Error('Failed to create layout');
-      getLayoutUseCaseMock.execute.resolves(undefined);
+      getLayoutUseV0CaseMock.execute.resolves(undefined);
       createLayoutUseCaseMock.execute.rejects(error);
 
       const command = UpsertLayoutCommand.create({
@@ -755,7 +767,7 @@ describe('UpsertLayoutUseCase', () => {
 
     it('should propagate errors from updateLayoutUseCase', async () => {
       const error = new Error('Failed to update layout');
-      getLayoutUseCaseMock.execute.resolves(mockExistingLayout);
+      getLayoutUseV0CaseMock.execute.resolves(mockExistingLayout);
       updateLayoutUseCaseMock.execute.rejects(error);
 
       const command = UpsertLayoutCommand.create({
@@ -776,7 +788,7 @@ describe('UpsertLayoutUseCase', () => {
 
     it('should propagate errors from upsertControlValuesUseCase', async () => {
       const error = new Error('Failed to upsert control values');
-      getLayoutUseCaseMock.execute.resolves(undefined);
+      getLayoutUseV0CaseMock.execute.resolves(undefined);
       createLayoutUseCaseMock.execute.resolves(mockCreatedLayout);
       upsertControlValuesUseCaseMock.execute.rejects(error);
 
@@ -795,11 +807,11 @@ describe('UpsertLayoutUseCase', () => {
       }
     });
 
-    it('should propagate errors from layoutVariablesSchemaUseCase', async () => {
+    it('should propagate errors from getLayoutUseCase', async () => {
       const error = new Error('Failed to generate schema');
-      getLayoutUseCaseMock.execute.resolves(undefined);
+      getLayoutUseV0CaseMock.execute.resolves(undefined);
       createLayoutUseCaseMock.execute.resolves(mockCreatedLayout);
-      layoutVariablesSchemaUseCaseMock.execute.rejects(error);
+      getLayoutUseCaseMock.execute.rejects(error);
 
       const command = UpsertLayoutCommand.create({
         userId: mockUser._id,
@@ -824,7 +836,7 @@ describe('UpsertLayoutUseCase', () => {
         type: undefined,
         origin: undefined,
       };
-      getLayoutUseCaseMock.execute.resolves(layoutWithoutTypeAndOrigin);
+      getLayoutUseV0CaseMock.execute.resolves(layoutWithoutTypeAndOrigin);
       updateLayoutUseCaseMock.execute.resolves(layoutWithoutTypeAndOrigin);
 
       const command = UpsertLayoutCommand.create({
@@ -848,7 +860,7 @@ describe('UpsertLayoutUseCase', () => {
         controlValues: undefined,
       };
 
-      getLayoutUseCaseMock.execute.resolves(undefined);
+      getLayoutUseV0CaseMock.execute.resolves(undefined);
       createLayoutUseCaseMock.execute.resolves(mockCreatedLayout);
 
       const command = UpsertLayoutCommand.create({
@@ -865,7 +877,7 @@ describe('UpsertLayoutUseCase', () => {
     });
 
     it('should handle empty string layoutIdOrInternalId', async () => {
-      getLayoutUseCaseMock.execute.resolves(undefined);
+      getLayoutUseV0CaseMock.execute.resolves(undefined);
       createLayoutUseCaseMock.execute.resolves(mockCreatedLayout);
 
       const command = UpsertLayoutCommand.create({
@@ -880,13 +892,13 @@ describe('UpsertLayoutUseCase', () => {
 
       // Should follow create path since empty string is falsy
       expect(createLayoutUseCaseMock.execute.calledOnce).to.be.true;
-      expect(getLayoutUseCaseMock.execute.called).to.be.false;
+      expect(getLayoutUseV0CaseMock.execute.called).to.be.false;
     });
   });
 
   describe('parameter verification', () => {
     beforeEach(() => {
-      getLayoutUseCaseMock.execute.resolves(undefined);
+      getLayoutUseV0CaseMock.execute.resolves(undefined);
       createLayoutUseCaseMock.execute.resolves(mockCreatedLayout);
     });
 
@@ -904,7 +916,7 @@ describe('UpsertLayoutUseCase', () => {
       expect(buildLayoutIssuesUsecaseMock.execute.calledOnce).to.be.true;
       expect(createLayoutUseCaseMock.execute.calledOnce).to.be.true;
       expect(upsertControlValuesUseCaseMock.execute.calledOnce).to.be.true;
-      expect(layoutVariablesSchemaUseCaseMock.execute.calledOnce).to.be.true;
+      expect(getLayoutUseCaseMock.execute.calledOnce).to.be.true;
       expect(analyticsServiceMock.mixpanelTrack.calledOnce).to.be.true;
     });
 

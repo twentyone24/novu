@@ -39,7 +39,9 @@ export class GetActivityFeed {
     private traceLogRepository: TraceLogRepository,
     private featureFlagsService: FeatureFlagsService,
     private logger: PinoLogger
-  ) {}
+  ) {
+    this.logger.setContext(this.constructor.name);
+  }
 
   async execute(command: GetActivityFeedCommand): Promise<ActivitiesResponseDto> {
     let subscriberIds: string[] | undefined;
@@ -129,14 +131,14 @@ export class GetActivityFeed {
 
   private parseAndValidateDate(dateString: string, parameterName: string): Date {
     const parsedDate = new Date(dateString);
-    
+
     if (Number.isNaN(parsedDate.getTime())) {
       throw new HttpException(
         `Invalid date format for parameter '${parameterName}': ${dateString}. Please provide a valid ISO 8601 date string.`,
         HttpStatus.BAD_REQUEST
       );
     }
-    
+
     return parsedDate;
   }
 
@@ -152,7 +154,10 @@ export class GetActivityFeed {
     const buffer = 1 * 60 * 60 * 1000; // 1 hour
     const bufferedEarliestAllowedDate = new Date(earliestAllowedDate.getTime() - buffer);
 
-    if (afterDate < bufferedEarliestAllowedDate || beforeDate < bufferedEarliestAllowedDate) {
+    if (
+      process.env.NODE_ENV !== 'local' &&
+      (afterDate < bufferedEarliestAllowedDate || beforeDate < bufferedEarliestAllowedDate)
+    ) {
       throw new HttpException(
         `Requested date range exceeds your plan's retention period. ` +
           `The earliest accessible date for your plan is ${earliestAllowedDate.toISOString().split('T')[0]}. ` +
@@ -212,9 +217,11 @@ export class GetActivityFeed {
         subscriberIds: subscriberIds || [],
         transactionId: command.transactionId,
         topicKey: command.topicKey,
+        subscriptionId: command.subscriptionId,
         after: command.after,
         before: command.before,
         severity: command.severity,
+        contextKeys: command.contextKeys,
       },
       command.page * command.limit,
       command.limit
@@ -276,11 +283,11 @@ export class GetActivityFeed {
         };
       });
 
-      this.logger.debug('Successfully enhanced notifications with ClickHouse execution details', {
+      this.logger.debug({
         notificationCount: notifications.length,
         jobCount: allJobIds.length,
         executionDetailsCount: Array.from(executionDetailsByJobId.values()).flat().length,
-      });
+      }, 'Successfully enhanced notifications with ClickHouse execution details');
 
       return enhancedNotifications;
     } catch (error) {

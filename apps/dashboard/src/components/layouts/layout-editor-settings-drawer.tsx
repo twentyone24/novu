@@ -1,8 +1,10 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { PermissionsEnum } from '@novu/shared';
+/** biome-ignore-all lint/correctness/useUniqueElementIds: working correctly */
+
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
+import { EnvironmentTypeEnum, PermissionsEnum, ResourceOriginEnum } from '@novu/shared';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { formatDistanceToNow } from 'date-fns';
-import { forwardRef, useCallback, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { RiDeleteBin2Line, RiSettings4Line } from 'react-icons/ri';
 import { useBlocker, useNavigate } from 'react-router-dom';
@@ -34,6 +36,7 @@ import { useEnvironment } from '@/context/environment/hooks';
 import { useBeforeUnload } from '@/hooks/use-before-unload';
 import { useDeleteLayout } from '@/hooks/use-delete-layout';
 import { useUpdateLayout } from '@/hooks/use-update-layout';
+import { LocalizationResourceEnum } from '@/types/translations';
 import { buildRoute, ROUTES } from '@/utils/routes';
 import { cn } from '@/utils/ui';
 import { CopyButton } from '../primitives/copy-button';
@@ -41,15 +44,12 @@ import { PermissionButton } from '../primitives/permission-button';
 import { Separator } from '../primitives/separator';
 import { ToastIcon } from '../primitives/sonner';
 import TruncatedText from '../truncated-text';
+import { TranslationToggleSection } from '../workflow-editor/translation-toggle-section';
 import { DeleteLayoutDialog } from './delete-layout-dialog';
 import { useLayoutEditor } from './layout-editor-provider';
+import { layoutSchema } from './schema';
 
-const layoutSettingsFormSchema = z.object({
-  name: z.string().min(1),
-  layoutId: z.string().min(1),
-});
-
-type LayoutSettingsFormData = z.infer<typeof layoutSettingsFormSchema>;
+type LayoutSettingsFormData = z.infer<typeof layoutSchema>;
 
 const toastOptions: ExternalToast = {
   position: 'bottom-right',
@@ -71,18 +71,29 @@ export const LayoutEditorSettingsDrawer = forwardRef<HTMLDivElement, LayoutEdito
     const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+    const isReadOnly =
+      layout?.origin === ResourceOriginEnum.EXTERNAL || currentEnvironment?.type !== EnvironmentTypeEnum.DEV;
 
-    const form = useForm<LayoutSettingsFormData>({
-      resolver: zodResolver(layoutSettingsFormSchema),
+    const form = useForm({
+      resolver: standardSchemaResolver(layoutSchema),
       defaultValues: {
         name: layout?.name || '',
         layoutId: layout?.layoutId || '',
-      },
-      values: {
-        name: layout?.name || '',
-        layoutId: layout?.layoutId || '',
+        isTranslationEnabled: layout?.isTranslationEnabled || false,
       },
     });
+
+    const wasOpenRef = useRef(false);
+    useEffect(() => {
+      if (isOpen && !wasOpenRef.current && layout) {
+        form.reset({
+          name: layout.name || '',
+          layoutId: layout.layoutId || '',
+          isTranslationEnabled: layout.isTranslationEnabled || false,
+        });
+      }
+      wasOpenRef.current = isOpen;
+    }, [isOpen, layout, form]);
 
     const hasUnsavedChanges = form.formState.isDirty;
 
@@ -101,7 +112,12 @@ export const LayoutEditorSettingsDrawer = forwardRef<HTMLDivElement, LayoutEdito
     });
 
     const { updateLayout, isPending: isUpdating } = useUpdateLayout({
-      onSuccess: () => {
+      onSuccess: (data) => {
+        form.reset({
+          name: data.name || '',
+          layoutId: data.layoutId || '',
+          isTranslationEnabled: data.isTranslationEnabled || false,
+        });
         showSuccessToast('Layout updated successfully', '', toastOptions);
         onOpenChange(false);
       },
@@ -147,21 +163,26 @@ export const LayoutEditorSettingsDrawer = forwardRef<HTMLDivElement, LayoutEdito
     const onDeleteLayout = async () => {
       if (!layout) return;
 
-      await deleteLayout({
-        layoutSlug: layout.slug,
-      });
+      try {
+        await deleteLayout({
+          layoutSlug: layout.slug,
+        });
+      } catch {}
     };
 
     const onSubmit = async (data: LayoutSettingsFormData) => {
       if (!layout) return;
 
-      await updateLayout({
-        layout: {
-          name: data.name,
-          controlValues: layout.controls.values || {},
-        },
-        layoutSlug: layout.slug,
-      });
+      try {
+        await updateLayout({
+          layout: {
+            name: data.name,
+            isTranslationEnabled: data.isTranslationEnabled,
+            controlValues: layout.controls.values || {},
+          },
+          layoutSlug: layout.slug,
+        });
+      } catch {}
     };
 
     const checkUnsavedChanges = useCallback(
@@ -235,7 +256,10 @@ export const LayoutEditorSettingsDrawer = forwardRef<HTMLDivElement, LayoutEdito
                 id="layout-settings"
                 autoComplete="off"
                 noValidate
-                onSubmit={form.handleSubmit(onSubmit)}
+                onSubmit={(e) => {
+                  e.stopPropagation();
+                  form.handleSubmit(onSubmit)(e);
+                }}
                 className="flex h-full flex-col"
               >
                 <VisuallyHidden>
@@ -284,6 +308,21 @@ export const LayoutEditorSettingsDrawer = forwardRef<HTMLDivElement, LayoutEdito
                         </FormControl>
                         <FormMessage />
                       </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="isTranslationEnabled"
+                    render={({ field }) => (
+                      <TranslationToggleSection
+                        value={field.value ?? false}
+                        onChange={field.onChange}
+                        isReadOnly={isReadOnly}
+                        resourceId={layout?.layoutId}
+                        resourceType={LocalizationResourceEnum.LAYOUT}
+                        showDrawer={!!(layout?.layoutId && layout?.isTranslationEnabled)}
+                      />
                     )}
                   />
                 </SheetMain>

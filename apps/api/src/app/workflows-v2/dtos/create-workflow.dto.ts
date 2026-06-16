@@ -1,18 +1,26 @@
 import { ApiExtraModels, ApiProperty, ApiPropertyOptional, getSchemaPath } from '@nestjs/swagger';
-import { SeverityLevelEnum, StepTypeEnum, WorkflowCreationSourceEnum } from '@novu/shared';
-import { Type } from 'class-transformer';
-import { IsArray, IsEnum, IsOptional, IsString, Matches, ValidateNested } from 'class-validator';
 import {
   ChatControlDto,
   CustomControlDto,
   DelayControlDto,
   DigestControlDto,
   EmailControlDto,
+  HttpRequestControlDto,
   InAppControlDto,
   PushControlDto,
   SmsControlDto,
   ThrottleControlDto,
-} from './controls';
+  WorkflowCommonsFields,
+} from '@novu/application-generic';
+import {
+  SeverityLevelEnum,
+  SLUG_IDENTIFIER_REGEX,
+  StepTypeEnum,
+  slugIdentifierFormatMessage,
+  WorkflowCreationSourceEnum,
+} from '@novu/shared';
+import { Type } from 'class-transformer';
+import { IsArray, IsEnum, IsOptional, IsString, Matches, ValidateNested } from 'class-validator';
 import {
   BaseStepConfigDto,
   ChatStepUpsertDto,
@@ -20,13 +28,25 @@ import {
   DelayStepUpsertDto,
   DigestStepUpsertDto,
   EmailStepUpsertDto,
+  HttpRequestStepUpsertDto,
   InAppStepUpsertDto,
   PushStepUpsertDto,
   SmsStepUpsertDto,
   ThrottleStepUpsertDto,
 } from './create-step.dto';
 import { PreferencesRequestDto } from './preferences.request.dto';
-import { WorkflowCommonsFields } from './workflow-commons.dto';
+
+export type StepCreateDto =
+  | InAppStepUpsertDto
+  | EmailStepUpsertDto
+  | SmsStepUpsertDto
+  | PushStepUpsertDto
+  | ChatStepUpsertDto
+  | DelayStepUpsertDto
+  | DigestStepUpsertDto
+  | ThrottleStepUpsertDto
+  | CustomStepUpsertDto
+  | HttpRequestStepUpsertDto;
 
 @ApiExtraModels(
   InAppStepUpsertDto,
@@ -38,6 +58,7 @@ import { WorkflowCommonsFields } from './workflow-commons.dto';
   DigestStepUpsertDto,
   ThrottleStepUpsertDto,
   CustomStepUpsertDto,
+  HttpRequestStepUpsertDto,
   InAppControlDto,
   EmailControlDto,
   SmsControlDto,
@@ -46,13 +67,14 @@ import { WorkflowCommonsFields } from './workflow-commons.dto';
   DelayControlDto,
   DigestControlDto,
   ThrottleControlDto,
-  CustomControlDto
+  CustomControlDto,
+  HttpRequestControlDto
 )
 export class CreateWorkflowDto extends WorkflowCommonsFields {
   @ApiProperty({ description: 'Unique identifier for the workflow' })
   @IsString()
-  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
-    message: 'must be a valid slug format (lowercase letters, numbers, and hyphens only)',
+  @Matches(SLUG_IDENTIFIER_REGEX, {
+    message: slugIdentifierFormatMessage('workflowId'),
   })
   workflowId: string;
 
@@ -70,6 +92,7 @@ export class CreateWorkflowDto extends WorkflowCommonsFields {
         { $ref: getSchemaPath(DigestStepUpsertDto) },
         { $ref: getSchemaPath(ThrottleStepUpsertDto) },
         { $ref: getSchemaPath(CustomStepUpsertDto) },
+        { $ref: getSchemaPath(HttpRequestStepUpsertDto) },
       ],
       discriminator: {
         propertyName: 'type',
@@ -83,6 +106,7 @@ export class CreateWorkflowDto extends WorkflowCommonsFields {
           [StepTypeEnum.DIGEST]: getSchemaPath(DigestStepUpsertDto),
           [StepTypeEnum.THROTTLE]: getSchemaPath(ThrottleStepUpsertDto),
           [StepTypeEnum.CUSTOM]: getSchemaPath(CustomStepUpsertDto),
+          [StepTypeEnum.HTTP_REQUEST]: getSchemaPath(HttpRequestStepUpsertDto),
         },
       },
     },
@@ -102,6 +126,7 @@ export class CreateWorkflowDto extends WorkflowCommonsFields {
         { name: StepTypeEnum.DIGEST, value: DigestStepUpsertDto },
         { name: StepTypeEnum.THROTTLE, value: ThrottleStepUpsertDto },
         { name: StepTypeEnum.CUSTOM, value: CustomStepUpsertDto },
+        { name: StepTypeEnum.HTTP_REQUEST, value: HttpRequestStepUpsertDto },
       ],
     },
     keepDiscriminatorProperty: true,
@@ -116,6 +141,7 @@ export class CreateWorkflowDto extends WorkflowCommonsFields {
     | DigestStepUpsertDto
     | ThrottleStepUpsertDto
     | CustomStepUpsertDto
+    | HttpRequestStepUpsertDto
   )[];
 
   @ApiProperty({

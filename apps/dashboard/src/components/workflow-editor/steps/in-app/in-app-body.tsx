@@ -3,7 +3,7 @@ import { FormControl, FormField, FormItem, FormMessage } from '@/components/prim
 import { ControlInput } from '@/components/workflow-editor/control-input';
 import { useWorkflow } from '@/components/workflow-editor/workflow-provider';
 import { useParseVariables } from '@/hooks/use-parse-variables';
-import { capitalize, containsHTMLEntities, containsVariables } from '@/utils/string';
+import { capitalize, containsHTMLEntities } from '@/utils/string';
 import { InputRoot } from '../../../primitives/input';
 
 const bodyKey = 'body';
@@ -17,7 +17,7 @@ function getFormMessage(
     return 'HTML entities detected. Consider disabling content sanitization for proper rendering';
   }
 
-  const hints = ['Type {{ to access variables, or wrap text in ** for bold.'];
+  const hints = ['Type {{ to access variables, wrap text in ** for bold, or * for italic.'];
 
   if (isTranslationEnabled) {
     hints.push('Type {{t. to access translation keys.');
@@ -42,7 +42,7 @@ export const InAppBody = () => {
           <FormControl>
             <InputRoot hasError={!!fieldState.error}>
               <ControlInput
-                className="min-h-[7rem]"
+                className="min-h-28"
                 indentWithTab={false}
                 placeholder={capitalize(field.name)}
                 id={field.name}

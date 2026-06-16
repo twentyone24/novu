@@ -4,12 +4,21 @@ import { flatten } from 'flat';
 import { ERROR_AVATAR, INFO_AVATAR, WARNING_AVATAR } from '@/utils/avatars';
 import {
   DEFAULT_CONTROL_DELAY_AMOUNT,
+  DEFAULT_CONTROL_DELAY_CRON,
   DEFAULT_CONTROL_DELAY_TYPE,
   DEFAULT_CONTROL_DELAY_UNIT,
   DEFAULT_CONTROL_DIGEST_AMOUNT,
   DEFAULT_CONTROL_DIGEST_CRON,
   DEFAULT_CONTROL_DIGEST_DIGEST_KEY,
+  DEFAULT_CONTROL_DIGEST_TYPE,
   DEFAULT_CONTROL_DIGEST_UNIT,
+  DEFAULT_CONTROL_HTTP_REQUEST_BODY,
+  DEFAULT_CONTROL_HTTP_REQUEST_CONTINUE_ON_FAILURE,
+  DEFAULT_CONTROL_HTTP_REQUEST_ENFORCE_SCHEMA_VALIDATION,
+  DEFAULT_CONTROL_HTTP_REQUEST_HEADERS,
+  DEFAULT_CONTROL_HTTP_REQUEST_METHOD,
+  DEFAULT_CONTROL_HTTP_REQUEST_RESPONSE_BODY_SCHEMA,
+  DEFAULT_CONTROL_HTTP_REQUEST_TIMEOUT,
   DEFAULT_CONTROL_THROTTLE_THRESHOLD,
   DEFAULT_CONTROL_THROTTLE_TYPE,
   DEFAULT_CONTROL_THROTTLE_UNIT,
@@ -103,7 +112,8 @@ export const updateStepInWorkflow = (
     steps: workflow.steps.map((step) => {
       if (step.stepId === stepId) {
         const existingControlValues = step.controls?.values || {};
-        const updatedControlValues = updateStep.controlValues || existingControlValues;
+        const updatedControlValues =
+          updateStep.controlValues !== undefined ? updateStep.controlValues : existingControlValues;
 
         return {
           ...step,
@@ -128,6 +138,7 @@ export const createStep = (
   const controlValue: Record<string, unknown> = {};
 
   if (type === StepTypeEnum.DIGEST) {
+    controlValue.type = DEFAULT_CONTROL_DIGEST_TYPE;
     controlValue.amount = DEFAULT_CONTROL_DIGEST_AMOUNT;
     controlValue.unit = DEFAULT_CONTROL_DIGEST_UNIT;
     controlValue.digestKey = DEFAULT_CONTROL_DIGEST_DIGEST_KEY;
@@ -135,9 +146,10 @@ export const createStep = (
   }
 
   if (type === StepTypeEnum.DELAY) {
+    controlValue.type = DEFAULT_CONTROL_DELAY_TYPE;
     controlValue.amount = DEFAULT_CONTROL_DELAY_AMOUNT;
     controlValue.unit = DEFAULT_CONTROL_DELAY_UNIT;
-    controlValue.type = DEFAULT_CONTROL_DELAY_TYPE;
+    controlValue.cron = DEFAULT_CONTROL_DELAY_CRON;
   }
 
   if (type === StepTypeEnum.THROTTLE) {
@@ -145,6 +157,16 @@ export const createStep = (
     controlValue.amount = DEFAULT_CONTROL_THROTTLE_WINDOW;
     controlValue.unit = DEFAULT_CONTROL_THROTTLE_UNIT;
     controlValue.threshold = DEFAULT_CONTROL_THROTTLE_THRESHOLD;
+  }
+
+  if (type === StepTypeEnum.HTTP_REQUEST) {
+    controlValue.method = DEFAULT_CONTROL_HTTP_REQUEST_METHOD;
+    controlValue.headers = DEFAULT_CONTROL_HTTP_REQUEST_HEADERS;
+    controlValue.body = DEFAULT_CONTROL_HTTP_REQUEST_BODY;
+    controlValue.responseBodySchema = DEFAULT_CONTROL_HTTP_REQUEST_RESPONSE_BODY_SCHEMA;
+    controlValue.enforceSchemaValidation = DEFAULT_CONTROL_HTTP_REQUEST_ENFORCE_SCHEMA_VALIDATION;
+    controlValue.continueOnFailure = DEFAULT_CONTROL_HTTP_REQUEST_CONTINUE_ON_FAILURE;
+    controlValue.timeout = DEFAULT_CONTROL_HTTP_REQUEST_TIMEOUT;
   }
 
   if (type === StepTypeEnum.EMAIL && defaultLayoutId) {
@@ -162,7 +184,7 @@ export const createStep = (
   }
 
   return {
-    name: STEP_TYPE_LABELS[type] + ' Step',
+    name: `${STEP_TYPE_LABELS[type]} Step`,
     type,
     controlValues: controlValue,
   };

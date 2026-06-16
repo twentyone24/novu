@@ -46,6 +46,7 @@ export class SubscriberRepository extends BaseRepository<SubscriberDBModel, Subs
     });
 
     let bulkResponse;
+    let writeErrors: Array<{ err: { index: number; errmsg: string; op?: { subscriberId?: string } } }> = [];
     try {
       bulkResponse = await this.bulkWrite(bulkWriteOps);
     } catch (e: unknown) {
@@ -54,12 +55,19 @@ export class SubscriberRepository extends BaseRepository<SubscriberDBModel, Subs
           throw new DalException(e.message);
         }
         bulkResponse = e.result;
+        writeErrors = e.writeErrors as Array<{
+          err: { index: number; errmsg: string; op?: { subscriberId?: string } };
+        }>;
       } else {
         throw new DalException('An unknown error occurred');
       }
     }
-    const created = bulkResponse.getUpsertedIds();
-    const writeErrors = bulkResponse.getWriteErrors();
+
+    const upsertedIds = bulkResponse.upsertedIds || {};
+    const created = Object.entries(upsertedIds).map(([index, _id]) => ({
+      index: parseInt(index, 10),
+      _id,
+    }));
 
     const indexes: number[] = [];
 
@@ -69,7 +77,7 @@ export class SubscriberRepository extends BaseRepository<SubscriberDBModel, Subs
       return mapToSubscriberObject(subscribers[inserted.index]?.subscriberId);
     });
 
-    let failed = [];
+    let failed: Array<{ message: string; subscriberId?: string }> = [];
     if (writeErrors.length > 0) {
       failed = writeErrors.map((error) => {
         indexes.push(error.err.index);
@@ -174,7 +182,13 @@ export class SubscriberRepository extends BaseRepository<SubscriberDBModel, Subs
     subscriberId?: string;
     name?: string;
     includeCursor?: boolean;
-  }): Promise<{ subscribers: SubscriberEntity[]; next: string | null; previous: string | null }> {
+  }): Promise<{
+    subscribers: SubscriberEntity[];
+    next: string | null;
+    previous: string | null;
+    totalCount: number;
+    totalCountCapped: boolean;
+  }> {
     if (query.before && query.after) {
       throw new DalException('Cannot specify both "before" and "after" cursors at the same time.');
     }
@@ -192,6 +206,8 @@ export class SubscriberRepository extends BaseRepository<SubscriberDBModel, Subs
           subscribers: [],
           next: null,
           previous: null,
+          totalCount: 0,
+          totalCountCapped: false,
         };
       }
     }
@@ -227,10 +243,7 @@ export class SubscriberRepository extends BaseRepository<SubscriberDBModel, Subs
               },
             }),
             ...(query.subscriberId && {
-              subscriberId: {
-                $regex: regExpEscape(query.subscriberId),
-                $options: 'i',
-              },
+              subscriberId: query.subscriberId,
             }),
             ...(query.name && {
               $expr: {
@@ -256,6 +269,8 @@ export class SubscriberRepository extends BaseRepository<SubscriberDBModel, Subs
       subscribers: pagination.data,
       next: pagination.next,
       previous: pagination.previous,
+      totalCount: pagination.totalCount,
+      totalCountCapped: pagination.totalCountCapped,
     };
   }
 }

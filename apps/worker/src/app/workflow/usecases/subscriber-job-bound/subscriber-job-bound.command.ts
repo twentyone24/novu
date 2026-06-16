@@ -1,8 +1,7 @@
-import { EnvironmentWithUserCommand } from '@novu/application-generic';
-import { SubscriberEntity, TopicEntity } from '@novu/dal';
+import { EnvironmentWithUserCommand, SubscriberTopicPreference } from '@novu/application-generic';
+import { SubscriberEntity } from '@novu/dal';
 import { DiscoverWorkflowOutput } from '@novu/framework/internal';
 import {
-  ContextKey,
   ISubscribersDefine,
   ITenantDefine,
   StatelessControls,
@@ -39,10 +38,9 @@ export class SubscriberJobBoundCommand extends EnvironmentWithUserCommand {
   @IsOptional()
   actor?: SubscriberEntity;
 
-  @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  contextKeys?: ContextKey[];
+  contextKeys: string[];
 
   @IsDefined()
   @IsMongoId()
@@ -52,7 +50,7 @@ export class SubscriberJobBoundCommand extends EnvironmentWithUserCommand {
   subscriber: ISubscribersDefine;
 
   @IsOptional()
-  topics?: Pick<TopicEntity, '_id' | 'key'>[];
+  topics?: SubscriberTopicPreference[];
 
   @IsDefined()
   @IsEnum(SubscriberSourceEnum)
@@ -65,8 +63,4 @@ export class SubscriberJobBoundCommand extends EnvironmentWithUserCommand {
   bridge?: { url: string; workflow: DiscoverWorkflowOutput };
 
   controls?: StatelessControls;
-
-  @IsDefined()
-  @IsString()
-  environmentName: string;
 }

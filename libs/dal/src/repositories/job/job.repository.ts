@@ -1,8 +1,15 @@
-import { DigestCreationResultEnum, IDigestBaseMetadata, IDigestRegularMetadata, StepTypeEnum } from '@novu/shared';
+import {
+  DeliveryLifecycleDetail,
+  DeliveryLifecycleStatusEnum,
+  DigestCreationResultEnum,
+  IDigestBaseMetadata,
+  IDigestRegularMetadata,
+  StepTypeEnum,
+} from '@novu/shared';
 import { sub } from 'date-fns';
 import { ProjectionType } from 'mongoose';
 import { DalException } from '../../shared';
-import type { EnforceEnvOrOrgIds, IUpdateResult } from '../../types';
+import type { EnforceEnvOrOrgIds } from '../../types';
 import { BaseRepository } from '../base-repository';
 import { EnvironmentEntity } from '../environment';
 import { NotificationEntity } from '../notification';
@@ -51,8 +58,8 @@ export class JobRepository extends BaseRepository<JobDBModel, JobEntity, Enforce
     jobId: string,
     status: JobStatusEnum,
     deliveryLifecycleState?: DeliveryLifecycleState
-  ): Promise<IUpdateResult> {
-    return this.MongooseModel.updateOne(
+  ): Promise<JobEntity | null> {
+    return this.MongooseModel.findOneAndUpdate(
       {
         _environmentId: environmentId,
         _id: jobId,
@@ -62,7 +69,8 @@ export class JobRepository extends BaseRepository<JobDBModel, JobEntity, Enforce
           status,
           deliveryLifecycleState,
         },
-      }
+      },
+      { new: true }
     );
   }
 
@@ -303,20 +311,32 @@ export class JobRepository extends BaseRepository<JobDBModel, JobEntity, Enforce
     transactionId: string;
     _subscriberId: string;
     _templateId: string;
-  }): Promise<IUpdateResult> {
-    return this.MongooseModel.updateMany(
-      {
-        _environmentId,
-        _subscriberId,
-        _templateId,
-        status: JobStatusEnum.PENDING,
-        transactionId,
-      },
+  }): Promise<JobEntity[]> {
+    const pendingJobs = await this.find({
+      _environmentId,
+      _subscriberId,
+      _templateId,
+      status: JobStatusEnum.PENDING,
+      transactionId,
+    });
+
+    if (pendingJobs.length === 0) {
+      return [];
+    }
+
+    await this.MongooseModel.updateMany(
+      { _id: { $in: pendingJobs.map((job) => job._id) } },
       {
         $set: {
           status: JobStatusEnum.CANCELED,
+          deliveryLifecycleState: {
+            status: DeliveryLifecycleStatusEnum.CANCELED,
+            detail: DeliveryLifecycleDetail.EXECUTION_STOPPED,
+          },
         },
       }
     );
+
+    return pendingJobs;
   }
 }

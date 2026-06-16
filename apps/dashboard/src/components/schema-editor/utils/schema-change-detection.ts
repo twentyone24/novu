@@ -38,7 +38,19 @@ function getSchemaRequired(schema?: JSONSchema7): string[] {
 
 function getPropertyType(property: JSONSchema7): JSONSchema7TypeName | undefined {
   if (typeof property === 'boolean') return undefined;
-  return property.type as JSONSchema7TypeName;
+
+  const type = property.type;
+
+  // Handle type arrays (nullable properties with type like ["string", "null"])
+  // Extract the non-null type for comparison to avoid false positives
+  if (Array.isArray(type)) {
+    const nonNullTypes = type.filter((t) => t !== 'null');
+    if (nonNullTypes.length > 0) {
+      return nonNullTypes[0] as JSONSchema7TypeName;
+    }
+  }
+
+  return type as JSONSchema7TypeName;
 }
 
 export function detectSchemaChanges(
@@ -132,26 +144,4 @@ export function detectSchemaChanges(
   }
 
   return changes;
-}
-
-export function getChangesSummary(changes: SchemaChanges): string {
-  const parts: string[] = [];
-
-  if (changes.deleted.length > 0) {
-    parts.push(`${changes.deleted.length} deleted`);
-  }
-
-  if (changes.added.length > 0) {
-    parts.push(`${changes.added.length} added`);
-  }
-
-  if (changes.typeChanged.length > 0) {
-    parts.push(`${changes.typeChanged.length} type changed`);
-  }
-
-  if (changes.requiredChanged.length > 0) {
-    parts.push(`${changes.requiredChanged.length} required status changed`);
-  }
-
-  return parts.join(', ');
 }

@@ -1,11 +1,18 @@
 import { Injectable } from '@nestjs/common';
-import { PreferencesEntity, PreferencesRepository } from '@novu/dal';
+import {
+  EnforceEnvOrOrgIds,
+  ErrorCodesEnum,
+  PreferencesDBModel,
+  PreferencesEntity,
+  PreferencesRepository,
+} from '@novu/dal';
 import {
   FeatureFlagsKeysEnum,
   PreferencesTypeEnum,
   WorkflowPreferences,
   WorkflowPreferencesPartial,
 } from '@novu/shared';
+import { FilterQuery } from 'mongoose';
 import { Instrument } from '../../instrumentation';
 import { FeatureFlagsService } from '../../services/feature-flags/feature-flags.service';
 import { deepMerge } from '../../utils';
@@ -31,6 +38,7 @@ type UpsertPreferencesCommand = Omit<
   environmentId: string;
   type: PreferencesTypeEnum;
   preferences: WorkflowPreferencesPartial;
+  topicSubscriptionId?: string;
 };
 
 @Injectable()
@@ -58,13 +66,6 @@ export class UpsertPreferences {
   public async upsertSubscriberGlobalPreferences(command: UpsertSubscriberGlobalPreferencesCommand) {
     await this.deleteSubscriberWorkflowChannelPreferences(command);
 
-    const isSubscribersScheduleEnabled = await this.featureFlagsService.getFlag({
-      key: FeatureFlagsKeysEnum.IS_SUBSCRIBERS_SCHEDULE_ENABLED,
-      defaultValue: false,
-      environment: { _id: command.environmentId },
-      organization: { _id: command.organizationId },
-    });
-
     return this.upsert({
       _subscriberId: command._subscriberId,
       environmentId: command.environmentId,
@@ -72,7 +73,8 @@ export class UpsertPreferences {
       preferences: command.preferences,
       type: PreferencesTypeEnum.SUBSCRIBER_GLOBAL,
       returnPreference: command.returnPreference,
-      schedule: isSubscribersScheduleEnabled ? command.schedule : undefined,
+      schedule: command.schedule,
+      contextKeys: command.contextKeys,
     });
   }
 
@@ -111,6 +113,7 @@ export class UpsertPreferences {
       _subscriberId: command._subscriberId,
       environmentId: command.environmentId,
       organizationId: command.organizationId,
+      contextKeys: command.contextKeys,
       preferences: command.preferences,
       templateId: command.templateId,
       type: PreferencesTypeEnum.SUBSCRIBER_WORKFLOW,
@@ -135,6 +138,21 @@ export class UpsertPreferences {
     return result as WorkflowPreferencesFull;
   }
 
+  @Instrument()
+  public async upsertTopicSubscriptionPreferences(command: UpsertSubscriberWorkflowPreferencesCommand) {
+    return this.upsert({
+      _subscriberId: command._subscriberId,
+      environmentId: command.environmentId,
+      organizationId: command.organizationId,
+      preferences: command.preferences,
+      templateId: command.templateId,
+      topicSubscriptionId: command.topicSubscriptionId,
+      type: PreferencesTypeEnum.SUBSCRIPTION_SUBSCRIBER_WORKFLOW,
+      returnPreference: command.returnPreference,
+      contextKeys: command.contextKeys,
+    });
+  }
+
   private async upsert(command: UpsertPreferencesCommand): Promise<PreferencesEntity | undefined> {
     const foundPreference = await this.getPreference(command);
 
@@ -146,16 +164,47 @@ export class UpsertPreferences {
   }
 
   private async createPreferences(command: UpsertPreferencesCommand): Promise<PreferencesEntity> {
-    return await this.preferencesRepository.create({
-      _subscriberId: command._subscriberId,
-      _userId: command.userId,
-      _environmentId: command.environmentId,
-      _organizationId: command.organizationId,
-      _templateId: command.templateId,
-      preferences: command.preferences,
-      type: command.type,
-      schedule: command.schedule,
+    const useContextFiltering = await this.featureFlagsService.getFlag({
+      key: FeatureFlagsKeysEnum.IS_CONTEXT_PREFERENCES_ENABLED,
+      defaultValue: false,
+      organization: { _id: command.organizationId },
     });
+
+    // Determine contextKeys based on preference type AND feature flag
+    // Non-context-scoped types (universal/workflow-level): undefined (no field)
+    // Context-scoped types (subscriber-level): [] or ["key"]
+    const isContextScoped = [
+      PreferencesTypeEnum.SUBSCRIBER_WORKFLOW,
+      PreferencesTypeEnum.SUBSCRIPTION_SUBSCRIBER_WORKFLOW,
+      PreferencesTypeEnum.SUBSCRIBER_GLOBAL,
+    ].includes(command.type);
+
+    try {
+      return await this.preferencesRepository.create({
+        _subscriberId: command._subscriberId,
+        _userId: command.userId,
+        _environmentId: command.environmentId,
+        _organizationId: command.organizationId,
+        _templateId: command.templateId,
+        _topicSubscriptionId: command.topicSubscriptionId,
+        preferences: command.preferences,
+        type: command.type,
+        schedule: command.schedule,
+        contextKeys: useContextFiltering && isContextScoped ? (command.contextKeys ?? []) : undefined,
+      });
+    } catch (error) {
+      const isDuplicateKeyError =
+        error && typeof error === 'object' && 'code' in error && error.code === ErrorCodesEnum.DUPLICATE_KEY;
+
+      if (isDuplicateKeyError) {
+        const existingPreference = await this.getPreference(command);
+        if (existingPreference) {
+          return existingPreference;
+        }
+      }
+
+      throw error;
+    }
   }
 
   private async updatePreferences(
@@ -174,7 +223,17 @@ export class UpsertPreferences {
       },
       {
         $set: {
-          preferences: mergedPreferences,
+          preferences: {
+            ...mergedPreferences,
+            ...(mergedPreferences.all && {
+              all: {
+                ...mergedPreferences.all,
+                ...(command.preferences.all?.condition !== undefined && {
+                  condition: command.preferences.all?.condition,
+                }),
+              },
+            }),
+          },
           schedule: command.schedule,
           _userId: command.userId,
         },
@@ -188,22 +247,31 @@ export class UpsertPreferences {
     return undefined;
   }
 
-  private async deletePreferences(command: UpsertPreferencesCommand, preferencesId: string) {
-    return await this.preferencesRepository.delete({
-      _id: preferencesId,
-      _environmentId: command.environmentId,
-      _organizationId: command.organizationId,
-      _templateId: command.templateId,
-    });
-  }
-
   private async getPreference(command: UpsertPreferencesCommand): Promise<PreferencesEntity | undefined> {
-    return await this.preferencesRepository.findOne({
-      _subscriberId: command._subscriberId,
+    // Non-context-scoped types (universal/workflow-level) - no context filter
+    const nonContextScopedTypes = [PreferencesTypeEnum.WORKFLOW_RESOURCE, PreferencesTypeEnum.USER_WORKFLOW];
+    const useContextFiltering = nonContextScopedTypes.includes(command.type)
+      ? false
+      : await this.featureFlagsService.getFlag({
+          key: FeatureFlagsKeysEnum.IS_CONTEXT_PREFERENCES_ENABLED,
+          defaultValue: false,
+          organization: { _id: command.organizationId },
+        });
+
+    const contextQuery = this.preferencesRepository.buildContextExactMatchQuery(command.contextKeys, {
+      enabled: useContextFiltering,
+    });
+
+    const query: FilterQuery<PreferencesDBModel> & EnforceEnvOrOrgIds = {
       _environmentId: command.environmentId,
       _organizationId: command.organizationId,
+      _subscriberId: command._subscriberId,
+      _topicSubscriptionId: command.topicSubscriptionId,
       _templateId: command.templateId,
       type: command.type,
-    });
+      ...contextQuery,
+    };
+
+    return await this.preferencesRepository.findOne(query);
   }
 }

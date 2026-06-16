@@ -2,7 +2,6 @@ import {
   ChannelEndpointByType,
   ChannelEndpointType,
   ChannelTypeEnum,
-  ContextKey,
   IActor,
   IMessageCTA,
   SeverityLevelEnum,
@@ -24,6 +23,7 @@ export type MessageChannelData<T extends ChannelEndpointType = ChannelEndpointTy
 export class MessageEntity {
   _id: string;
 
+  // WorkflowEntity._id
   _templateId: string;
 
   _environmentId: string;
@@ -45,6 +45,8 @@ export class MessageEntity {
   template?: NotificationTemplateEntity;
 
   templateIdentifier: string;
+
+  stepId?: string;
 
   createdAt: string;
 
@@ -134,7 +136,7 @@ export class MessageEntity {
 
   channelData?: MessageChannelData[];
 
-  contextKeys?: ContextKey[];
+  contextKeys?: string[];
 }
 
 export type MessageDBModel = ChangePropsValueType<

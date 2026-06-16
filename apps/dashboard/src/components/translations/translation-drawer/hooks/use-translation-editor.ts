@@ -1,58 +1,98 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Translation } from '@/api/translations';
+import { TranslationResponseDto } from '@novu/api/models/components';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-export function useTranslationEditor(selectedTranslation: Translation | undefined) {
+function escapeControlCharsInJsonStrings(jsonString: string): string {
+  let result = '';
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < jsonString.length; i++) {
+    const char = jsonString[i];
+
+    if (escaped) {
+      result += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\' && inString) {
+      escaped = true;
+      result += char;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      result += char;
+      continue;
+    }
+
+    if (inString) {
+      const code = char.charCodeAt(0);
+      if (code < 0x20) {
+        if (char === '\n') {
+          result += '\\n';
+        } else if (char === '\r') {
+          result += '\\r';
+        } else if (char === '\t') {
+          result += '\\t';
+        } else {
+          result += `\\u${code.toString(16).padStart(4, '0')}`;
+        }
+        continue;
+      }
+    }
+
+    result += char;
+  }
+
+  return result;
+}
+
+export function useTranslationEditor(selectedTranslation: TranslationResponseDto | undefined) {
   const [modifiedContentString, setModifiedContentString] = useState<string | null>(null);
+  const [modifiedContent, setModifiedContent] = useState<Record<string, any> | null>(null);
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const originalContent = useMemo(
+    () => JSON.stringify(selectedTranslation?.content ?? {}, null, 2),
+    [selectedTranslation?.content]
+  );
 
   useEffect(() => {
     setModifiedContentString(null);
+    setModifiedContent(null);
     setJsonError(null);
   }, [selectedTranslation?.locale]);
 
   const handleContentChange = useCallback((newContentString: string) => {
-    // Store the raw string content without any reformatting
     setModifiedContentString(newContentString);
 
     try {
-      // Only parse for validation, don't modify the content
-      JSON.parse(newContentString);
+      setModifiedContent(JSON.parse(newContentString));
       setJsonError(null);
     } catch (error) {
-      setJsonError(error instanceof Error ? error.message : 'Invalid JSON format');
+      try {
+        const sanitized = escapeControlCharsInJsonStrings(newContentString);
+        setModifiedContent(JSON.parse(sanitized));
+        setJsonError(null);
+      } catch {
+        setModifiedContent(null);
+        setJsonError(error instanceof Error ? error.message : 'Invalid JSON format');
+      }
     }
   }, []);
 
   const resetContent = useCallback(() => {
     setModifiedContentString(null);
+    setModifiedContent(null);
     setJsonError(null);
   }, []);
 
-  const parseModifiedContent = useCallback(() => {
-    if (!modifiedContentString || jsonError) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(modifiedContentString);
-    } catch {
-      return null;
-    }
-  }, [modifiedContentString, jsonError]);
-
-  const checkIfContentChanged = useCallback(() => {
-    if (!modifiedContentString || !selectedTranslation) {
-      return false;
-    }
-
-    const originalContent = JSON.stringify(selectedTranslation.content, null, 2);
-    return modifiedContentString !== originalContent;
-  }, [modifiedContentString, selectedTranslation]);
-
-  const modifiedContent = parseModifiedContent();
-  const hasUnsavedChanges = checkIfContentChanged();
+  const hasUnsavedChanges =
+    !modifiedContentString || !selectedTranslation ? false : modifiedContentString !== originalContent;
 
   return {
+    originalContent,
     modifiedContent,
     modifiedContentString,
     jsonError,

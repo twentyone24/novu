@@ -9,7 +9,7 @@ import {
   IEmailProvider,
   ISendMessageSuccessResponse,
 } from '@novu/stateless';
-import sgClient from '@sendgrid/client';
+import { Client } from '@sendgrid/client';
 // cspell:disable-next-line
 import { EventWebhook } from '@sendgrid/eventwebhook';
 import { MailDataRequired, MailService } from '@sendgrid/mail';
@@ -17,13 +17,14 @@ import { BaseProvider, CasingEnum } from '../../../base.provider';
 import { WithPassthrough } from '../../../utils/types';
 
 type AttachmentJSON = MailDataRequired['attachments'][0];
+type SendGridContent = NonNullable<MailDataRequired['content']>;
 
 export class SendgridEmailProvider extends BaseProvider implements IEmailProvider {
   id = EmailProviderIdEnum.SendGrid;
   protected casing: CasingEnum = CasingEnum.CAMEL_CASE;
   channelType = ChannelTypeEnum.EMAIL as ChannelTypeEnum.EMAIL;
   private sendgridMail: MailService;
-  private sendgridClient: typeof sgClient;
+  private client: Client;
 
   constructor(
     private config: {
@@ -32,13 +33,20 @@ export class SendgridEmailProvider extends BaseProvider implements IEmailProvide
       senderName: string;
       ipPoolName?: string;
       webhookPublicKey?: string;
+      region?: string;
     }
   ) {
     super();
+    this.client = new Client();
+
+    if (this.config.region === 'eu') {
+      this.client.setDataResidency('eu');
+    }
+
+    this.client.setApiKey(this.config.apiKey);
+
     this.sendgridMail = new MailService();
-    this.sendgridMail.setApiKey(this.config.apiKey);
-    this.sendgridClient = sgClient;
-    this.sendgridClient.setApiKey(this.config.apiKey);
+    this.sendgridMail.setClient(this.client);
   }
 
   async sendMessage(
@@ -96,7 +104,7 @@ export class SendgridEmailProvider extends BaseProvider implements IEmailProvide
       };
 
       if (attachment?.cid) {
-        attachmentJson.contentId = attachment?.cid;
+        attachmentJson['content_id'] = attachment?.cid;
       }
 
       if (attachment?.disposition) {
@@ -107,6 +115,7 @@ export class SendgridEmailProvider extends BaseProvider implements IEmailProvide
 
       return attachmentJson;
     });
+    const content = this.buildContent(options);
 
     const mailData: Partial<MailDataRequired> = {
       from: {
@@ -117,7 +126,7 @@ export class SendgridEmailProvider extends BaseProvider implements IEmailProvide
       to: options.to.map((email) => ({ email })),
       cc: options.cc?.map((ccItem) => ({ email: ccItem })),
       bcc: options.bcc?.map((ccItem) => ({ email: ccItem })),
-      html: options.html,
+      ...(content ? { content } : { html: options.html }),
       subject: options.subject,
       substitutions: {},
       category: options.notificationDetails?.workflowIdentifier,
@@ -147,6 +156,21 @@ export class SendgridEmailProvider extends BaseProvider implements IEmailProvide
     }
 
     return mailData as MailDataRequired;
+  }
+
+  private buildContent(options: IEmailOptions): SendGridContent | undefined {
+    if (!options.alternatives?.length) {
+      return undefined;
+    }
+
+    return [
+      ...(options.text ? [{ type: 'text/plain', value: options.text }] : []),
+      { type: 'text/html', value: options.html },
+      ...options.alternatives.map((alternative) => ({
+        type: alternative.contentType,
+        value: Buffer.isBuffer(alternative.content) ? alternative.content.toString() : alternative.content,
+      })),
+    ] as SendGridContent;
   }
 
   private getIpPoolObject(options: IEmailOptions) {
@@ -210,7 +234,7 @@ export class SendgridEmailProvider extends BaseProvider implements IEmailProvide
   }> {
     try {
       // Step 1: Create a new Event Webhook
-      const [createResponse, createBody] = await this.sendgridClient.request({
+      const [createResponse, createBody] = await this.client.request({
         url: '/v3/user/webhooks/event/settings',
         method: 'POST' as const,
         body: {
@@ -222,6 +246,7 @@ export class SendgridEmailProvider extends BaseProvider implements IEmailProvide
           open: true,
           click: true,
           bounce: true,
+          blocked: true,
           dropped: true,
           delivered: true,
         },
@@ -237,7 +262,7 @@ export class SendgridEmailProvider extends BaseProvider implements IEmailProvide
       const webhookId = createBody.id;
 
       // Step 2: Enable Signature Verification
-      const [enableSignatureResponse, enableSignatureBody] = await this.sendgridClient.request({
+      const [enableSignatureResponse, enableSignatureBody] = await this.client.request({
         url: `/v3/user/webhooks/event/settings/signed/${webhookId}`,
         method: 'PATCH' as const,
         body: {
@@ -286,18 +311,18 @@ export class SendgridEmailProvider extends BaseProvider implements IEmailProvide
   }
 
   parseEventBody(body: unknown | unknown[], identifier: string): IEmailEventBody | undefined {
-    let eventBody: any;
+    let eventBody: Record<string, unknown>;
     if (Array.isArray(body)) {
-      eventBody = body.find((item: any) => item.id === identifier);
+      eventBody = body.find((item: Record<string, unknown>) => item.id === identifier);
     } else {
-      eventBody = body;
+      eventBody = body as Record<string, unknown>;
     }
 
     if (!eventBody) {
       return undefined;
     }
 
-    const status = this.getStatus(eventBody.event);
+    const status = this.getStatus(eventBody.event as string);
 
     if (status === undefined) {
       return undefined;
@@ -306,10 +331,10 @@ export class SendgridEmailProvider extends BaseProvider implements IEmailProvide
     return {
       status,
       date: new Date().toISOString(),
-      externalId: eventBody.id,
-      attempts: eventBody.attempt ? parseInt(eventBody.attempt, 10) : 1,
-      response: eventBody.response ? eventBody.response : '',
-      row: eventBody,
+      externalId: eventBody.id as string,
+      attempts: eventBody.attempt ? parseInt(eventBody.attempt as string, 10) : 1,
+      response: eventBody.response ? (eventBody.response as string) : '',
+      row: JSON.stringify(eventBody),
     };
   }
 
@@ -319,6 +344,8 @@ export class SendgridEmailProvider extends BaseProvider implements IEmailProvide
         return EmailEventStatusEnum.OPENED;
       case 'bounce':
         return EmailEventStatusEnum.BOUNCED;
+      case 'blocked':
+        return EmailEventStatusEnum.BLOCKED;
       case 'click':
         return EmailEventStatusEnum.CLICKED;
       case 'dropped':

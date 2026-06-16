@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   AnalyticsService,
-  buildFeedKey,
   buildMessageCountKey,
   buildSubscriberKey,
   CachedResponse,
@@ -15,11 +14,10 @@ import {
   PinoLogger,
   SendWebhookMessage,
   StepType,
-  Trace,
   WebSocketsQueueService,
 } from '@novu/application-generic';
 import { MessageEntity, MessageRepository, SubscriberEntity, SubscriberRepository } from '@novu/dal';
-import { DeliveryLifecycleStatus, WebhookEventEnum, WebhookObjectTypeEnum, WebSocketEventEnum } from '@novu/shared';
+import { DeliveryLifecycleStatusEnum, WebhookEventEnum, WebhookObjectTypeEnum, WebSocketEventEnum } from '@novu/shared';
 
 import { MarkEnum, MarkMessageAsCommand } from './mark-message-as.command';
 
@@ -39,13 +37,6 @@ export class MarkMessageAs {
   }
 
   async execute(command: MarkMessageAsCommand): Promise<MessageEntity[]> {
-    await this.invalidateCache.invalidateQuery({
-      key: buildFeedKey().invalidate({
-        subscriberId: command.subscriberId,
-        _environmentId: command.environmentId,
-      }),
-    });
-
     await this.invalidateCache.invalidateQuery({
       key: buildMessageCountKey().invalidate({
         subscriberId: command.subscriberId,
@@ -115,7 +106,7 @@ export class MarkMessageAs {
 
     if (allTraceData.length > 0) {
       try {
-        await this.messageInteractionService.trace(allTraceData, DeliveryLifecycleStatus.INTERACTED);
+        await this.messageInteractionService.trace(allTraceData, DeliveryLifecycleStatusEnum.INTERACTED);
       } catch (error) {
         this.logger.warn({ err: error }, `Failed to create engagement traces for ${allTraceData.length} traces`);
       }
@@ -138,14 +129,15 @@ export class MarkMessageAs {
           event_type: eventType,
           title: mapEventTypeToTitle(eventType),
           message: `Message ${eventType.replace('message_', '')} for subscriber ${message._subscriberId}`,
-          raw_data: null,
+          raw_data: '',
           status: 'success',
-          entity_type: 'step_run',
           entity_id: message._jobId,
           external_subscriber_id: message._subscriberId,
           step_run_type: message.channel as StepType,
           workflow_run_identifier: '',
           _notificationId: message._notificationId,
+          workflow_id: message._templateId,
+          provider_id: '',
         });
       }
     }
@@ -174,6 +166,7 @@ export class MarkMessageAs {
         event: eventMessage,
         userId: subscriber._id,
         _environmentId: subscriber._environmentId,
+        contextKeys: [],
       },
       groupId: subscriber._organizationId,
     });

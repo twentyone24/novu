@@ -6,6 +6,7 @@ import {
   createProviderSelectedMessage,
   DetailEnum,
   GetNovuProviderCredentials,
+  Instrument,
   SelectIntegration,
   SelectIntegrationCommand,
   SelectVariant,
@@ -33,7 +34,7 @@ import {
 import { format } from 'date-fns';
 import i18next from 'i18next';
 import { merge } from 'lodash';
-import { PlatformException } from '../../../shared/utils';
+import { PlatformException, TRANSLATIONS_SERVICE } from '../../../shared/utils';
 import { SendMessageChannelCommand } from './send-message-channel.command';
 import { SendMessageResult, SendMessageStatus, SendMessageType } from './send-message-type.usecase';
 
@@ -64,6 +65,7 @@ export abstract class SendMessageBase extends SendMessageType {
     return merge({}, bridgeProviderData, workflowGlobalProviderOverrides, triggerOverrides);
   }
 
+  @Instrument()
   protected async getIntegration(params: {
     id?: string;
     providerId?: ProvidersIdEnum;
@@ -130,6 +132,7 @@ export abstract class SendMessageBase extends SendMessageType {
     };
   }
 
+  @Instrument()
   protected async sendSelectedIntegrationExecution(job: JobEntity, integration: IntegrationEntity) {
     const providerDisplayName = providers.find((el) => el.id === integration?.providerId)?.displayName || 'Unknown';
 
@@ -152,6 +155,7 @@ export abstract class SendMessageBase extends SendMessageType {
     );
   }
 
+  @Instrument()
   protected async processVariants(command: SendMessageChannelCommand): Promise<MessageTemplateEntity> {
     const { messageTemplate, conditions } = await this.selectVariant.execute(
       SelectVariantCommand.create({
@@ -181,13 +185,14 @@ export abstract class SendMessageBase extends SendMessageType {
     return messageTemplate;
   }
 
+  @Instrument()
   protected async initiateTranslations(environmentId: string, organizationId: string, locale: string | undefined) {
     try {
       if (process.env.NOVU_ENTERPRISE === 'true' || process.env.CI_EE_TEST === 'true') {
-        if (!require('@novu/ee-shared-services')?.TranslationsService) {
+        if (!this.moduleRef.get(TRANSLATIONS_SERVICE, { strict: false })) {
           throw new PlatformException('Translation module is not loaded');
         }
-        const service = this.moduleRef.get(require('@novu/ee-shared-services')?.TranslationsService, { strict: false });
+        const service = this.moduleRef.get(TRANSLATIONS_SERVICE, { strict: false });
         const { namespaces, resources, defaultLocale } = await service.getTranslationsList(
           environmentId,
           organizationId
@@ -208,7 +213,7 @@ export abstract class SendMessageBase extends SendMessageType {
                 return format(new Date(value), formatting);
               }
 
-              return value.toString();
+              return String(value ?? '');
             },
           },
         });

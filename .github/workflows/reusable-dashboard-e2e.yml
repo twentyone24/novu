@@ -53,7 +53,7 @@ jobs:
 
       - id: checkout-enterprise-code
         name: Checkout enterprise code from the submodule
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         if: steps.determine_run_type.outputs.enterprise_run == 'true'
         with:
           submodules: true
@@ -61,7 +61,7 @@ jobs:
 
       - id: checkout-community-code
         name: Checkout community code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         if: steps.determine_run_type.outputs.enterprise_run != 'true'
 
       - uses: ./.github/actions/setup-project
@@ -93,6 +93,8 @@ jobs:
           echo NODE_ENV=test >> .env.playwright
 
       - uses: mansagroup/nrwl-nx-action@v3
+        env:
+          NX_NO_CLOUD: ${{ secrets.NX_CLOUD_ACCESS_TOKEN == '' && 'true' || 'false' }}
         with:
           targets: build
           projects: '@novu/dashboard,@novu/api-service,@novu/worker'
@@ -171,10 +173,10 @@ jobs:
     needs: [e2e_dashboard]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.19.0
+          node-version: 22.22.1
 
       - name: Download blob reports from GitHub Actions Artifacts
         uses: actions/download-artifact@v4

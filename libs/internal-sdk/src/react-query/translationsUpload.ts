@@ -12,12 +12,24 @@ import { translationsUpload } from "../funcs/translationsUpload.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
+import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useNovuContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type TranslationsUploadMutationVariables = {
-  uploadTranslationsRequestDto: components.UploadTranslationsRequestDto;
+  requestBody:
+    operations.TranslationControllerUploadTranslationFilesRequestBody;
   idempotencyKey?: string | undefined;
   options?: RequestOptions;
 };
@@ -25,21 +37,31 @@ export type TranslationsUploadMutationVariables = {
 export type TranslationsUploadMutationData =
   components.UploadTranslationsResponseDto;
 
+export type TranslationsUploadMutationError =
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * Upload translation files
  *
  * @remarks
- * Upload one or more JSON translation files for a specific workflow. Files name must match the locale, e.g. en_US.json
+ * Upload one or more JSON translation files for a specific workflow. Files name must match the locale, e.g. en_US.json. Supports both "files" and "files[]" field names for backwards compatibility.
  */
 export function useTranslationsUploadMutation(
   options?: MutationHookOptions<
     TranslationsUploadMutationData,
-    Error,
+    TranslationsUploadMutationError,
     TranslationsUploadMutationVariables
   >,
 ): UseMutationResult<
   TranslationsUploadMutationData,
-  Error,
+  TranslationsUploadMutationError,
   TranslationsUploadMutationVariables
 > {
   const client = useNovuContext();
@@ -65,7 +87,7 @@ export function buildTranslationsUploadMutation(
   return {
     mutationKey: mutationKeyTranslationsUpload(),
     mutationFn: function translationsUploadMutationFn({
-      uploadTranslationsRequestDto,
+      requestBody,
       idempotencyKey,
       options,
     }): Promise<TranslationsUploadMutationData> {
@@ -83,7 +105,7 @@ export function buildTranslationsUploadMutation(
       };
       return unwrapAsync(translationsUpload(
         client$,
-        uploadTranslationsRequestDto,
+        requestBody,
         idempotencyKey,
         mergedOptions,
       ));

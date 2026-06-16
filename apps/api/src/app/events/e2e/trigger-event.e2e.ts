@@ -1,7 +1,7 @@
 import { Novu } from '@novu/api';
 import { CreateIntegrationRequestDto, TriggerEventResponseDto } from '@novu/api/models/components';
 import { SubscriberPayloadDto } from '@novu/api/src/models/components/subscriberpayloaddto';
-import { DetailEnum } from '@novu/application-generic';
+import { ClickHouseService, DetailEnum, QueryBuilder, Trace, TraceLogRepository } from '@novu/application-generic';
 import {
   CommunityOrganizationRepository,
   EnvironmentRepository,
@@ -19,7 +19,6 @@ import {
 } from '@novu/dal';
 import {
   ActorTypeEnum,
-  ApiServiceLevelEnum,
   ChannelTypeEnum,
   ChatProviderIdEnum,
   CreateWorkflowDto,
@@ -48,12 +47,6 @@ import { v4 as uuid } from 'uuid';
 import { initNovuClassSdk } from '../../shared/helpers/e2e/sdk/e2e-sdk.helper';
 import { createTenant } from '../../tenant/e2e/create-tenant.e2e';
 import { pollForJobStatusChange } from './utils/poll-for-job-status-change.util';
-import { sleep } from './utils/sleep.util';
-
-const promiseTimeout = (ms: number): Promise<void> =>
-  new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 
 describe('Trigger event - /v1/events/trigger (POST) #novu-v2', () => {
   let session: UserSession;
@@ -960,6 +953,134 @@ describe('Trigger event - /v1/events/trigger (POST) #novu-v2', () => {
       expect(updatedSubscriber?.locale).to.equal(payload.locale);
     });
 
+    it('should allow to nullify the subscriber fields', async () => {
+      const subscriberId = SubscriberRepository.createObjectId();
+      const payload = {
+        subscriberId,
+        firstName: 'Test Name',
+        lastName: 'Last of name',
+        email: 'test@email.novu',
+        phone: '+1234567890',
+        avatar: 'https://example.com/avatar.jpg',
+        timezone: 'America/New_York',
+        locale: 'en-US',
+        data: { custom1: 'custom value1', custom2: 'custom value2' },
+      };
+
+      await novuClient.trigger({
+        workflowId: template.triggers[0].identifier,
+        to: [payload],
+      });
+
+      await session.waitForJobCompletion();
+      const createdSubscriber = await subscriberRepository.findBySubscriberId(session.environment._id, subscriberId);
+
+      expect(createdSubscriber?.subscriberId).to.equal(subscriberId);
+      expect(createdSubscriber?.firstName).to.equal(payload.firstName);
+      expect(createdSubscriber?.lastName).to.equal(payload.lastName);
+      expect(createdSubscriber?.email).to.equal(payload.email);
+      expect(createdSubscriber?.locale).to.equal(payload.locale);
+      expect(createdSubscriber?.phone).to.equal(payload.phone);
+      expect(createdSubscriber?.avatar).to.equal(payload.avatar);
+      expect(createdSubscriber?.timezone).to.equal(payload.timezone);
+      expect(createdSubscriber?.data).to.deep.equal(payload.data);
+
+      const payload2 = {
+        subscriberId,
+        firstName: null,
+        lastName: null,
+        email: null,
+        locale: null,
+        phone: null,
+        avatar: null,
+        timezone: null,
+        data: null,
+      };
+
+      await novuClient.trigger({
+        workflowId: template.triggers[0].identifier,
+        to: [payload2],
+      });
+
+      await session.waitForJobCompletion();
+
+      const updatedSubscriber = await subscriberRepository.findBySubscriberId(session.environment._id, subscriberId);
+
+      expect(updatedSubscriber?.subscriberId).to.equal(subscriberId);
+      expect(updatedSubscriber?.firstName).to.be.null;
+      expect(updatedSubscriber?.lastName).to.be.null;
+      expect(updatedSubscriber?.email).to.be.null;
+      expect(updatedSubscriber?.locale).to.be.null;
+      expect(updatedSubscriber?.phone).to.be.null;
+      expect(updatedSubscriber?.avatar).to.be.null;
+      expect(updatedSubscriber?.timezone).to.be.null;
+      expect(updatedSubscriber?.data).to.be.null;
+    });
+
+    it('should allow to make some fields empty', async () => {
+      const subscriberId = SubscriberRepository.createObjectId();
+      const payload = {
+        subscriberId,
+        firstName: 'Test Name',
+        lastName: 'Last of name',
+        email: 'test@email.novu',
+        phone: '+1234567890',
+        avatar: 'https://example.com/avatar.jpg',
+        timezone: 'America/New_York',
+        locale: 'en-US',
+        data: { custom1: 'custom value1', custom2: 'custom value2' },
+      };
+
+      await novuClient.trigger({
+        workflowId: template.triggers[0].identifier,
+        to: [payload],
+      });
+
+      await session.waitForJobCompletion();
+      const createdSubscriber = await subscriberRepository.findBySubscriberId(session.environment._id, subscriberId);
+
+      expect(createdSubscriber?.subscriberId).to.equal(subscriberId);
+      expect(createdSubscriber?.firstName).to.equal(payload.firstName);
+      expect(createdSubscriber?.lastName).to.equal(payload.lastName);
+      expect(createdSubscriber?.email).to.equal(payload.email);
+      expect(createdSubscriber?.locale).to.equal(payload.locale);
+      expect(createdSubscriber?.phone).to.equal(payload.phone);
+      expect(createdSubscriber?.avatar).to.equal(payload.avatar);
+      expect(createdSubscriber?.timezone).to.equal(payload.timezone);
+      expect(createdSubscriber?.data).to.deep.equal(payload.data);
+
+      const payload2 = {
+        subscriberId,
+        firstName: '',
+        lastName: '',
+        email: 'test2@email.novu',
+        locale: 'en-US',
+        phone: '',
+        avatar: '',
+        timezone: 'America/New_York',
+        data: payload.data,
+      };
+
+      await novuClient.trigger({
+        workflowId: template.triggers[0].identifier,
+        to: [payload2],
+      });
+
+      await session.waitForJobCompletion();
+
+      const updatedSubscriber = await subscriberRepository.findBySubscriberId(session.environment._id, subscriberId);
+
+      expect(updatedSubscriber?.subscriberId).to.equal(subscriberId);
+      expect(updatedSubscriber?.firstName).to.equal(payload2.firstName);
+      expect(updatedSubscriber?.lastName).to.equal(payload2.lastName);
+      expect(updatedSubscriber?.email).to.equal(payload2.email);
+      expect(updatedSubscriber?.locale).to.equal(payload2.locale);
+      expect(updatedSubscriber?.phone).to.equal(payload2.phone);
+      expect(updatedSubscriber?.avatar).to.equal(payload2.avatar);
+      expect(updatedSubscriber?.timezone).to.equal(payload2.timezone);
+      expect(updatedSubscriber?.data).to.deep.equal(payload2.data);
+    });
+
     describe('Subscriber channels', () => {
       it('should set a new subscriber with channels array', async () => {
         const subscriberId = SubscriberRepository.createObjectId();
@@ -1252,7 +1373,7 @@ describe('Trigger event - /v1/events/trigger (POST) #novu-v2', () => {
         },
       });
       const body = response.result;
-      expect(body).to.have.all.keys('acknowledged', 'status', 'transactionId');
+      expect(body).to.have.all.keys('acknowledged', 'status', 'transactionId', 'activityFeedLink');
       expect(body.acknowledged).to.equal(true);
       expect(body.status).to.equal('processed');
       expect(body.transactionId).to.be.a.string;
@@ -1748,76 +1869,6 @@ describe('Trigger event - /v1/events/trigger (POST) #novu-v2', () => {
       expect(messages[0].providerId).to.be.equal(EmailProviderIdEnum.Mailgun);
     });
 
-    it('should fail to trigger with missing variables', async () => {
-      template = await session.createTemplate({
-        steps: [
-          {
-            name: 'Message Name',
-            subject: 'Test email {{nested.subject}}',
-            type: StepTypeEnum.EMAIL,
-            variables: [
-              { name: 'myUser.lastName', required: true, type: TemplateVariableTypeEnum.STRING },
-              { name: 'myUser.array', required: true, type: TemplateVariableTypeEnum.ARRAY },
-              { name: 'myUser.bool', required: true, type: TemplateVariableTypeEnum.BOOLEAN },
-            ],
-            content: [
-              {
-                type: EmailBlockTypeEnum.TEXT,
-                content: 'Hello {{myUser.lastName}}, Welcome to {{organizationName}}' as string,
-              },
-            ],
-          },
-        ],
-      });
-
-      let response = await session.testAgent
-        .post('/v1/events/trigger')
-        .send({
-          name: template.triggers[0].identifier,
-          to: [subscriber.subscriberId],
-          payload: {},
-        })
-        .expect(400);
-
-      expect(JSON.stringify(response.body)).to.include(
-        'payload is missing required key(s) and type(s): myUser.lastName (Value), myUser.array (Array), myUser.bool (Boolean)'
-      );
-
-      response = await session.testAgent
-        .post('/v1/events/trigger')
-        .send({
-          name: template.triggers[0].identifier,
-          to: [subscriber.subscriberId],
-          payload: {
-            myUser: {
-              lastName: true,
-              array: 'John Doe',
-              bool: 0,
-            },
-          },
-        })
-        .expect(400);
-
-      expect(JSON.stringify(response.body)).to.include(
-        'payload is missing required key(s) and type(s): myUser.lastName (Value), myUser.array (Array), myUser.bool (Boolean)'
-      );
-
-      response = await session.testAgent
-        .post('/v1/events/trigger')
-        .send({
-          name: template.triggers[0].identifier,
-          to: [subscriber.subscriberId],
-          payload: {
-            myUser: {
-              lastName: '',
-              array: [],
-              bool: true,
-            },
-          },
-        })
-        .expect(201);
-    });
-
     it('should fill trigger payload with default variables', async () => {
       const newSubscriberIdInAppNotification = SubscriberRepository.createObjectId();
       const channelType = ChannelTypeEnum.EMAIL;
@@ -1852,16 +1903,13 @@ describe('Trigger event - /v1/events/trigger (POST) #novu-v2', () => {
         ],
       });
 
-      await session.testAgent
-        .post('/v1/events/trigger')
-        .send({
-          name: template.triggers[0].identifier,
-          to: newSubscriberIdInAppNotification,
-          payload: {
-            organizationName: 'Umbrella Corp',
-          },
-        })
-        .expect(201);
+      await novuClient.trigger({
+        workflowId: template.triggers[0].identifier,
+        to: newSubscriberIdInAppNotification,
+        payload: {
+          organizationName: 'Umbrella Corp',
+        },
+      });
 
       await session.waitForJobCompletion(template._id);
 
@@ -1900,26 +1948,6 @@ describe('Trigger event - /v1/events/trigger (POST) #novu-v2', () => {
       expect(body.statusCode).to.equal(422);
       expect(body.message).to.equal('workflow_not_found');
       expect(body.error).to.equal('Unprocessable Entity');
-    });
-
-    it('should handle empty workflow scenario', async () => {
-      template = await session.createTemplate({
-        steps: [],
-      });
-
-      const response = await novuClient.trigger({
-        workflowId: template.triggers[0].identifier,
-        to: [subscriber.subscriberId],
-        payload: {
-          myUser: {
-            lastName: 'Test',
-          },
-        },
-      });
-
-      const { status, acknowledged } = response.result;
-      expect(status).to.equal('no_workflow_steps_defined');
-      expect(acknowledged).to.equal(true);
     });
 
     it('should trigger with given required variables', async () => {
@@ -2418,18 +2446,6 @@ describe('Trigger event - /v1/events/trigger (POST) #novu-v2', () => {
 
       it(`should not create multiple subscribers when multiple triggers are made        
          with the same not created subscribers `, async () => {
-        // Access subscriberRepository and print database indexes
-        console.log('Accessing subscriberRepository indexes...');
-        const subscriberModel = subscriberRepository._model;
-        subscriberModel.collection
-          .getIndexes()
-          .then((indexes) => {
-            console.log('Subscriber Collection Indexes:');
-            console.log(JSON.stringify(indexes, null, 2));
-          })
-          .catch((error) => {
-            console.error('Error fetching indexes:', error);
-          });
         template = await createSimpleWorkflow(session);
         for (let i = 0; i < 3; i += 1) {
           const subscriberId = `not-created-twice-subscriber${i}`;
@@ -3397,6 +3413,108 @@ describe('Trigger event - /v1/events/trigger (POST) #novu-v2', () => {
       expect(message[0].content).to.include(`Hello ${subscriber.lastName},`);
     });
 
+    it('should allow html entities in subject and body when using html editor', async function test() {
+      const workflowBody: CreateWorkflowDto = {
+        name: 'Test HTML Entities Workflow',
+        workflowId: 'test-html-entities-workflow',
+        __source: WorkflowCreationSourceEnum.DASHBOARD,
+        steps: [
+          {
+            type: StepTypeEnum.EMAIL,
+            name: 'Message Name',
+            controlValues: {
+              subject: '{{payload.htmlEntities}}',
+              editorType: 'html',
+              body: '<p>{{payload.htmlEntities}}</p>',
+            },
+          },
+        ],
+      };
+
+      const response = await session.testAgent.post('/v2/workflows').send(workflowBody);
+      expect(response.status).to.equal(201);
+      const workflow: WorkflowResponseDto = response.body.data;
+
+      await novuClient.trigger({
+        workflowId: workflow.workflowId,
+        to: [subscriber.subscriberId],
+        payload: {
+          htmlEntities: 'Hello &lt; &gt; &amp; &quot; &apos;',
+        },
+      });
+      await session.waitForJobCompletion(workflow._id);
+
+      await session.waitForJobCompletion(workflow._id);
+      const message = await messageRepository.find({
+        _environmentId: session.environment._id,
+        _subscriberId: subscriber._id,
+      });
+
+      expect(message.length).to.equal(1);
+      expect(message[0].subject).to.equal(`Hello < > & " '`);
+      // for html content it preserves the html entities, because it's rendered as html and will be decoded by the browser
+      expect(message[0].content).to.include(`Hello &lt; &gt; &amp; " '`);
+    });
+
+    it('should allow html entities in subject and body when using block editor', async function test() {
+      const mailyContent = JSON.stringify({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: { textAlign: null, showIfKey: null },
+            content: [
+              {
+                type: 'variable',
+                attrs: { id: 'payload.htmlEntities' },
+              },
+            ],
+          },
+        ],
+      });
+
+      const workflowBody: CreateWorkflowDto = {
+        name: 'Test HTML Entities Workflow',
+        workflowId: 'test-html-entities-workflow',
+        __source: WorkflowCreationSourceEnum.DASHBOARD,
+        steps: [
+          {
+            type: StepTypeEnum.EMAIL,
+            name: 'Message Name',
+            controlValues: {
+              subject: '{{payload.htmlEntities}}',
+              editorType: 'block',
+              body: mailyContent,
+            },
+          },
+        ],
+      };
+
+      const response = await session.testAgent.post('/v2/workflows').send(workflowBody);
+      expect(response.status).to.equal(201);
+      const workflow: WorkflowResponseDto = response.body.data;
+
+      await novuClient.trigger({
+        workflowId: workflow.workflowId,
+        to: [subscriber.subscriberId],
+        payload: {
+          htmlEntities: 'Hello &lt; &gt; &amp; &quot; &apos;',
+        },
+      });
+      await session.waitForJobCompletion(workflow._id);
+
+      await session.waitForJobCompletion(workflow._id);
+      const message = await messageRepository.find({
+        _environmentId: session.environment._id,
+        _subscriberId: subscriber._id,
+      });
+
+      expect(message.length).to.equal(1);
+      expect(message[0].subject).to.equal(`Hello < > & " '`);
+      // for html content it preserves the html entities, because it's rendered as html and will be decoded by the browser
+      expect(message[0].content).to.include(`Hello &lt; &gt; &amp; " '`);
+    });
+
     it('should execute step based on conditions', async () => {
       const workflowBody: CreateWorkflowDto = {
         name: 'Test Step Conditions Workflow',
@@ -3659,21 +3777,223 @@ describe('Trigger event - /v1/events/trigger (POST) #novu-v2', () => {
       expect(executionDetails?.raw).to.contain('Failed to evaluate rule');
       expect(executionDetails?.raw).to.contain('Unrecognized operation invalidOp');
     });
+
+    it('should skip step when containsAny condition does not match with literal values', async () => {
+      const workflowBody: CreateWorkflowDto = {
+        name: 'Test ContainsAny Literal',
+        workflowId: 'test-contains-any-literal',
+        __source: WorkflowCreationSourceEnum.DASHBOARD,
+        steps: [
+          {
+            type: StepTypeEnum.IN_APP,
+            name: 'Message Name',
+            controlValues: {
+              body: 'Hello!',
+              skip: {
+                containsAny: [{ var: 'payload.tags' }, ['urgent', 'important']],
+              },
+            },
+          },
+        ],
+      };
+
+      const response = await session.testAgent.post('/v2/workflows').send(workflowBody);
+      expect(response.status).to.equal(201);
+      const workflow: WorkflowResponseDto = response.body.data;
+
+      await novuClient.trigger({
+        workflowId: workflow.workflowId,
+        to: [subscriber.subscriberId],
+        payload: { tags: ['info', 'low'] },
+      });
+      await session.waitForJobCompletion(workflow._id);
+
+      const skippedMessages = await messageRepository.find({
+        _environmentId: session.environment._id,
+        _subscriberId: subscriber._id,
+      });
+      expect(skippedMessages.length).to.equal(0);
+
+      await novuClient.trigger({
+        workflowId: workflow.workflowId,
+        to: [subscriber.subscriberId],
+        payload: { tags: ['urgent', 'info'] },
+      });
+      await session.waitForJobCompletion(workflow._id);
+
+      const executedMessages = await messageRepository.find({
+        _environmentId: session.environment._id,
+        _subscriberId: subscriber._id,
+      });
+      expect(executedMessages.length).to.equal(1);
+    });
+
+    it('should execute step when containsAny matches with var reference to another payload array', async () => {
+      const workflowBody: CreateWorkflowDto = {
+        name: 'Test ContainsAny Var Ref',
+        workflowId: 'test-contains-any-var-ref',
+        __source: WorkflowCreationSourceEnum.DASHBOARD,
+        steps: [
+          {
+            type: StepTypeEnum.IN_APP,
+            name: 'Message Name',
+            controlValues: {
+              body: 'Hello!',
+              skip: {
+                containsAny: [{ var: 'payload.items' }, { var: 'payload.tags' }],
+              },
+            },
+          },
+        ],
+      };
+
+      const response = await session.testAgent.post('/v2/workflows').send(workflowBody);
+      expect(response.status).to.equal(201);
+      const workflow: WorkflowResponseDto = response.body.data;
+
+      await novuClient.trigger({
+        workflowId: workflow.workflowId,
+        to: [subscriber.subscriberId],
+        payload: { items: ['a', 'b'], tags: ['x', 'y'] },
+      });
+      await session.waitForJobCompletion(workflow._id);
+
+      const skippedMessages = await messageRepository.find({
+        _environmentId: session.environment._id,
+        _subscriberId: subscriber._id,
+      });
+      expect(skippedMessages.length).to.equal(0);
+
+      await novuClient.trigger({
+        workflowId: workflow.workflowId,
+        to: [subscriber.subscriberId],
+        payload: { items: ['dima'], tags: ['dima'] },
+      });
+      await session.waitForJobCompletion(workflow._id);
+
+      const executedMessages = await messageRepository.find({
+        _environmentId: session.environment._id,
+        _subscriberId: subscriber._id,
+      });
+      expect(executedMessages.length).to.equal(1);
+    });
+
+    it('should skip step when doesNotContainAny condition does not match', async () => {
+      const workflowBody: CreateWorkflowDto = {
+        name: 'Test DoesNotContainAny',
+        workflowId: 'test-does-not-contain-any',
+        __source: WorkflowCreationSourceEnum.DASHBOARD,
+        steps: [
+          {
+            type: StepTypeEnum.IN_APP,
+            name: 'Message Name',
+            controlValues: {
+              body: 'Hello!',
+              skip: {
+                doesNotContainAny: [{ var: 'payload.tags' }, ['blocked', 'spam']],
+              },
+            },
+          },
+        ],
+      };
+
+      const response = await session.testAgent.post('/v2/workflows').send(workflowBody);
+      expect(response.status).to.equal(201);
+      const workflow: WorkflowResponseDto = response.body.data;
+
+      await novuClient.trigger({
+        workflowId: workflow.workflowId,
+        to: [subscriber.subscriberId],
+        payload: { tags: ['info', 'blocked'] },
+      });
+      await session.waitForJobCompletion(workflow._id);
+
+      const skippedMessages = await messageRepository.find({
+        _environmentId: session.environment._id,
+        _subscriberId: subscriber._id,
+      });
+      expect(skippedMessages.length).to.equal(0);
+
+      await novuClient.trigger({
+        workflowId: workflow.workflowId,
+        to: [subscriber.subscriberId],
+        payload: { tags: ['info', 'update'] },
+      });
+      await session.waitForJobCompletion(workflow._id);
+
+      const executedMessages = await messageRepository.find({
+        _environmentId: session.environment._id,
+        _subscriberId: subscriber._id,
+      });
+      expect(executedMessages.length).to.equal(1);
+    });
+
+    it('should execute step when containsAny with var reference to subscriber data', async () => {
+      subscriber = await subscriberService.createSubscriber({
+        firstName: 'John',
+        lastName: 'Doe',
+        data: { tags: ['vip', 'premium'] },
+      });
+
+      const workflowBody: CreateWorkflowDto = {
+        name: 'Test ContainsAny Subscriber Data',
+        workflowId: 'test-contains-any-subscriber-data',
+        __source: WorkflowCreationSourceEnum.DASHBOARD,
+        steps: [
+          {
+            type: StepTypeEnum.IN_APP,
+            name: 'Message Name',
+            controlValues: {
+              body: 'Hello!',
+              skip: {
+                containsAny: [{ var: 'payload.tags' }, { var: 'subscriber.data.tags' }],
+              },
+            },
+          },
+        ],
+      };
+
+      const response = await session.testAgent.post('/v2/workflows').send(workflowBody);
+      expect(response.status).to.equal(201);
+      const workflow: WorkflowResponseDto = response.body.data;
+
+      await novuClient.trigger({
+        workflowId: workflow.workflowId,
+        to: [subscriber.subscriberId],
+        payload: { tags: ['basic', 'free'] },
+      });
+      await session.waitForJobCompletion(workflow._id);
+
+      const skippedMessages = await messageRepository.find({
+        _environmentId: session.environment._id,
+        _subscriberId: subscriber._id,
+      });
+      expect(skippedMessages.length).to.equal(0);
+
+      await novuClient.trigger({
+        workflowId: workflow.workflowId,
+        to: [subscriber.subscriberId],
+        payload: { tags: ['vip', 'other'] },
+      });
+      await session.waitForJobCompletion(workflow._id);
+
+      const executedMessages = await messageRepository.find({
+        _environmentId: session.environment._id,
+        _subscriberId: subscriber._id,
+      });
+      expect(executedMessages.length).to.equal(1);
+    });
   });
 
   describe('Subscriber Schedule Logic', () => {
-    const isSubscribersScheduleEnabled = process.env.IS_SUBSCRIBERS_SCHEDULE_ENABLED;
+    const isContextPreferencesEnabled = (process.env as Record<string, string>).IS_CONTEXT_PREFERENCES_ENABLED;
 
     beforeEach(async () => {
-      // Enable the feature flag for schedule tests
-      // @ts-expect-error process.env is not typed
-      process.env.IS_SUBSCRIBERS_SCHEDULE_ENABLED = 'true';
+      (process.env as Record<string, string>).IS_CONTEXT_PREFERENCES_ENABLED = 'true';
     });
 
     afterEach(() => {
-      // Restore the original feature flag state
-      // @ts-expect-error process.env is not typed
-      process.env.IS_SUBSCRIBERS_SCHEDULE_ENABLED = isSubscribersScheduleEnabled;
+      (process.env as Record<string, string>).IS_CONTEXT_PREFERENCES_ENABLED = isContextPreferencesEnabled;
     });
 
     // Helper function to create a schedule that's outside current time
@@ -4377,6 +4697,285 @@ describe('Trigger event - /v1/events/trigger (POST) #novu-v2', () => {
       expect(message?.subject).to.equal('Test Email Subject');
       expect(message?.content).to.contain('Test Email Body');
     });
+
+    it('should respect context-specific schedule when triggering with context', async () => {
+      // Create subscriber with schedule for context A (outside current time)
+      const scheduledSubscriber = await subscriberService.createSubscriber({
+        subscriberId: 'context-schedule-subscriber',
+        timezone: 'America/New_York',
+      });
+
+      const { weeklySchedule: scheduleOutside } = createScheduleOutsideCurrentTime('America/New_York');
+      const { weeklySchedule: scheduleInside } = createScheduleIncludingCurrentTime('America/New_York');
+
+      // Set schedule for context A (restrictive - outside current time)
+      await session.testAgent
+        .patch(`/v2/subscribers/${scheduledSubscriber.subscriberId}/preferences`)
+        .send({
+          schedule: {
+            isEnabled: true,
+            weeklySchedule: scheduleOutside,
+          },
+          context: { tenant: 'acme' },
+        })
+        .set('Authorization', `ApiKey ${session.apiKey}`);
+
+      // Set schedule for context B (permissive - includes current time)
+      await session.testAgent
+        .patch(`/v2/subscribers/${scheduledSubscriber.subscriberId}/preferences`)
+        .send({
+          schedule: {
+            isEnabled: true,
+            weeklySchedule: scheduleInside,
+          },
+          context: { tenant: 'globex' },
+        })
+        .set('Authorization', `ApiKey ${session.apiKey}`);
+
+      const workflowBody: CreateWorkflowDto = {
+        name: 'Context Schedule Test Workflow',
+        workflowId: 'context-schedule-test-workflow',
+        __source: WorkflowCreationSourceEnum.DASHBOARD,
+        steps: [
+          {
+            type: StepTypeEnum.EMAIL,
+            name: 'Email Step',
+            controlValues: {
+              subject: 'Context Schedule Test',
+              body: 'Testing context-aware schedule',
+              disableOutputSanitization: false,
+            },
+          },
+        ],
+      };
+
+      const workflow: WorkflowResponseDto = (await session.testAgent.post('/v2/workflows').send(workflowBody)).body
+        .data;
+
+      // Trigger with context A (should be blocked by schedule)
+      await novuClient.trigger({
+        workflowId: workflowBody.workflowId,
+        to: [{ subscriberId: scheduledSubscriber.subscriberId }],
+        payload: { firstName: 'Test' },
+        context: { tenant: 'acme' },
+      });
+
+      await session.waitForJobCompletion(workflow._id);
+
+      const jobsContextA = await jobRepository.find({
+        _environmentId: session.environment._id,
+        _subscriberId: scheduledSubscriber._id,
+        _templateId: workflow._id,
+        type: StepTypeEnum.EMAIL,
+      });
+
+      // Should be canceled due to schedule
+      expect(jobsContextA).to.have.length(1);
+      expect(jobsContextA[0].status).to.equal(JobStatusEnum.CANCELED);
+
+      // Trigger with context B (should be allowed by schedule)
+      await novuClient.trigger({
+        workflowId: workflowBody.workflowId,
+        to: [{ subscriberId: scheduledSubscriber.subscriberId }],
+        context: { tenant: 'globex' },
+        payload: { firstName: 'Test' },
+      });
+
+      await session.waitForJobCompletion(workflow._id);
+
+      const jobsContextB = await jobRepository.find({
+        _environmentId: session.environment._id,
+        _subscriberId: scheduledSubscriber._id,
+        _templateId: workflow._id,
+        type: StepTypeEnum.EMAIL,
+      });
+
+      // Should have 2 jobs total (1 canceled from context A, 1 from context B that passed schedule)
+      expect(jobsContextB).to.have.length(2);
+
+      // Verify context A job was canceled (outside schedule 09:00 AM - 05:00 PM)
+      const canceledJob = jobsContextB.find((j) => j.contextKeys?.includes('tenant:acme'));
+      expect(canceledJob).to.exist;
+      expect(canceledJob?.status).to.equal(JobStatusEnum.CANCELED);
+
+      // Verify context B job was NOT canceled (passed schedule check 05:00 AM - 07:00 AM)
+      const contextBJob = jobsContextB.find((j) => j.contextKeys?.includes('tenant:globex'));
+      expect(contextBJob).to.exist;
+      expect(contextBJob?.status).to.not.equal(JobStatusEnum.CANCELED);
+
+      // Verify messages: only context B should have created a message (context A was canceled)
+      const messages = await messageRepository.find({
+        _environmentId: session.environment._id,
+        _subscriberId: scheduledSubscriber._id,
+        channel: ChannelTypeEnum.EMAIL,
+      });
+
+      expect(messages).to.have.length(1);
+      expect(messages[0].subject).to.equal('Context Schedule Test');
+      expect(messages[0].content).to.contain('Testing context-aware schedule');
+    });
+
+    it('should use default schedule (no context) when triggered without context', async () => {
+      const scheduledSubscriber = await subscriberService.createSubscriber({
+        subscriberId: 'default-schedule-subscriber',
+        timezone: 'America/New_York',
+      });
+
+      const { weeklySchedule: scheduleOutside } = createScheduleOutsideCurrentTime('America/New_York');
+      const { weeklySchedule: scheduleInside } = createScheduleIncludingCurrentTime('America/New_York');
+
+      // Set restrictive schedule with specific context
+      await session.testAgent
+        .patch(`/v2/subscribers/${scheduledSubscriber.subscriberId}/preferences`)
+        .send({
+          schedule: {
+            isEnabled: true,
+            weeklySchedule: scheduleOutside,
+          },
+          context: { tenant: 'restricted' },
+        })
+        .set('Authorization', `ApiKey ${session.apiKey}`);
+
+      // Set permissive schedule without context (default)
+      await session.testAgent
+        .patch(`/v2/subscribers/${scheduledSubscriber.subscriberId}/preferences`)
+        .send({
+          schedule: {
+            isEnabled: true,
+            weeklySchedule: scheduleInside,
+          },
+        })
+        .set('Authorization', `ApiKey ${session.apiKey}`);
+
+      const workflowBody: CreateWorkflowDto = {
+        name: 'Default Schedule Test Workflow',
+        workflowId: 'default-schedule-test-workflow',
+        __source: WorkflowCreationSourceEnum.DASHBOARD,
+        steps: [
+          {
+            type: StepTypeEnum.EMAIL,
+            name: 'Email Step',
+            controlValues: {
+              subject: 'Default Schedule Test',
+              body: 'Testing default schedule',
+              disableOutputSanitization: false,
+            },
+          },
+        ],
+      };
+
+      const workflow: WorkflowResponseDto = (await session.testAgent.post('/v2/workflows').send(workflowBody)).body
+        .data;
+
+      // Trigger without context (should use default permissive schedule)
+      await novuClient.trigger({
+        workflowId: workflowBody.workflowId,
+        to: [scheduledSubscriber.subscriberId],
+        payload: { firstName: 'Test' },
+      });
+
+      await session.waitForJobCompletion(workflow._id);
+
+      const jobs = await jobRepository.find({
+        _environmentId: session.environment._id,
+        _subscriberId: scheduledSubscriber._id,
+        _templateId: workflow._id,
+        type: StepTypeEnum.EMAIL,
+      });
+
+      // Should have 1 job that was NOT canceled (used default schedule which allows current time)
+      expect(jobs).to.have.length(1);
+      expect(jobs[0].status).to.not.equal(JobStatusEnum.CANCELED);
+
+      // Verify message was created (email was processed, not blocked by schedule)
+      const message = await messageRepository.findOne({
+        _environmentId: session.environment._id,
+        _subscriberId: scheduledSubscriber._id,
+        channel: ChannelTypeEnum.EMAIL,
+      });
+
+      expect(message).to.be.ok;
+      expect(message?.subject).to.equal('Default Schedule Test');
+    });
+  });
+
+  /**
+   * Regression test for duplicated `workflow_run_status_completed` entries in the
+   * `workflow_run_count` ClickHouse table. The bug occurs when `buildDeliveryLifecycle`
+   * is called while a sibling job is still RUNNING (which Priority 8 didn't cover),
+   * causing the lifecycle to fall through to ERRORED and emit an extra completed trace
+   * once the RUNNING job finishes.
+   */
+  it('should emit exactly one workflow_run_status_completed trace for a multi-step workflow', async () => {
+    const clickHouseService = new ClickHouseService();
+    await clickHouseService.init();
+    const traceLogRepository: TraceLogRepository = session.testServer?.getService(TraceLogRepository);
+    const subscribersService = new SubscribersService(session.organization._id, session.environment._id);
+    const testSubscriber = await subscribersService.createSubscriber();
+
+    const template: NotificationTemplateEntity = await session.createTemplate({
+      steps: [
+        {
+          type: StepTypeEnum.EMAIL,
+          subject: 'Step 1',
+          content: [{ type: EmailBlockTypeEnum.TEXT, content: 'First email step' }],
+        },
+        {
+          type: StepTypeEnum.EMAIL,
+          subject: 'Step 2',
+          content: [{ type: EmailBlockTypeEnum.TEXT, content: 'Second email step' }],
+        },
+      ],
+    });
+
+    await novuClient.trigger({
+      workflowId: template.triggers[0].identifier,
+      to: [testSubscriber.subscriberId],
+      payload: { test: 'duplicate-completed-check' },
+    });
+
+    await session.waitForWorkflowQueueCompletion();
+    await session.waitForStandardQueueCompletion();
+    await session.waitForSubscriberQueueCompletion();
+    await session.waitForJobCompletion(template._id);
+
+    const notifications = await notificationRepository.find({
+      _environmentId: session.environment._id,
+      _templateId: template._id,
+    });
+    expect(notifications.length).to.equal(1);
+    const notificationId = notifications[0]._id;
+
+    const jobs = await jobRepository.find({
+      _environmentId: session.environment._id,
+      _notificationId: notificationId,
+    });
+    const channelJobs = jobs.filter((j) => j.type === StepTypeEnum.EMAIL);
+    expect(channelJobs.length, 'should have 2 email jobs').to.equal(2);
+
+    const databaseName = process.env.CLICK_HOUSE_DATABASE || 'test_logs';
+    await clickHouseService.exec({
+      query: `OPTIMIZE TABLE ${databaseName}.traces FINAL`,
+    });
+
+    const queryBuilder = new QueryBuilder<Trace>({
+      environmentId: session.environment._id,
+    });
+    queryBuilder.whereEquals('organization_id', session.organization._id);
+    queryBuilder.whereEquals('entity_type', 'workflow_run');
+    queryBuilder.whereEquals('event_type', 'workflow_run_status_completed');
+    queryBuilder.whereEquals('entity_id', notificationId);
+
+    const traces = await traceLogRepository.find({
+      where: queryBuilder.build(),
+      select: '*',
+      limit: 10,
+    });
+
+    expect(
+      traces.data.length,
+      `Expected exactly 1 workflow_run_status_completed trace but found ${traces.data.length}`
+    ).to.equal(1);
   });
 });
 

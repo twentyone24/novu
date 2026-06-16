@@ -1,8 +1,16 @@
-import { ChannelTypeEnum, IIntegration, IProviderConfig, PermissionsEnum } from '@novu/shared';
-import { useEffect } from 'react';
+import {
+  ChannelTypeEnum,
+  ChatProviderIdEnum,
+  CredentialsKeyEnum,
+  IIntegration,
+  IProviderConfig,
+  PermissionsEnum,
+  slackConfig,
+} from '@novu/shared';
+import { useEffect, useMemo } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { RiInputField } from 'react-icons/ri';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/primitives/accordion';
 import { Form, FormRoot } from '@/components/primitives/form/form';
 import { Label } from '@/components/primitives/label';
@@ -14,6 +22,8 @@ import { InlineToast } from '../../primitives/inline-toast';
 import { EnvironmentDropdown } from '../../side-navigation/environment-dropdown';
 import { CredentialSection } from './credential-section';
 import { GeneralSettings } from './integration-general-settings';
+import { SlackCredentialsPaste } from './slack-credentials-paste';
+import { useSlackCredentialsPasteFallback } from './use-slack-credentials-paste-fallback';
 import { isDemoIntegration } from './utils/helpers';
 
 type IntegrationFormData = {
@@ -35,7 +45,8 @@ type IntegrationConfigurationProps = {
   isChannelSupportPrimary?: boolean;
   hasOtherProviders?: boolean;
   isReadOnly?: boolean;
-  onFormStateChange?: (formState: { isValid: boolean; errors: Record<string, unknown> }) => void;
+  agentOnboarding?: boolean;
+  onFormStateChange?: (formState: { isValid: boolean; errors: Record<string, unknown>; isDirty: boolean }) => void;
 };
 
 function generateSlug(name: string): string {
@@ -55,9 +66,11 @@ export function IntegrationSettings({
   isChannelSupportPrimary,
   hasOtherProviders,
   isReadOnly,
+  agentOnboarding,
   onFormStateChange,
 }: IntegrationConfigurationProps) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { currentEnvironment, environments } = useEnvironment();
 
   const form = useForm<IntegrationFormData>({
@@ -92,9 +105,10 @@ export function IntegrationSettings({
       onFormStateChange({
         isValid: formState.isValid,
         errors: formState.errors,
+        isDirty: formState.isDirty,
       });
     }
-  }, [formState.isValid, formState.errors, onFormStateChange]);
+  }, [formState.isValid, formState.errors, formState.isDirty, onFormStateChange]);
 
   const name = useWatch({ control, name: 'name' });
   const environmentId = useWatch({ control, name: 'environmentId' });
@@ -106,6 +120,33 @@ export function IntegrationSettings({
   }, [name, mode, setValue]);
 
   const isDemo = integration && isDemoIntegration(integration.providerId);
+  const isAgentOnboarding = agentOnboarding || searchParams.get('agent_onboarding') === 'true';
+  const isSlackOnboarding = isAgentOnboarding && provider.id === ChatProviderIdEnum.Slack;
+  const handleSlackCredentialsPaste = useSlackCredentialsPasteFallback({
+    control,
+    setValue,
+    isEnabled: isSlackOnboarding && !isReadOnly,
+  });
+
+  const providerCredentials = useMemo(() => {
+    let credentials = provider.credentials;
+
+    if (provider.id === ChatProviderIdEnum.Slack) {
+      // For existing integrations (update mode), show HMAC if it is true in credentials
+      if (mode === 'update' && integration?.credentials?.hmac === true) {
+        credentials = provider.credentials;
+      } else {
+        // For new integrations (create mode), use config without HMAC
+        credentials = slackConfig;
+      }
+    }
+
+    if (isAgentOnboarding) {
+      return credentials.filter((credential) => credential.key !== CredentialsKeyEnum.RedirectUrl);
+    }
+
+    return credentials;
+  }, [provider.id, provider.credentials, mode, integration?.credentials, isAgentOnboarding]);
 
   return (
     <Form {...form}>
@@ -134,39 +175,41 @@ export function IntegrationSettings({
             />
           </div>
         </div>
-        <Accordion type="single" collapsible defaultValue="layout" className="p-3">
-          <AccordionItem value="layout">
-            <AccordionTrigger>
-              <div className="flex items-center gap-1 text-xs">
-                <RiInputField className="text-feature size-5" />
-                General Settings
-              </div>
-            </AccordionTrigger>
-            <AccordionContent>
-              <GeneralSettings
-                control={control}
-                mode={mode}
-                isReadOnly={isReadOnly}
-                hidePrimarySelector={!isChannelSupportPrimary}
-                disabledPrimary={!hasOtherProviders && integration?.primary}
-                configurations={provider.configurations}
-                integrationId={integration?._id}
-                isDemo={isDemo}
-                provider={provider}
-                formData={form.getValues()}
-                onAutoConfigureSuccess={(updatedIntegration) => {
-                  // Update form with the new integration data
-                  setValue('configurations', updatedIntegration.configurations as Record<string, string>);
-                  setValue('credentials', updatedIntegration.credentials as Record<string, string>);
-                  setValue('name', updatedIntegration.name);
-                  setValue('identifier', updatedIntegration.identifier);
-                  setValue('active', updatedIntegration.active);
-                  setValue('primary', updatedIntegration.primary ?? false);
-                }}
-              />
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+        {!isAgentOnboarding && (
+          <Accordion type="single" collapsible defaultValue="layout" className="p-3">
+            <AccordionItem value="layout">
+              <AccordionTrigger>
+                <div className="flex items-center gap-1 text-xs">
+                  <RiInputField className="text-feature size-5" />
+                  General Settings
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <GeneralSettings
+                  control={control}
+                  mode={mode}
+                  isReadOnly={isReadOnly}
+                  hidePrimarySelector={!isChannelSupportPrimary}
+                  disabledPrimary={!hasOtherProviders && integration?.primary}
+                  configurations={provider.configurations}
+                  integrationId={integration?._id}
+                  isDemo={isDemo}
+                  provider={provider}
+                  formData={form.getValues()}
+                  onAutoConfigureSuccess={(updatedIntegration) => {
+                    // Update form with the new integration data
+                    setValue('configurations', updatedIntegration.configurations as Record<string, string>);
+                    setValue('credentials', updatedIntegration.credentials as Record<string, string>);
+                    setValue('name', updatedIntegration.name);
+                    setValue('identifier', updatedIntegration.identifier);
+                    setValue('active', updatedIntegration.active);
+                    setValue('primary', updatedIntegration.primary ?? false);
+                  }}
+                />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        )}
 
         {isDemo && (
           <div className="p-3">
@@ -182,7 +225,7 @@ export function IntegrationSettings({
           </div>
         )}
 
-        {!isDemo && (
+        {!isDemo && providerCredentials.length > 0 && (
           <div className="p-3">
             <Protect permission={PermissionsEnum.INTEGRATION_WRITE}>
               <Accordion type="single" collapsible defaultValue="credentials">
@@ -194,15 +237,28 @@ export function IntegrationSettings({
                     </div>
                   </AccordionTrigger>
                   <AccordionContent>
+                    {provider?.id === ChatProviderIdEnum.MsTeams && (
+                      <InlineToast
+                        variant="tip"
+                        className="mb-3"
+                        description="These credentials are only required for Bot App authentication and are not needed for incoming webhook functionality."
+                      />
+                    )}
                     <div className="border-neutral-alpha-200 bg-background text-foreground-600 mx-0 mt-0 flex flex-col gap-2 rounded-lg border p-3">
-                      {provider.credentials.map((credential) => (
-                        <CredentialSection
-                          key={credential.key}
-                          credential={credential}
-                          control={control}
-                          isReadOnly={isReadOnly}
-                        />
-                      ))}
+                      {isSlackOnboarding && (
+                        <SlackCredentialsPaste control={control} setValue={setValue} isReadOnly={isReadOnly} />
+                      )}
+                      <div onPasteCapture={handleSlackCredentialsPaste} className="flex flex-col gap-2">
+                        {providerCredentials.map((credential) => (
+                          <CredentialSection
+                            key={`${credential.key}-${integration?._id || 'no-id'}`}
+                            credential={credential}
+                            control={control}
+                            isReadOnly={isReadOnly}
+                            integrationId={integration?._id}
+                          />
+                        ))}
+                      </div>
                     </div>
                   </AccordionContent>
                 </AccordionItem>
@@ -211,7 +267,10 @@ export function IntegrationSettings({
 
             {/* TODO: This is a temporary solution to show the guide only for in-app channel, 
               we need to replace it with dedicated view per integration channel */}
-            {integration && integration.channel === ChannelTypeEnum.IN_APP && !integration.connected ? (
+            {!isAgentOnboarding &&
+            integration &&
+            integration.channel === ChannelTypeEnum.IN_APP &&
+            !integration.connected ? (
               <InlineToast
                 variant={'tip'}
                 className="mt-3"
@@ -220,6 +279,7 @@ export function IntegrationSettings({
                 onCtaClick={() => navigate(`${ROUTES.INBOX_EMBED}?environmentId=${integration._environmentId}`)}
               />
             ) : (
+              !isAgentOnboarding &&
               provider?.docReference && (
                 <InlineToast
                   variant={'tip'}

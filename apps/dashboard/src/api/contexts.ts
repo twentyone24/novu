@@ -1,19 +1,11 @@
-import type { ContextData, ContextId, ContextType, DirectionEnum, IEnvironment } from '@novu/shared';
-import { getV2 } from './api.client';
-
-export type ContextResponseDto = {
-  id: ContextId;
-  type: ContextType;
-  data: ContextData;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type ListContextsResponse = {
-  data: Array<ContextResponseDto>;
-  next: string | null;
-  previous: string | null;
-};
+import {
+  CreateContextRequestDto,
+  GetContextResponseDto,
+  ListContextsResponseDto,
+  UpdateContextRequestDto,
+} from '@novu/api/models/components';
+import type { ContextId, ContextType, DirectionEnum, IEnvironment } from '@novu/shared';
+import { delV2, getV2, patchV2, postV2 } from './api.client';
 
 export const getContexts = async ({
   environment,
@@ -37,10 +29,9 @@ export const getContexts = async ({
   type?: ContextType;
   id?: ContextId;
   search?: string;
-}): Promise<ListContextsResponse> => {
+}): Promise<ListContextsResponseDto> => {
   const params = new URLSearchParams();
 
-  // Add pagination and ordering parameters
   params.append('limit', limit.toString());
 
   if (after) {
@@ -75,7 +66,7 @@ export const getContexts = async ({
     params.append('search', search);
   }
 
-  const response = await getV2<ListContextsResponse>(`/contexts?${params.toString()}`, {
+  const response = await getV2<ListContextsResponseDto>(`/contexts?${params.toString()}`, {
     environment,
   });
 
@@ -90,10 +81,62 @@ export const getContext = async ({
   environment: IEnvironment;
   type: ContextType;
   id: ContextId;
-}): Promise<ContextResponseDto> => {
-  const response = await getV2<ContextResponseDto>(`/contexts/${type}/${id}`, {
+}): Promise<GetContextResponseDto> => {
+  const { data } = await getV2<{ data: GetContextResponseDto }>(`/contexts/${type}/${id}`, {
     environment,
   });
 
-  return response;
+  return data;
+};
+
+export const createContext = async ({
+  environment,
+  type,
+  id,
+  data,
+}: {
+  environment: IEnvironment;
+  type: ContextType;
+  id: ContextId;
+  data?: CreateContextRequestDto['data'];
+}): Promise<GetContextResponseDto> => {
+  const { data: responseData } = await postV2<{ data: GetContextResponseDto }>(`/contexts`, {
+    environment,
+    body: { type, id, data },
+  });
+
+  return responseData;
+};
+
+export const updateContext = async ({
+  environment,
+  type,
+  id,
+  data,
+}: {
+  environment: IEnvironment;
+  type: ContextType;
+  id: ContextId;
+  data: UpdateContextRequestDto['data'];
+}): Promise<GetContextResponseDto> => {
+  const { data: responseData } = await patchV2<{ data: GetContextResponseDto }>(`/contexts/${type}/${id}`, {
+    environment,
+    body: { data },
+  });
+
+  return responseData;
+};
+
+export const deleteContext = async ({
+  environment,
+  type,
+  id,
+}: {
+  environment: IEnvironment;
+  type: ContextType;
+  id: ContextId;
+}): Promise<void> => {
+  await delV2(`/contexts/${type}/${id}`, {
+    environment,
+  });
 };

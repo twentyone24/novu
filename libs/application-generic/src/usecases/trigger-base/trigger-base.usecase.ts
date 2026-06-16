@@ -1,15 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { NotificationTemplateEntity, SubscriberEntity } from '@novu/dal';
 import {
-  EnvironmentEntity,
-  NotificationTemplateEntity,
-  OrganizationEntity,
-  SubscriberEntity,
-  TopicEntity,
-  UserEntity,
-} from '@novu/dal';
-import {
-  ContextKey,
-  FeatureFlagsKeysEnum,
   ISubscribersDefine,
   ITenantDefine,
   ResourceEnum,
@@ -20,9 +11,9 @@ import {
 } from '@novu/shared';
 import _ from 'lodash';
 
-import { IProcessSubscriberBulkJobDto } from '../../dtos';
+import { IProcessSubscriberBulkJobDto, SubscriberTopicPreference } from '../../dtos';
 import { PinoLogger } from '../../logging';
-import { CacheService, FeatureFlagsService } from '../../services';
+import { CacheService } from '../../services';
 import { buildUsageKey } from '../../services/cache/key-builders';
 import { SubscriberProcessQueueService } from '../../services/queues/subscriber-process-queue.service';
 import { mapSubscribersToJobs } from '../../utils';
@@ -39,9 +30,8 @@ export type BaseTriggerCommand = {
   overrides: TriggerOverrides;
   template: NotificationTemplateEntity;
   actor?: SubscriberEntity | undefined;
-  contextKeys?: ContextKey[];
+  contextKeys: string[];
   tenant: ITenantDefine | null;
-  environmentName: string;
   requestCategory?: TriggerRequestCategoryEnum;
   controls?: StatelessControls;
   bridgeUrl?: string;
@@ -53,20 +43,11 @@ export abstract class TriggerBase {
   constructor(
     protected subscriberProcessQueueService: SubscriberProcessQueueService,
     protected cacheService: CacheService,
-    protected featureFlagsService: FeatureFlagsService,
     protected logger: PinoLogger,
     protected queueChunkSize: number = 100
   ) {}
 
   protected async subscriberProcessQueueAddBulk(jobs: IProcessSubscriberBulkJobDto[]) {
-    const isUsageTrackingInTriggerBaseEnabled = await this.featureFlagsService.getFlag({
-      key: FeatureFlagsKeysEnum.IS_INCR_IF_EXIST_USAGE_ENABLED,
-      defaultValue: false,
-      organization: { _id: jobs[0].data.organizationId } as OrganizationEntity,
-      environment: { _id: jobs[0].data.environmentId } as EnvironmentEntity,
-      user: { _id: jobs[0].data.userId } as UserEntity,
-    });
-
     return await Promise.all(
       _.chunk(jobs, this.queueChunkSize).map(async (chunk: IProcessSubscriberBulkJobDto[]) => {
         try {
@@ -75,18 +56,16 @@ export abstract class TriggerBase {
           this.logger.warn({ err: error }, 'Failed to add jobs to queue');
         }
 
-        if (isUsageTrackingInTriggerBaseEnabled) {
-          try {
-            await this.cacheService.incrIfExistsAtomic(
-              buildUsageKey({
-                _organizationId: jobs[0].data.organizationId,
-                resourceType: ResourceEnum.EVENTS,
-              }),
-              chunk.length
-            );
-          } catch (error) {
-            this.logger.warn({ err: error }, 'Failed to increment usage counter');
-          }
+        try {
+          await this.cacheService.incrIfExistsAtomic(
+            buildUsageKey({
+              _organizationId: jobs[0].data.organizationId,
+              resourceType: ResourceEnum.EVENTS,
+            }),
+            chunk.length
+          );
+        } catch (error) {
+          this.logger.warn({ err: error }, 'Failed to increment usage counter');
         }
       })
     );
@@ -94,7 +73,12 @@ export abstract class TriggerBase {
 
   protected async sendToProcessSubscriberService(
     command: BaseTriggerCommand,
-    subscribers: { subscriberId: string; topics?: Pick<TopicEntity, '_id' | 'key'>[] }[] | ISubscribersDefine[],
+    subscribers:
+      | {
+          subscriberId: string;
+          topics?: Array<SubscriberTopicPreference>;
+        }[]
+      | ISubscribersDefine[],
     subscriberSource: SubscriberSourceEnum
   ) {
     if (subscribers.length === 0) {

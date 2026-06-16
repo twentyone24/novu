@@ -1,4 +1,4 @@
-import { zodResolver } from '@hookform/resolvers/zod';
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import {
   type CreateWorkflowDto,
   DuplicateWorkflowDto,
@@ -31,8 +31,8 @@ interface CreateWorkflowFormProps {
 }
 
 export function CreateWorkflowForm({ onSubmit, template }: CreateWorkflowFormProps) {
-  const form = useForm<z.infer<typeof workflowSchema>>({
-    resolver: zodResolver(workflowSchema),
+  const form = useForm({
+    resolver: standardSchemaResolver(workflowSchema),
     defaultValues: {
       description: template?.description ?? '',
       workflowId: slugify(template?.name ?? ''),
@@ -138,16 +138,12 @@ export function CreateWorkflowForm({ onSubmit, template }: CreateWorkflowFormPro
           )}
         />
 
-        <TranslationToggleSection
+        <FormField
           control={form.control}
-          fieldName="isTranslationEnabled"
-          showManageLink={false}
-          onChange={(checked) => {
-            form.setValue('isTranslationEnabled', checked, {
-              shouldValidate: true,
-              shouldDirty: true,
-            });
-          }}
+          name="isTranslationEnabled"
+          render={({ field }) => (
+            <TranslationToggleSection value={field.value ?? false} showManageLink={false} onChange={field.onChange} />
+          )}
         />
       </FormRoot>
     </Form>

@@ -1,18 +1,32 @@
 import { Injectable } from '@nestjs/common';
-import { EmailControlType, InstrumentUsecase, LayoutControlType } from '@novu/application-generic';
+import {
+  buildContextSchema,
+  buildSubscriberSchema,
+  ControlValueSanitizerService,
+  CreateVariablesObject,
+  CreateVariablesObjectCommand,
+  EmailControlType,
+  GetLayoutCommand,
+  GetLayoutUseCase,
+  InstrumentUsecase,
+  LayoutControlType,
+  PayloadMergerService,
+  PlatformException,
+  PreviewPayloadProcessorService,
+  PreviewStep,
+  PreviewStepCommand,
+  resolveEnvironmentVariables,
+} from '@novu/application-generic';
+import { EnvironmentRepository, EnvironmentVariableRepository, JsonSchemaTypeEnum } from '@novu/dal';
+import { ContextResolved } from '@novu/framework/internal';
 import {
   ChannelTypeEnum,
+  EnvironmentSystemVariables,
   LAYOUT_PREVIEW_EMAIL_STEP,
   LAYOUT_PREVIEW_WORKFLOW_ID,
   ResourceOriginEnum,
 } from '@novu/shared';
-import { PreviewStep, PreviewStepCommand } from '../../../bridge/usecases/preview-step';
-import { ControlValueSanitizerService } from '../../../shared/services/control-value-sanitizer.service';
-import { CreateVariablesObject, CreateVariablesObjectCommand } from '../../../shared/usecases/create-variables-object';
-import { PayloadMergerService } from '../../../workflows-v2/usecases/preview/services/payload-merger.service';
-import { PreviewPayloadProcessorService } from '../../../workflows-v2/usecases/preview/services/preview-payload-processor.service';
 import { GenerateLayoutPreviewResponseDto } from '../../dtos/generate-layout-preview-response.dto';
-import { GetLayoutCommand, GetLayoutUseCase } from '../get-layout';
 import { PreviewLayoutCommand } from './preview-layout.command';
 import { enhanceBodyForPreview } from './preview-utils';
 
@@ -24,7 +38,9 @@ export class PreviewLayoutUsecase {
     private controlValueSanitizer: ControlValueSanitizerService,
     private payloadProcessor: PreviewPayloadProcessorService,
     private payloadMerger: PayloadMergerService,
-    private previewStepUsecase: PreviewStep
+    private previewStepUsecase: PreviewStep,
+    private readonly environmentVariableRepository: EnvironmentVariableRepository,
+    private readonly environmentRepository: EnvironmentRepository
   ) {}
 
   @InstrumentUsecase()
@@ -76,10 +92,28 @@ export class PreviewLayoutUsecase {
       const editorType = email?.editorType ?? 'block';
       const body = email?.body ?? (editorType === 'block' ? '{}' : '');
 
+      const [rawEnvVars, environmentEntity] = await Promise.all([
+        this.environmentVariableRepository.findByEnvironment(command.user.organizationId, command.user.environmentId),
+        this.environmentRepository.findByIdAndOrganization(command.user.environmentId, command.user.organizationId),
+      ]);
+
+      if (!environmentEntity) throw new PlatformException('EnvironmentEntity not found');
+
+      const environmentSystemVars: EnvironmentSystemVariables = {
+        name: environmentEntity.name,
+        type: environmentEntity.type,
+      };
+
+      const envVars = {
+        ...resolveEnvironmentVariables(rawEnvVars),
+        ...environmentSystemVars,
+      };
+
       const executeOutput = await this.previewStepUsecase.execute(
         PreviewStepCommand.create({
           payload: (cleanedPayloadExample.payload ?? {}) as Record<string, unknown>,
           subscriber: cleanedPayloadExample.subscriber ?? {},
+          context: (cleanedPayloadExample.context ?? {}) as ContextResolved,
           // mapping the email layout controls to the email step controls
           controls: {
             subject: 'email-layout-preview',
@@ -92,11 +126,22 @@ export class PreviewLayoutUsecase {
           userId: command.user._id,
           workflowId: LAYOUT_PREVIEW_WORKFLOW_ID,
           workflowOrigin: ResourceOriginEnum.NOVU_CLOUD,
+          layoutId: layout.layoutId,
           state: [],
+          env: envVars,
         })
       );
 
       const { body: previewBody } = executeOutput.outputs as any;
+
+      // Generate schema from the preview payload example
+      const schema = {
+        type: JsonSchemaTypeEnum.OBJECT,
+        properties: {
+          subscriber: buildSubscriberSchema(payloadExample.subscriber),
+          context: buildContextSchema(payloadExample.context),
+        },
+      };
 
       return {
         result: {
@@ -104,6 +149,7 @@ export class PreviewLayoutUsecase {
           type: ChannelTypeEnum.EMAIL,
         },
         previewPayloadExample: payloadExample,
+        schema,
       };
     } catch (error) {
       /*
@@ -115,6 +161,7 @@ export class PreviewLayoutUsecase {
           type: ChannelTypeEnum.EMAIL,
         },
         previewPayloadExample: {},
+        schema: null,
       };
     }
   }

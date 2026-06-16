@@ -4,6 +4,7 @@ import {
   ClientSession,
   FilterQuery,
   Model,
+  mongo,
   ProjectionType,
   QueryOptions,
   QueryWithHelpers,
@@ -13,6 +14,13 @@ import {
 } from 'mongoose';
 import { DalException } from '../shared';
 
+/**
+ * @deprecated Use BaseRepositoryV2 instead. BaseRepositoryV2 enforces required
+ * field selection via a mandatory `select` parameter and provides auto-inferred
+ * return types based on the selected fields (Pick<Entity, Keys>).
+ * All existing repositories remain on this class; only new repositories should
+ * extend BaseRepositoryV2.
+ */
 export class BaseRepository<T_DBModel, T_MappedEntity, T_Enforcement> {
   public _model: Model<T_DBModel>;
 
@@ -44,10 +52,72 @@ export class BaseRepository<T_DBModel, T_MappedEntity, T_Enforcement> {
     return new Types.ObjectId(value);
   }
 
-  async count(query: FilterQuery<T_DBModel> & T_Enforcement, limit?: number): Promise<number> {
+  /**
+   * Builds a MongoDB query for exact context key matching in READ operations.
+   * Uses $all and $size operators for order-independent array matching.
+   */
+  public buildContextExactMatchQuery(
+    contextKeys?: string[],
+    options?: {
+      enabled?: boolean;
+      strictEmpty?: boolean;
+    }
+  ): Record<string, unknown> {
+    const { enabled = true, strictEmpty = false } = options ?? {};
+
+    if (!enabled) {
+      return {};
+    }
+
+    // Match records with no context (default/empty context)
+    if (contextKeys === undefined || contextKeys.length === 0) {
+      // For collections created after context was introduced, we always write contextKeys: []
+      // For older collections, the field may not exist (treated as default context)
+      if (strictEmpty) {
+        return { contextKeys: [] };
+      }
+
+      // Match both missing field (legacy) and empty array (current)
+      return {
+        $or: [{ contextKeys: { $exists: false } }, { contextKeys: [] }],
+      };
+    }
+
+    // Sort defensively to ensure consistent matching regardless of input order
+    // This protects against unsorted input and enables future query optimization
+    const sortedKeys = [...contextKeys].sort();
+
+    // Use $all + $size for order-independent array matching
+    // After data migration to guarantee sorted storage, this can be simplified to:
+    // return { contextKeys: sortedKeys };  // Direct equality (faster, uses index)
+    return {
+      contextKeys: { $all: sortedKeys, $size: sortedKeys.length },
+    };
+  }
+
+  async count(
+    query: FilterQuery<T_DBModel> & T_Enforcement,
+    limit?: number,
+    readPreference?: 'secondaryPreferred' | 'primary'
+  ): Promise<number> {
     return this.MongooseModel.countDocuments(query, {
       limit,
+      readPreference: readPreference || 'primary',
     });
+  }
+
+  private async getCountWithLimit(
+    query: FilterQuery<T_DBModel> & T_Enforcement,
+    maxLimit: number = 50001
+  ): Promise<{ count: number; hasMore: boolean }> {
+    const result = await this.count(query, maxLimit, 'secondaryPreferred');
+    const count = result;
+    const hasMore = count === maxLimit;
+
+    return {
+      count: hasMore ? maxLimit - 1 : count,
+      hasMore,
+    };
   }
 
   async estimatedDocumentCount(): Promise<number> {
@@ -65,16 +135,23 @@ export class BaseRepository<T_DBModel, T_MappedEntity, T_Enforcement> {
       readPreference?: 'secondaryPreferred' | 'primary';
       query?: QueryOptions<T_DBModel>;
       session?: ClientSession | null;
+      enhanceQuery?: <TQuery extends QueryWithHelpers<T_DBModel | null, T_DBModel, {}, T_DBModel, 'findOne'>>(
+        queryBuilder: TQuery
+      ) => QueryWithHelpers<T_DBModel | null, T_DBModel, {}, T_DBModel, 'findOne'>;
     } = {}
   ): Promise<T_MappedEntity | null> {
     const { session, ...queryOptions } = options;
 
-    const queryBuilder = this.MongooseModel.findOne(query, select, queryOptions.query).read(
+    let queryBuilder = this.MongooseModel.findOne(query, select, queryOptions.query).read(
       queryOptions.readPreference || 'primary'
     );
 
     if (session) {
       queryBuilder.session(session);
+    }
+
+    if (options.enhanceQuery) {
+      queryBuilder = options.enhanceQuery(queryBuilder) as typeof queryBuilder;
     }
 
     const data = await queryBuilder;
@@ -323,19 +400,18 @@ export class BaseRepository<T_DBModel, T_MappedEntity, T_Enforcement> {
   async update(
     query: FilterQuery<T_DBModel> & T_Enforcement,
     updateBody: UpdateQuery<T_DBModel>,
-    options: QueryOptions<T_DBModel> & {
+    options: Omit<mongo.UpdateOptions, 'session'> & {
+      timestamps?: boolean;
+      strict?: boolean | 'throw';
       session?: ClientSession | null;
-      writeConcern?: { w: number | 'majority' };
     } = {}
   ): Promise<{
     matched: number;
     modified: number;
   }> {
-    const { session, ...updateOptions } = options;
-
+    const { session, ...restOptions } = options;
     const saved = await this.MongooseModel.updateMany(query, updateBody, {
-      multi: true,
-      ...updateOptions,
+      ...restOptions,
       ...(session && { session }),
     });
 
@@ -402,9 +478,10 @@ export class BaseRepository<T_DBModel, T_MappedEntity, T_Enforcement> {
       return await (await this._model.db.startSession()).withTransaction(fn);
     } catch (error) {
       // Check if the error is related to replica set requirement
+      const errorMessage = error?.message?.toLowerCase() || '';
       if (
-        error.message?.includes('replica set') ||
-        error.message?.includes('transaction') ||
+        errorMessage.includes('replica set') ||
+        errorMessage.includes('transaction') ||
         error.codeName === 'IllegalOperation'
       ) {
         // MongoDB is not running in replica set mode, execute without transaction
@@ -435,7 +512,13 @@ export class BaseRepository<T_DBModel, T_MappedEntity, T_Enforcement> {
     paginateField: string;
     enhanceQuery?: (query: QueryWithHelpers<Array<T_DBModel>, T_DBModel>) => any;
     includeCursor?: boolean;
-  }): Promise<{ data: T_MappedEntity[]; next: string | null; previous: string | null }> {
+  }): Promise<{
+    data: T_MappedEntity[];
+    next: string | null;
+    previous: string | null;
+    totalCount: number;
+    totalCountCapped: boolean;
+  }> {
     if (before && after) {
       throw new DalException('Cannot specify both "before" and "after" cursors at the same time.');
     }
@@ -498,8 +581,12 @@ export class BaseRepository<T_DBModel, T_MappedEntity, T_Enforcement> {
       builder = enhanceQuery(builder);
     }
 
-    const rawResults = await builder.exec();
+    // Run find query and count aggregation in parallel
+    const [rawResults, countResult] = await Promise.all([builder.exec(), this.getCountWithLimit(query, 50001)]);
+
     const hasExtraItem = rawResults.length > limit;
+    const totalCount = countResult.count;
+    const hasMore = countResult.hasMore;
 
     let startIndex = 0;
     let endIndex = limit;
@@ -523,6 +610,8 @@ export class BaseRepository<T_DBModel, T_MappedEntity, T_Enforcement> {
         data: [],
         next: null,
         previous: null,
+        totalCount: totalCount,
+        totalCountCapped: hasMore,
       };
     }
 
@@ -594,6 +683,8 @@ export class BaseRepository<T_DBModel, T_MappedEntity, T_Enforcement> {
       data: this.mapEntities(pageResults),
       next: nextCursor,
       previous: prevCursor,
+      totalCount: totalCount,
+      totalCountCapped: hasMore,
     };
   }
 

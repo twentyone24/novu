@@ -1,5 +1,5 @@
 import { StepCreateDto, StepTypeEnum, WorkflowCreationSourceEnum } from '@novu/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { IWorkflowSuggestion } from '@/components/template-store/types';
 import { extractApiItems } from '@/utils/api-response-normalizer';
 
@@ -22,6 +22,7 @@ const typeMap: Record<string, StepTypeEnum> = {
   delay: StepTypeEnum.DELAY,
   digest: StepTypeEnum.DIGEST,
   custom: StepTypeEnum.CUSTOM,
+  http_request: StepTypeEnum.HTTP_REQUEST,
 };
 
 function normalizeStepType(input: unknown): StepTypeEnum {
@@ -270,7 +271,7 @@ export function useTemplateStore() {
     };
   }, []);
 
-  const availableTags = extractUniqueTags(suggestions);
+  const availableTags = useMemo(() => extractUniqueTags(suggestions), [suggestions]);
 
   return {
     suggestions,

@@ -14,6 +14,8 @@ export type ListSubscribersResponse = {
   data: Array<ISubscriberResponseDto>;
   next: string | null;
   previous: string | null;
+  totalCount: number;
+  totalCountCapped: boolean;
 };
 
 export const getSubscribers = async ({
@@ -68,7 +70,7 @@ export const deleteSubscriber = async ({
   environment: IEnvironment;
   subscriberId: string;
 }) => {
-  const response = await delV2<RemoveSubscriberResponseDto>(`/subscribers/${subscriberId}`, {
+  const response = await delV2<RemoveSubscriberResponseDto>(`/subscribers/${encodeURIComponent(subscriberId)}`, {
     environment,
   });
   return response;
@@ -81,7 +83,7 @@ export const getSubscriber = async ({
   environment: IEnvironment;
   subscriberId: string;
 }) => {
-  const { data } = await getV2<{ data: SubscriberResponseDto }>(`/subscribers/${subscriberId}`, {
+  const { data } = await getV2<{ data: SubscriberResponseDto }>(`/subscribers/${encodeURIComponent(subscriberId)}`, {
     environment,
   });
 
@@ -97,7 +99,7 @@ export const patchSubscriber = async ({
   subscriberId: string;
   subscriber: Partial<PatchSubscriberRequestDto>;
 }) => {
-  const { data } = await patchV2<{ data: SubscriberResponseDto }>(`/subscribers/${subscriberId}`, {
+  const { data } = await patchV2<{ data: SubscriberResponseDto }>(`/subscribers/${encodeURIComponent(subscriberId)}`, {
     environment,
     body: subscriber,
   });
@@ -108,11 +110,26 @@ export const patchSubscriber = async ({
 export const getSubscriberPreferences = async ({
   environment,
   subscriberId,
+  contextKeys,
 }: {
   environment: IEnvironment;
   subscriberId: string;
+  contextKeys?: string[];
 }) => {
-  const { data } = await getV2<{ data: GetSubscriberPreferencesDto }>(`/subscribers/${subscriberId}/preferences`, {
+  const params = new URLSearchParams();
+
+  if (contextKeys !== undefined) {
+    if (contextKeys.length === 0) {
+      params.append('contextKeys', '');
+    } else {
+      for (const key of contextKeys) {
+        params.append('contextKeys', key);
+      }
+    }
+  }
+
+  const url = `/subscribers/${encodeURIComponent(subscriberId)}/preferences${params.toString() ? `?${params}` : ''}`;
+  const { data } = await getV2<{ data: GetSubscriberPreferencesDto }>(url, {
     environment,
   });
 
@@ -128,10 +145,13 @@ export const patchSubscriberPreferences = async ({
   subscriberId: string;
   preferences: Partial<PatchSubscriberPreferencesDto>;
 }) => {
-  const { data } = await patchV2<{ data: GetSubscriberPreferencesDto }>(`/subscribers/${subscriberId}/preferences`, {
-    environment,
-    body: preferences,
-  });
+  const { data } = await patchV2<{ data: GetSubscriberPreferencesDto }>(
+    `/subscribers/${encodeURIComponent(subscriberId)}/preferences`,
+    {
+      environment,
+      body: preferences,
+    }
+  );
 
   return data;
 };
@@ -164,6 +184,7 @@ export const getSubscriberSubscriptions = async ({
   orderBy,
   key,
   includeCursor,
+  contextKeys,
 }: {
   environment: IEnvironment;
   subscriberId: string;
@@ -174,6 +195,7 @@ export const getSubscriberSubscriptions = async ({
   orderBy?: string;
   key?: string;
   includeCursor?: boolean;
+  contextKeys?: string[];
 }) => {
   const params = new URLSearchParams({
     limit: limit.toString(),
@@ -185,9 +207,18 @@ export const getSubscriberSubscriptions = async ({
     ...(includeCursor && { includeCursor: includeCursor.toString() }),
   });
 
-  const response = await getV2<ListTopicSubscriptionsResponse>(`/subscribers/${subscriberId}/subscriptions?${params}`, {
-    environment,
-  });
+  if (contextKeys?.length) {
+    for (const contextKey of contextKeys) {
+      params.append('contextKeys', contextKey);
+    }
+  }
+
+  const response = await getV2<ListTopicSubscriptionsResponse>(
+    `/subscribers/${encodeURIComponent(subscriberId)}/subscriptions?${params}`,
+    {
+      environment,
+    }
+  );
 
   return response;
 };

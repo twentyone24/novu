@@ -1,8 +1,17 @@
+/** biome-ignore-all lint/correctness/useUniqueElementIds: expected */
 import { motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
-import { CursorPagination } from '@/components/cursor-pagination';
 import { ResizablePanel, ResizablePanelGroup } from '@/components/primitives/resizable';
-import { Table, TableBody, TableHead, TableHeader, TableRow } from '@/components/primitives/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/primitives/table';
+import { TablePaginationFooter } from '@/components/primitives/table-pagination-footer';
 import { UpdatedAgo } from '@/components/updated-ago';
 import { useFetchRequestLogs } from '@/hooks/use-fetch-request-logs';
 import { useLogsUrlState } from '@/hooks/use-logs-url-state';
@@ -25,8 +34,8 @@ export function RequestsTable({ onLogClick }: RequestsTableProps) {
     handleLogSelect,
     handleNext,
     handlePrevious,
-    handleFirst,
     handleFiltersChange,
+    handlePageSizeChange,
     clearFilters,
     hasActiveFilters,
     currentPage,
@@ -104,10 +113,10 @@ export function RequestsTable({ onLogClick }: RequestsTableProps) {
       </div>
 
       <div className="relative flex h-full min-h-full flex-1 pt-2.5">
-        <ResizablePanelGroup direction="horizontal" className="gap-2">
-          <ResizablePanel defaultSize={50} minSize={50}>
-            <div className="flex h-full flex-col">
-              <div className="flex-1">
+        <ResizablePanelGroup orientation="horizontal" className="gap-2" autoSaveId="logs-table-panel-group">
+          <ResizablePanel defaultSize="50%" minSize="50%" id="logs-table-panel">
+            <div className="flex h-full flex-col overflow-hidden">
+              <div className="flex-1 overflow-auto">
                 <Table isLoading={isLoading} loadingRow={<LogsTableSkeletonRow />} loadingRowsCount={8}>
                   <TableHeader>
                     <TableRow>
@@ -128,16 +137,27 @@ export function RequestsTable({ onLogClick }: RequestsTableProps) {
                       );
                     })}
                   </TableBody>
+                  {(paginationState.hasNext || paginationState.hasPrevious || logsData.length > 0) && (
+                    <TableFooter>
+                      <TableRow>
+                        <TableCell colSpan={2} className="p-0">
+                          <TablePaginationFooter
+                            pageSize={limit}
+                            currentPageItemsCount={logsData.length}
+                            onPreviousPage={handlePrevious}
+                            onNextPage={handleNext}
+                            onPageSizeChange={handlePageSizeChange}
+                            hasPreviousPage={paginationState.hasPrevious}
+                            hasNextPage={paginationState.hasNext}
+                            itemName="requests"
+                            totalCount={totalCount}
+                            pageSizeOptions={[10, 20, 50]}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    </TableFooter>
+                  )}
                 </Table>
-                {(paginationState.hasNext || paginationState.hasPrevious) && (
-                  <CursorPagination
-                    hasNext={paginationState.hasNext}
-                    hasPrevious={paginationState.hasPrevious}
-                    onNext={handleNext}
-                    onPrevious={handlePrevious}
-                    onFirst={handleFirst}
-                  />
-                )}
               </div>
 
               {!isLoading && logsData.length === 0 && hasActiveFilters && (
@@ -156,7 +176,7 @@ export function RequestsTable({ onLogClick }: RequestsTableProps) {
             </div>
           </ResizablePanel>
 
-          <ResizablePanel defaultSize={50} minSize={35} maxSize={50}>
+          <ResizablePanel defaultSize="50%" minSize="35%" maxSize="50%" id="logs-detail-panel">
             <motion.div
               key={selectedLogId || 'empty'}
               initial={{ opacity: 0 }}

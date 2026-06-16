@@ -142,7 +142,7 @@ export const nodemailerConfig: IConfigCredential[] = [
   {
     key: CredentialsKeyEnum.Secure,
     displayName: 'Secure',
-    type: 'boolean',
+    type: 'switch',
     required: false,
   },
   {
@@ -200,6 +200,18 @@ export const sendgridConfig: IConfigCredential[] = [
     displayName: 'API Key',
     type: 'string',
     required: true,
+  },
+  {
+    key: CredentialsKeyEnum.Region,
+    displayName: 'Region',
+    description: 'Select EU if your SendGrid account is hosted in the EU data center',
+    type: 'dropdown',
+    required: false,
+    value: 'global',
+    dropdown: [
+      { name: 'Global (US)', value: 'global' },
+      { name: 'EU', value: 'eu' },
+    ],
   },
   {
     key: CredentialsKeyEnum.IpPoolName,
@@ -481,10 +493,10 @@ export const messagebirdConfig: IConfigCredential[] = [
   ...smsConfigBase,
 ];
 
-export const slackConfig: IConfigCredential[] = [
+export const slackConfigLegacy: IConfigCredential[] = [
   {
     key: CredentialsKeyEnum.ApplicationId,
-    displayName: 'Application Id',
+    displayName: 'App ID',
     type: 'string',
     required: true,
   },
@@ -501,6 +513,13 @@ export const slackConfig: IConfigCredential[] = [
     required: true,
   },
   {
+    key: CredentialsKeyEnum.SigningSecret,
+    displayName: 'Signing Secret',
+    description: 'Slack app Signing Secret, used for verifying inbound webhook requests',
+    type: 'string',
+    required: true,
+  },
+  {
     key: CredentialsKeyEnum.RedirectUrl,
     displayName: 'Redirect URL',
     description: 'Redirect after Slack OAuth flow finished (default behaviour will close the tab)',
@@ -511,6 +530,72 @@ export const slackConfig: IConfigCredential[] = [
     key: CredentialsKeyEnum.Hmac,
     displayName: 'HMAC',
     type: 'switch',
+    required: false,
+  },
+];
+
+export const slackConfig: IConfigCredential[] = [
+  {
+    key: CredentialsKeyEnum.ApplicationId,
+    displayName: 'App ID',
+    type: 'string',
+    required: true,
+  },
+  {
+    key: CredentialsKeyEnum.ClientId,
+    displayName: 'Client ID',
+    type: 'string',
+    required: true,
+  },
+  {
+    key: CredentialsKeyEnum.SecretKey,
+    displayName: 'Client Secret',
+    type: 'string',
+    required: true,
+  },
+  {
+    key: CredentialsKeyEnum.SigningSecret,
+    displayName: 'Signing Secret',
+    description: 'Slack app Signing Secret, used for verifying inbound webhook requests',
+    type: 'string',
+    required: true,
+  },
+  {
+    key: CredentialsKeyEnum.RedirectUrl,
+    displayName: 'Redirect URL',
+    description: 'Redirect after Slack OAuth flow finished (default behaviour will close the tab)',
+    type: 'string',
+    required: false,
+  },
+];
+
+export const msTeamsConfig: IConfigCredential[] = [
+  {
+    key: CredentialsKeyEnum.ClientId,
+    displayName: 'Microsoft App ID',
+    description: 'From Azure Bot resource → Configuration, or App Registration → Overview (Application client ID)',
+    type: 'string',
+    required: false,
+  },
+  {
+    key: CredentialsKeyEnum.SecretKey,
+    displayName: 'Client Secret',
+    description: 'Secret value from App Registration → Certificates & secrets → New client secret',
+    type: 'string',
+    required: false,
+  },
+  {
+    key: CredentialsKeyEnum.TenantId,
+    displayName: 'Directory (tenant) ID',
+    description: 'From App Registration → Overview (Directory tenant ID)',
+    type: 'string',
+    required: false,
+  },
+  {
+    key: CredentialsKeyEnum.RedirectUrl,
+    displayName: 'Redirect URL',
+    description: 'Redirect after Teams OAuth flow finished (default behaviour will close the tab)',
+    type: 'string',
     required: false,
   },
 ];
@@ -1205,6 +1290,21 @@ export const whatsAppBusinessConfig: IConfigCredential[] = [
     type: 'string',
     required: true,
   },
+  {
+    key: CredentialsKeyEnum.SecretKey,
+    displayName: 'App Secret',
+    description:
+      'Found under App Settings > Basic in your Meta app dashboard — used to verify inbound webhook signatures',
+    type: 'string',
+    required: false,
+  },
+  {
+    key: CredentialsKeyEnum.Token,
+    displayName: 'Verify Token',
+    description: 'A secret string you define — must match the Verify Token entered in your Meta webhook configuration',
+    type: 'string',
+    required: false,
+  },
 ];
 
 export const mobishastraConfig: IConfigCredential[] = [
@@ -1264,11 +1364,83 @@ export const unifonicConfig: IConfigCredential[] = [
   },
   ...smsConfigBase,
 ];
+
 export const smsmodeProviderConfig: IConfigCredential[] = [
   {
     key: CredentialsKeyEnum.ApiKey,
     displayName: 'API Key',
     description: 'API key provided by smsmode',
+    type: 'string',
+    required: true,
+  },
+  ...smsConfigBase,
+];
+
+export const appIOConfig: IConfigCredential[] = [
+  {
+    key: CredentialsKeyEnum.AppIOBaseUrl,
+    displayName: 'Base URL',
+    description: 'Base URL of the App IO API (e.g., https://api.io.italia.it/api/v1)',
+    type: 'text',
+    required: true,
+  },
+  ...pushConfigBase,
+];
+
+export const sinchConfig: IConfigCredential[] = [
+  {
+    key: CredentialsKeyEnum.ServicePlanId,
+    displayName: 'Service Plan ID',
+    description: 'Your Sinch Service Plan ID',
+    type: 'string',
+    required: true,
+  },
+  {
+    key: CredentialsKeyEnum.ApiToken,
+    displayName: 'API Token',
+    type: 'string',
+    required: true,
+  },
+  {
+    key: CredentialsKeyEnum.Region,
+    displayName: 'Region',
+    description: 'Select your Sinch region',
+    type: 'dropdown',
+    required: true,
+    value: 'eu',
+    dropdown: [
+      { name: 'EU (Ireland, Sweden)', value: 'eu' },
+      { name: 'US', value: 'us' },
+      { name: 'Australia', value: 'au' },
+      { name: 'Brazil', value: 'br' },
+      { name: 'Canada', value: 'ca' },
+    ],
+  },
+  ...smsConfigBase,
+];
+
+export const ISendProProviderConfig: IConfigCredential[] = [
+  {
+    key: CredentialsKeyEnum.ApiKey,
+    displayName: 'API Key',
+    description: 'This is API key for example provider',
+    type: 'text',
+    required: true,
+  },
+  {
+    key: CredentialsKeyEnum.From,
+    displayName: 'Sender',
+    description: 'The sender of sms',
+    type: 'text',
+    required: false,
+  },
+];
+
+export const cmTelecomConfig: IConfigCredential[] = [
+  {
+    key: CredentialsKeyEnum.ApiToken,
+    displayName: 'Product Token',
+    description: 'Your CM.com product token',
     type: 'string',
     required: true,
   },

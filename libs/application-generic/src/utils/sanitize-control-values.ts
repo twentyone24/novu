@@ -1,9 +1,12 @@
-import { StepTypeEnum, TimeUnitEnum } from '@novu/shared';
+import { StepTypeEnum } from '@novu/shared';
 import { isEmpty } from 'lodash';
 import { PinoLogger } from '../logging';
 import {
   ChatControlType,
   DelayControlType,
+  DelayDynamicControlType,
+  DelayRegularControlType,
+  DelayTimedControlType,
   DigestControlSchemaType,
   DigestRegularControlType,
   DigestTimedControlType,
@@ -22,14 +25,17 @@ function sanitizeEmptyInput<T_Type>(input: T_Type, defaultValue: T_Type = undefi
 }
 
 export function sanitizeRedirect(redirect: InAppRedirectType | undefined) {
-  // TODO: There is a bug here, if the redirect doesn't contain both a url and a target it is removed from the new controlValues
-  if (!redirect?.url || redirect.url.length === 0 || !redirect?.target) {
+  if (!redirect?.url || redirect.url.length === 0) {
     return undefined;
   }
 
+  const url = redirect.url as string;
+  const isRelativeUrl = url.startsWith('/');
+  const defaultTarget = isRelativeUrl ? '_self' : '_blank';
+
   return {
-    url: redirect.url as string,
-    target: redirect.target as '_self' | '_blank' | '_parent' | '_top' | '_unfencedTop',
+    url,
+    target: (redirect.target ?? defaultTarget) as '_self' | '_blank' | '_parent' | '_top' | '_unfencedTop',
   };
 }
 
@@ -80,11 +86,13 @@ function sanitizeEmail(controlValues: EmailControlType) {
   });
 
   const emailControls: EmailControlType = {
+    editorType: controlValues.editorType,
     subject: sanitizeEmptyInput(controlValues.subject, ' '),
     body: sanitizeEmptyInput(controlValues.body, EMPTY_TIP_TAP),
     skip: controlValues.skip,
     disableOutputSanitization: controlValues.disableOutputSanitization,
     layoutId: controlValues.layoutId,
+    from: controlValues.from,
   };
 
   return filterNullishValues(emailControls);
@@ -121,6 +129,7 @@ function sanitizeChat(controlValues: ChatControlType) {
 function sanitizeDigest(controlValues: DigestControlSchemaType) {
   if (isTimedDigestControl(controlValues)) {
     const mappedValues: DigestTimedControlType = {
+      type: controlValues.type,
       cron: controlValues.cron,
       digestKey: controlValues.digestKey,
       skip: controlValues.skip,
@@ -133,6 +142,7 @@ function sanitizeDigest(controlValues: DigestControlSchemaType) {
   if (isRegularDigestControl(controlValues)) {
     const lookBackAmount = (controlValues.lookBackWindow as LookBackWindowType)?.amount;
     const mappedValues: DigestRegularControlType = {
+      type: controlValues.type,
       // Cast to trigger Ajv validation errors - possible undefined
       ...(parseAmount(controlValues.amount) as { amount?: number }),
       unit: controlValues.unit,
@@ -172,16 +182,42 @@ function sanitizeDigest(controlValues: DigestControlSchemaType) {
 }
 
 function sanitizeDelay(controlValues: DelayControlType) {
-  const mappedValues: DelayControlType = {
-    // Cast to trigger Ajv validation errors - possible undefined
-    ...(parseAmount(controlValues.amount) as { amount?: number }),
-    type: controlValues.type,
-    unit: controlValues.unit,
-    skip: controlValues.skip,
-    extendToSchedule: controlValues.extendToSchedule,
-  };
+  if (isTimedDelayControl(controlValues)) {
+    const mappedValues: DelayTimedControlType = {
+      type: controlValues.type,
+      cron: controlValues.cron,
+      skip: controlValues.skip,
+      extendToSchedule: controlValues.extendToSchedule,
+    };
 
-  return filterNullishValues(mappedValues);
+    return filterNullishValues(mappedValues);
+  }
+
+  if (isDynamicDelayControl(controlValues)) {
+    const mappedValues: DelayDynamicControlType = {
+      type: controlValues.type,
+      dynamicKey: controlValues.dynamicKey,
+      skip: controlValues.skip,
+      extendToSchedule: controlValues.extendToSchedule,
+    };
+
+    return filterNullishValues(mappedValues);
+  }
+
+  if (isRegularDelayControl(controlValues)) {
+    const mappedValues: DelayRegularControlType = {
+      type: controlValues.type,
+      // Cast to trigger Ajv validation errors - possible undefined
+      ...(parseAmount(controlValues.amount) as { amount?: number }),
+      unit: controlValues.unit,
+      skip: controlValues.skip,
+      extendToSchedule: controlValues.extendToSchedule,
+    };
+
+    return filterNullishValues(mappedValues);
+  }
+
+  return filterNullishValues(controlValues);
 }
 
 function sanitizeLayout(controlValues: LayoutControlType) {
@@ -209,7 +245,26 @@ function parseAmount(amount?: unknown) {
 
 function filterNullishValues<T extends Record<string, unknown>>(obj: T): T {
   if (typeof obj === 'object' && obj !== null) {
-    return Object.fromEntries(Object.entries(obj).filter(([_, value]) => value !== null && value !== undefined)) as T;
+    if (Array.isArray(obj)) {
+      return obj as T;
+    }
+
+    const result = {} as T;
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== null && value !== undefined) {
+        if (Array.isArray(value)) {
+          result[key as keyof T] = value.map((item) =>
+            typeof item === 'object' && item !== null ? filterNullishValues(item as Record<string, unknown>) : item
+          ) as T[keyof T];
+        } else if (typeof value === 'object') {
+          result[key as keyof T] = filterNullishValues(value as Record<string, unknown>) as T[keyof T];
+        } else {
+          result[key as keyof T] = value as T[keyof T];
+        }
+      }
+    }
+
+    return result;
   }
 
   return obj;
@@ -295,4 +350,16 @@ function isTimedDigestControl(controlValues: unknown): controlValues is DigestTi
 
 function isRegularDigestControl(controlValues: unknown): controlValues is DigestRegularControlType {
   return !isTimedDigestControl(controlValues);
+}
+
+function isTimedDelayControl(controlValues: unknown): controlValues is DelayTimedControlType {
+  return !isEmpty((controlValues as DelayTimedControlType)?.cron);
+}
+
+function isDynamicDelayControl(controlValues: unknown): controlValues is DelayDynamicControlType {
+  return !isEmpty((controlValues as DelayDynamicControlType)?.dynamicKey);
+}
+
+function isRegularDelayControl(controlValues: unknown): controlValues is DelayRegularControlType {
+  return !isTimedDelayControl(controlValues) && !isDynamicDelayControl(controlValues);
 }

@@ -76,7 +76,9 @@ export const TestWorkflowActivityDrawer = forwardRef<HTMLDivElement, TestWorkflo
     return (
       <Sheet open={isOpen} onOpenChange={onOpenChange}>
         <SheetContent ref={forwardedRef} className="w-[490px]">
-          <SheetTitle className="text-label-sm text-text-strong border-b border-neutral-200 p-3">Event Logs</SheetTitle>
+          <SheetTitle className="text-label-sm text-text-strong border-b border-neutral-200 p-3">
+            Workflow run
+          </SheetTitle>
 
           <div className="flex h-full max-h-full flex-1 flex-col overflow-auto">
             {localTransactionId ? (
@@ -92,7 +94,7 @@ export const TestWorkflowActivityDrawer = forwardRef<HTMLDivElement, TestWorkflo
                       <ActivityLogs activity={activity} onActivitySelect={setParentActivityId} />
                     </React.Fragment>
                   )}
-                  {workflow?.lastTriggeredAt && !isPending && !error && (
+                  {!workflow?.lastTriggeredAt && !isPending && !error && (
                     <div className="border-t border-neutral-100 p-3">
                       <div className="border-stroke-soft bg-bg-weak rounded-8 flex items-center justify-between gap-3 border p-3 py-2">
                         <div className="flex items-center gap-3">

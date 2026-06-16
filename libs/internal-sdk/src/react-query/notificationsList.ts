@@ -5,43 +5,71 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { NovuCore } from "../core.js";
-import { notificationsList } from "../funcs/notificationsList.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useNovuContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildNotificationsListQuery,
+  NotificationsListQueryData,
+  prefetchNotificationsList,
+  queryKeyNotificationsList,
+} from "./notificationsList.core.js";
+export {
+  buildNotificationsListQuery,
+  type NotificationsListQueryData,
+  prefetchNotificationsList,
+  queryKeyNotificationsList,
+};
 
-export type NotificationsListQueryData =
-  operations.NotificationsControllerListNotificationsResponse;
+export type NotificationsListQueryError =
+  | errors.ErrorDto
+  | errors.ValidationErrorDto
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * List all events
  *
  * @remarks
  * List all notification events (triggered events) for the current environment.
- *     This API supports filtering by **channels**, **templates**, **emails**, **subscriberIds**, **transactionId**, **topicKey**.
+ *     This API supports filtering by **channels**, **templates**, **emails**, **subscriberIds**, **transactionId**, **topicKey**, **severity**, **contextKeys**.
  *     Checkout all available filters in the query section.
  *     This API returns event triggers, to list each channel notifications, check messages APIs.
  */
 export function useNotificationsList(
   request: operations.NotificationsControllerListNotificationsRequest,
-  options?: QueryHookOptions<NotificationsListQueryData>,
-): UseQueryResult<NotificationsListQueryData, Error> {
+  options?: QueryHookOptions<
+    NotificationsListQueryData,
+    NotificationsListQueryError
+  >,
+): UseQueryResult<NotificationsListQueryData, NotificationsListQueryError> {
   const client = useNovuContext();
   return useQuery({
     ...buildNotificationsListQuery(
@@ -58,14 +86,20 @@ export function useNotificationsList(
  *
  * @remarks
  * List all notification events (triggered events) for the current environment.
- *     This API supports filtering by **channels**, **templates**, **emails**, **subscriberIds**, **transactionId**, **topicKey**.
+ *     This API supports filtering by **channels**, **templates**, **emails**, **subscriberIds**, **transactionId**, **topicKey**, **severity**, **contextKeys**.
  *     Checkout all available filters in the query section.
  *     This API returns event triggers, to list each channel notifications, check messages APIs.
  */
 export function useNotificationsListSuspense(
   request: operations.NotificationsControllerListNotificationsRequest,
-  options?: SuspenseQueryHookOptions<NotificationsListQueryData>,
-): UseSuspenseQueryResult<NotificationsListQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    NotificationsListQueryData,
+    NotificationsListQueryError
+  >,
+): UseSuspenseQueryResult<
+  NotificationsListQueryData,
+  NotificationsListQueryError
+> {
   const client = useNovuContext();
   return useSuspenseQuery({
     ...buildNotificationsListQuery(
@@ -74,19 +108,6 @@ export function useNotificationsListSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchNotificationsList(
-  queryClient: QueryClient,
-  client$: NovuCore,
-  request: operations.NotificationsControllerListNotificationsRequest,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildNotificationsListQuery(
-      client$,
-      request,
-    ),
   });
 }
 
@@ -104,6 +125,8 @@ export function setNotificationsListData(
       limit?: number | undefined;
       transactionId?: string | undefined;
       topicKey?: string | undefined;
+      subscriptionId?: string | undefined;
+      contextKeys?: Array<string> | undefined;
       after?: string | undefined;
       before?: string | undefined;
       idempotencyKey?: string | undefined;
@@ -130,6 +153,8 @@ export function invalidateNotificationsList(
       limit?: number | undefined;
       transactionId?: string | undefined;
       topicKey?: string | undefined;
+      subscriptionId?: string | undefined;
+      contextKeys?: Array<string> | undefined;
       after?: string | undefined;
       before?: string | undefined;
       idempotencyKey?: string | undefined;
@@ -151,68 +176,4 @@ export function invalidateAllNotificationsList(
     ...filters,
     queryKey: ["@novu/api", "Notifications", "list"],
   });
-}
-
-export function buildNotificationsListQuery(
-  client$: NovuCore,
-  request: operations.NotificationsControllerListNotificationsRequest,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<NotificationsListQueryData>;
-} {
-  return {
-    queryKey: queryKeyNotificationsList({
-      channels: request.channels,
-      templates: request.templates,
-      emails: request.emails,
-      search: request.search,
-      subscriberIds: request.subscriberIds,
-      severity: request.severity,
-      page: request.page,
-      limit: request.limit,
-      transactionId: request.transactionId,
-      topicKey: request.topicKey,
-      after: request.after,
-      before: request.before,
-      idempotencyKey: request.idempotencyKey,
-    }),
-    queryFn: async function notificationsListQueryFn(
-      ctx,
-    ): Promise<NotificationsListQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(notificationsList(
-        client$,
-        request,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyNotificationsList(
-  parameters: {
-    channels?: Array<components.ChannelTypeEnum> | undefined;
-    templates?: Array<string> | undefined;
-    emails?: Array<string> | undefined;
-    search?: string | undefined;
-    subscriberIds?: Array<string> | undefined;
-    severity?: Array<string> | undefined;
-    page?: number | undefined;
-    limit?: number | undefined;
-    transactionId?: string | undefined;
-    topicKey?: string | undefined;
-    after?: string | undefined;
-    before?: string | undefined;
-    idempotencyKey?: string | undefined;
-  },
-): QueryKey {
-  return ["@novu/api", "Notifications", "list", parameters];
 }

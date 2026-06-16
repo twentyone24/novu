@@ -1,5 +1,6 @@
 import {
   CreateLayoutDto,
+  DuplicateLayoutDto,
   GeneratePreviewResponseDto,
   IEnvironment,
   LayoutResponseDto,
@@ -88,7 +89,7 @@ export const duplicateLayout = async ({
 }: {
   environment: IEnvironment;
   layoutSlug: string;
-  data: { name: string };
+  data: DuplicateLayoutDto;
 }) => {
   const { data: result } = await postV2<{ data: LayoutResponseDto }>(`/layouts/${layoutSlug}/duplicate`, {
     environment,
@@ -114,14 +115,17 @@ export const previewLayout = async ({
   environment,
   layoutSlug,
   previewData,
+  signal,
 }: {
   environment: IEnvironment;
   layoutSlug: string;
   previewData: { controlValues: Record<string, unknown>; previewPayload: Record<string, unknown> };
+  signal?: AbortSignal;
 }) => {
   const { data } = await postV2<{ data: GeneratePreviewResponseDto }>(`/layouts/${layoutSlug}/preview`, {
     environment,
     body: previewData,
+    signal,
   });
 
   return data;

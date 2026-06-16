@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import {
   NotificationEntity,
   NotificationRepository,
@@ -7,7 +7,7 @@ import {
 } from '@novu/dal';
 import {
   DeliveryLifecycleDetail,
-  DeliveryLifecycleStatus,
+  DeliveryLifecycleStatusEnum,
   FeatureFlagsKeysEnum,
   SeverityLevelEnum,
 } from '@novu/shared';
@@ -15,6 +15,7 @@ import { InferClickhouseSchemaType } from 'clickhouse-schema';
 import { PinoLogger } from 'nestjs-pino';
 import { FeatureFlagsService } from '../../feature-flags/feature-flags.service';
 import { ClickHouseService, InsertOptions } from '../clickhouse.service';
+import { ClickHouseBatchService } from '../clickhouse-batch.service';
 import { LogRepository, SchemaKeys, Where } from '../log.repository';
 import { getInsertOptions } from '../shared';
 import { ORDER_BY, TABLE_NAME, WorkflowRun, WorkflowRunStatusEnum, workflowRunSchema } from './workflow-run.schema';
@@ -44,7 +45,7 @@ interface IWorkflowRunOptions {
   status?: WorkflowRunStatusEnum;
   userId?: string;
   externalSubscriberId?: string;
-  deliveryLifecycleStatus?: DeliveryLifecycleStatus;
+  deliveryLifecycleStatus?: DeliveryLifecycleStatusEnum;
   deliveryLifecycleDetail?: DeliveryLifecycleDetail;
 }
 
@@ -71,9 +72,10 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
     protected readonly logger: PinoLogger,
     protected readonly featureFlagsService: FeatureFlagsService,
     private readonly notificationRepository: NotificationRepository,
-    private readonly notificationTemplateRepository: NotificationTemplateRepository
+    private readonly notificationTemplateRepository: NotificationTemplateRepository,
+    @Optional() protected readonly batchService?: ClickHouseBatchService
   ) {
-    super(clickhouseService, logger, workflowRunSchema, ORDER_BY, featureFlagsService);
+    super(clickhouseService, logger, workflowRunSchema, ORDER_BY, featureFlagsService, batchService);
     this.logger.setContext(this.constructor.name);
   }
 
@@ -119,65 +121,6 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
     }
   }
 
-  async createWorkflowRunBatch(
-    notifications: Array<{
-      notification: NotificationEntity;
-      workflow: NotificationTemplateEntity;
-      options?: IWorkflowRunOptions;
-    }>
-  ): Promise<void> {
-    if (notifications.length === 0) return;
-
-    try {
-      const firstNotification = notifications[0].notification;
-
-      const isEnabled = await this.featureFlagsService.getFlag({
-        key: FeatureFlagsKeysEnum.IS_WORKFLOW_RUN_LOGS_WRITE_ENABLED,
-        organization: { _id: firstNotification._organizationId },
-        environment: { _id: firstNotification._environmentId },
-        user: { _id: notifications[0].options?.userId },
-        defaultValue: false,
-      });
-
-      if (!isEnabled) {
-        return;
-      }
-
-      const workflowRunsData = notifications.map(({ notification, workflow: template, options = {} }) =>
-        this.mapNotificationToWorkflowRun(notification, template, options)
-      );
-
-      await this.insertMany(
-        workflowRunsData,
-        {
-          organizationId: firstNotification._organizationId,
-          environmentId: firstNotification._environmentId,
-          userId: notifications[0].options?.userId,
-        },
-        WORKFLOW_RUN_INSERT_OPTIONS
-      );
-
-      this.logger.debug(
-        {
-          batchSize: notifications.length,
-          organizationId: firstNotification._organizationId,
-          environmentId: firstNotification._environmentId,
-        },
-        'Workflow run batch created for observability'
-      );
-    } catch (error) {
-      this.logger.error(
-        {
-          err: error,
-          batchSize: notifications.length,
-          errorMessage: error instanceof Error ? error.message : 'Unknown error',
-        },
-        'Failed to create workflow run batch'
-      );
-      // Don't rethrow to avoid breaking the main flow
-    }
-  }
-
   /**
    * Updates the status of a workflow run in ClickHouse.
    *
@@ -192,8 +135,12 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
       organizationId: string;
       environmentId: string;
     },
-    deliveryLifecycleStatus?: DeliveryLifecycleStatus,
-    deliveryLifecycleDetail?: DeliveryLifecycleDetail
+    deliveryLifecycleStatus?: DeliveryLifecycleStatusEnum,
+    deliveryLifecycleDetail?: DeliveryLifecycleDetail,
+    prefetchedData?: {
+      notification?: QueryNotificationEntity | null;
+      workflow?: Pick<NotificationTemplateEntity, 'name' | 'triggers'> | null;
+    }
   ): Promise<void> {
     try {
       const isEnabled = await this.featureFlagsService.getFlag({
@@ -208,31 +155,33 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
         return;
       }
 
-      const notification: QueryNotificationEntity | null = await this.notificationRepository.findOne(
-        {
-          _id: workflowRunId,
-          _organizationId: context.organizationId,
-          _environmentId: context.environmentId,
-        },
-        {
-          _id: 1,
-          _templateId: 1,
-          _organizationId: 1,
-          _environmentId: 1,
-          _subscriberId: 1,
-          transactionId: 1,
-          channels: 1,
-          to: 1,
-          payload: 1,
-          controls: 1,
-          topics: 1,
-          _digestedNotificationId: 1,
-          createdAt: 1,
-          severity: 1,
-          critical: 1,
-          contextKeys: 1,
-        }
-      );
+      const notification: QueryNotificationEntity | null =
+        (prefetchedData?.notification as QueryNotificationEntity | null) ??
+        (await this.notificationRepository.findOne(
+          {
+            _id: workflowRunId,
+            _organizationId: context.organizationId,
+            _environmentId: context.environmentId,
+          },
+          {
+            _id: 1,
+            _templateId: 1,
+            _organizationId: 1,
+            _environmentId: 1,
+            _subscriberId: 1,
+            transactionId: 1,
+            channels: 1,
+            to: 1,
+            payload: 1,
+            controls: 1,
+            topics: 1,
+            _digestedNotificationId: 1,
+            createdAt: 1,
+            severity: 1,
+            critical: 1,
+            contextKeys: 1,
+          }
+        ));
 
       if (!notification) {
         this.logger.warn(
@@ -243,19 +192,22 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
           },
           'Notification not found for workflow run status update'
         );
+
         return;
       }
 
-      const workflow = await this.notificationTemplateRepository.findOne(
-        {
-          _id: notification._templateId,
-          _environmentId: context.environmentId,
-        },
-        {
-          name: 1,
-          triggers: 1,
-        }
-      );
+      const workflow =
+        prefetchedData?.workflow ??
+        (await this.notificationTemplateRepository.findOne(
+          {
+            _id: notification._templateId,
+            _environmentId: context.environmentId,
+          },
+          {
+            name: 1,
+            triggers: 1,
+          }
+        ));
 
       if (!workflow) {
         this.logger.warn(
@@ -266,10 +218,11 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
           },
           'Notification template not found for workflow run status update'
         );
+
         return;
       }
 
-      const workflowRunData = this.mapNotificationToWorkflowRun(notification, workflow, {
+      const workflowRunData = this.mapNotificationToWorkflowRun(notification, workflow as NotificationTemplateEntity, {
         status,
         deliveryLifecycleStatus,
         deliveryLifecycleDetail,
@@ -418,12 +371,15 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
       LIMIT ${limit}
     `;
 
-    this.logger.debug('Executing compound cursor query with tenant enforcement', {
-      query: query.replace(/\s+/g, ' ').trim(),
-      cursor: cursor ? 'present' : 'none',
-      selectedColumns: select === '*' ? 'all' : (select as readonly string[]).length,
-      tenantEnforcement: '__unsafe' in where ? 'bypassed' : 'enforced',
-    });
+    this.logger.debug(
+      {
+        query: query.replace(/\s+/g, ' ').trim(),
+        cursor: cursor ? 'present' : 'none',
+        selectedColumns: select === '*' ? 'all' : (select as readonly string[]).length,
+        tenantEnforcement: '__unsafe' in where ? 'bypassed' : 'enforced',
+      },
+      'Executing compound cursor query with tenant enforcement'
+    );
 
     const result = await this.clickhouseService.query({
       query,
@@ -460,7 +416,7 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
       external_subscriber_id: options.externalSubscriberId || null,
 
       // Execution metadata
-      status: options.status || ('pending' as WorkflowRunStatusEnum),
+      status: options.status || WorkflowRunStatusEnum.PROCESSING,
       trigger_identifier: this.getTriggerIdentifier(workflow),
 
       // Correlation and grouping
@@ -473,7 +429,7 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
       control_values: notification.controls ? JSON.stringify(notification.controls) : null,
 
       // Topic information
-      topics: notification.topics ? JSON.stringify(notification.topics) : null,
+      topics: notification.topics ? notification.topics && JSON.stringify(notification.topics) : null,
 
       // Digest information
       is_digest: notification._digestedNotificationId ? 'true' : 'false',
@@ -501,8 +457,12 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
     environmentId: string,
     organizationId: string,
     startDate: Date,
-    endDate: Date
+    endDate: Date,
+    workflowIds?: string[]
   ): Promise<Array<{ workflow_name: string; count: string }>> {
+    const workflowFilter =
+      workflowIds && workflowIds.length > 0 ? 'AND workflow_id IN {workflowIds:Array(String)}' : '';
+
     const query = `
       SELECT 
         workflow_name,
@@ -513,17 +473,22 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
         AND organization_id = {organizationId:String}
         AND created_at >= {startDate:DateTime64(3)}
         AND created_at <= {endDate:DateTime64(3)}
+        ${workflowFilter}
       GROUP BY workflow_name
       ORDER BY count DESC
       LIMIT 5
     `;
 
-    const params = {
+    const params: Record<string, unknown> = {
       environmentId,
       organizationId,
       startDate: LogRepository.formatDateTime64(startDate),
       endDate: LogRepository.formatDateTime64(endDate),
     };
+
+    if (workflowIds && workflowIds.length > 0) {
+      params.workflowIds = workflowIds;
+    }
 
     const result = await this.clickhouseService.query<{
       workflow_name: string;
@@ -542,8 +507,12 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
     startDate: Date,
     endDate: Date,
     previousStartDate: Date,
-    previousEndDate: Date
+    previousEndDate: Date,
+    workflowIds?: string[]
   ): Promise<{ currentPeriod: number; previousPeriod: number }> {
+    const workflowFilter =
+      workflowIds && workflowIds.length > 0 ? 'AND workflow_id IN {workflowIds:Array(String)}' : '';
+
     // Query for current period
     const currentPeriodQuery = `
       SELECT count(DISTINCT external_subscriber_id) as count
@@ -553,6 +522,7 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
         AND organization_id = {organizationId:String}
         AND created_at >= {startDate:DateTime64(3)}
         AND created_at <= {endDate:DateTime64(3)}
+        ${workflowFilter}
     `;
 
     // Query for previous period
@@ -564,12 +534,17 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
         AND organization_id = {organizationId:String}
         AND created_at >= {previousStartDate:DateTime64(3)}
         AND created_at <= {previousEndDate:DateTime64(3)}
+        ${workflowFilter}
     `;
 
-    const baseParams = {
+    const baseParams: Record<string, unknown> = {
       environmentId,
       organizationId,
     };
+
+    if (workflowIds && workflowIds.length > 0) {
+      baseParams.workflowIds = workflowIds;
+    }
 
     const [currentResult, previousResult] = await Promise.all([
       this.clickhouseService.query<{ count: string }>({
@@ -605,8 +580,12 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
     startDate: Date,
     endDate: Date,
     previousStartDate: Date,
-    previousEndDate: Date
+    previousEndDate: Date,
+    workflowIds?: string[]
   ): Promise<{ currentPeriod: number; previousPeriod: number }> {
+    const workflowFilter =
+      workflowIds && workflowIds.length > 0 ? 'AND workflow_id IN {workflowIds:Array(String)}' : '';
+
     // Query for current period
     const currentPeriodQuery = `
       SELECT count(*) as count
@@ -616,6 +595,7 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
         AND organization_id = {organizationId:String}
         AND created_at >= {startDate:DateTime64(3)}
         AND created_at <= {endDate:DateTime64(3)}
+        ${workflowFilter}
     `;
 
     // Query for previous period
@@ -627,12 +607,17 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
         AND organization_id = {organizationId:String}
         AND created_at >= {previousStartDate:DateTime64(3)}
         AND created_at <= {previousEndDate:DateTime64(3)}
+        ${workflowFilter}
     `;
 
-    const baseParams = {
+    const baseParams: Record<string, unknown> = {
       environmentId,
       organizationId,
     };
+
+    if (workflowIds && workflowIds.length > 0) {
+      baseParams.workflowIds = workflowIds;
+    }
 
     const [currentResult, previousResult] = await Promise.all([
       this.clickhouseService.query<{ count: string }>({
@@ -666,8 +651,12 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
     environmentId: string,
     organizationId: string,
     startDate: Date,
-    endDate: Date
+    endDate: Date,
+    workflowIds?: string[]
   ): Promise<Array<{ date: string; status: string; count: string }>> {
+    const workflowFilter =
+      workflowIds && workflowIds.length > 0 ? 'AND workflow_id IN {workflowIds:Array(String)}' : '';
+
     const query = `
       SELECT 
         toDate(created_at) as date,
@@ -679,16 +668,21 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
         AND organization_id = {organizationId:String}
         AND created_at >= {startDate:DateTime64(3)}
         AND created_at <= {endDate:DateTime64(3)}
+        ${workflowFilter}
       GROUP BY date, status
       ORDER BY date, status
     `;
 
-    const params = {
+    const params: Record<string, unknown> = {
       environmentId,
       organizationId,
       startDate: LogRepository.formatDateTime64(startDate),
       endDate: LogRepository.formatDateTime64(endDate),
     };
+
+    if (workflowIds && workflowIds.length > 0) {
+      params.workflowIds = workflowIds;
+    }
 
     const result = await this.clickhouseService.query<{
       date: string;
@@ -706,8 +700,12 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
     environmentId: string,
     organizationId: string,
     startDate: Date,
-    endDate: Date
+    endDate: Date,
+    workflowIds?: string[]
   ): Promise<Array<{ date: string; count: string }>> {
+    const workflowFilter =
+      workflowIds && workflowIds.length > 0 ? 'AND workflow_id IN {workflowIds:Array(String)}' : '';
+
     const query = `
       SELECT 
         toDate(created_at) as date,
@@ -718,16 +716,21 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
         AND organization_id = {organizationId:String}
         AND created_at >= {startDate:DateTime64(3)}
         AND created_at <= {endDate:DateTime64(3)}
+        ${workflowFilter}
       GROUP BY date
       ORDER BY date
     `;
 
-    const params = {
+    const params: Record<string, unknown> = {
       environmentId,
       organizationId,
       startDate: LogRepository.formatDateTime64(startDate),
       endDate: LogRepository.formatDateTime64(endDate),
     };
+
+    if (workflowIds && workflowIds.length > 0) {
+      params.workflowIds = workflowIds;
+    }
 
     const result = await this.clickhouseService.query<{
       date: string;
@@ -736,6 +739,63 @@ export class WorkflowRunRepository extends LogRepository<typeof workflowRunSchem
       query,
       params,
     });
+
+    return result.data;
+  }
+
+  async getPlatformUsageByDateRange(
+    startDate: Date,
+    endDate: Date,
+    organizationId?: string
+  ): Promise<Array<{ organization_id: string; count: string }>> {
+    const organizationFilter = organizationId ? 'AND organization_id = {organizationId:String}' : '';
+
+    const query = `
+      SELECT 
+        organization_id,
+        count(*) as count
+      FROM workflow_runs FINAL
+      WHERE 
+        created_at >= {startDate:DateTime64(3)}
+        AND created_at < {endDate:DateTime64(3)}
+        ${organizationFilter}
+      GROUP BY organization_id
+      ORDER BY organization_id
+    `;
+
+    const params: Record<string, unknown> = {
+      startDate: LogRepository.formatDateTime64(startDate),
+      endDate: LogRepository.formatDateTime64(endDate),
+    };
+
+    if (organizationId) {
+      params.organizationId = organizationId;
+    }
+
+    const result = await this.clickhouseService.query<{
+      organization_id: string;
+      count: string;
+    }>({
+      query,
+      params,
+    });
+
+    const totalCount = result.data.reduce((sum, item) => sum + parseInt(item.count, 10), 0);
+
+    this.logger.debug(
+      {
+        query: query.replace(/\s+/g, ' ').trim(),
+        params: {
+          ...params,
+          startDateRaw: startDate.toISOString(),
+          endDateRaw: endDate.toISOString(),
+        },
+        organizationId,
+        resultCount: result.data.length,
+        totalRecords: totalCount,
+      },
+      'ClickHouse platform usage query completed'
+    );
 
     return result.data;
   }

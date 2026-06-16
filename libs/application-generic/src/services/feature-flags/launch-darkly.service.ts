@@ -30,14 +30,15 @@ export class LaunchDarklyFeatureFlagsService implements IFeatureFlagsService {
     environment,
     organization,
     user,
+    component,
   }: FeatureFlagContext<T_Result>): Promise<T_Result> {
-    const context = this.buildLDContext({ user, organization, environment });
+    const context = this.buildLDContext({ user, organization, environment, component });
     const newVar = await this.client.variation(key, context, defaultValue);
 
     return newVar;
   }
 
-  private buildLDContext({ user, organization, environment }: FeatureFlagContextBase): LDMultiKindContext {
+  private buildLDContext({ user, organization, environment, component }: FeatureFlagContextBase): LDMultiKindContext {
     const mappedContext: LDMultiKindContext = {
       kind: 'multi',
     };
@@ -66,6 +67,20 @@ export class LaunchDarklyFeatureFlagsService implements IFeatureFlagsService {
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
         externalId: user.externalId,
+      };
+    }
+
+    const region = process.env.NOVU_REGION;
+    if (region) {
+      mappedContext.region = {
+        key: region,
+        awsRegion: region,
+      };
+    }
+
+    if (component) {
+      mappedContext.component = {
+        key: component,
       };
     }
 

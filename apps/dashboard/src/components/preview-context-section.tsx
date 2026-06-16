@@ -1,14 +1,10 @@
-import { useCallback, useState } from 'react';
 import { RiInformation2Line, RiRefreshLine } from 'react-icons/ri';
-import { type ContextResponseDto } from '@/api/contexts';
 import { AccordionContent, AccordionItem, AccordionTrigger } from '@/components/primitives/accordion';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/primitives/tooltip';
-import { useFetchContexts } from '@/hooks/use-fetch-contexts';
-import { cn } from '@/utils/ui';
-import { Autocomplete } from './primitives/autocomplete';
-import { buttonVariants } from './primitives/button';
+import { ContextSearchEditor } from './context-search-editor';
+import { Button } from './primitives/button';
+import { ExternalLink } from './shared/external-link';
 import { ACCORDION_STYLES } from './workflow-editor/steps/constants/preview-context.constants';
-import { EditableJsonViewer } from './workflow-editor/steps/shared/editable-json-viewer/editable-json-viewer';
 import { ContextSectionProps } from './workflow-editor/steps/types/preview-context.types';
 
 export function PreviewContextSection({
@@ -16,37 +12,34 @@ export function PreviewContextSection({
   context,
   schema,
   onUpdate,
-  onContextSelect,
   onClearPersisted,
+  className,
 }: ContextSectionProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const { data: contextsData, isLoading } = useFetchContexts({
-    limit: 20,
-    search: searchQuery.length >= 2 ? searchQuery : undefined,
-  });
-  const contexts = contextsData?.data || [];
-
-  const displayValue = context || {};
-
-  const handleSelectContext = useCallback(
-    (selectedContext: ContextResponseDto) => {
-      onContextSelect(selectedContext);
-      setSearchQuery('');
-    },
-    [onContextSelect]
-  );
-
-  const handleContextChange = useCallback(
-    (updatedData: unknown) => {
-      onUpdate('context', updatedData || {});
-    },
-    [onUpdate]
-  );
-
   return (
-    <AccordionItem value="context" className={ACCORDION_STYLES.item}>
-      <AccordionTrigger className={ACCORDION_STYLES.trigger}>
+    <AccordionItem value="context" className={className ?? ACCORDION_STYLES.itemLast}>
+      <AccordionTrigger
+        className={ACCORDION_STYLES.trigger}
+        rightSlot={
+          onClearPersisted ? (
+            <div className="mr-2">
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClearPersisted();
+                }}
+                type="button"
+                variant="secondary"
+                mode="ghost"
+                size="2xs"
+                className="text-foreground-600 gap-1"
+              >
+                <RiRefreshLine className="h-3 w-3" />
+                Reset defaults
+              </Button>
+            </div>
+          ) : null
+        }
+      >
         <div className="flex w-full items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-0.5">
@@ -59,79 +52,28 @@ export function PreviewContextSection({
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
                   Context provides additional data that can be used in your workflow, such as tenant or
-                  application-specific information.
+                  application-specific information.{' '}
+                  <ExternalLink
+                    href="https://docs.novu.co/platform/workflow/advanced-features/contexts/contexts-in-workflows"
+                    target="_blank"
+                  >
+                    Learn more
+                  </ExternalLink>
                 </TooltipContent>
               </Tooltip>
             </div>
           </div>
-          {onClearPersisted && (
-            <div className="mr-2">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  onClearPersisted();
-                }}
-                className={cn(
-                  buttonVariants({ variant: 'secondary', mode: 'ghost', size: '2xs' }),
-                  'text-foreground-600 flex items-center gap-1'
-                )}
-                aria-label="Reset context"
-              >
-                <RiRefreshLine className="h-3 w-3" />
-                <span className="text-xs leading-none">Reset context</span>
-              </button>
-            </div>
-          )}
         </div>
       </AccordionTrigger>
       <AccordionContent className="flex flex-col gap-2">
-        <Autocomplete
-          value={searchQuery}
-          onChange={setSearchQuery}
-          items={contexts.map((context) => ({ ...context, id: `${context.type}:${context.id}` }))}
-          isLoading={isLoading}
-          hasSearched={searchQuery.length >= 2}
-          onSelectItem={(item) => {
-            const originalContext = contexts.find((c) => `${c.type}:${c.id}` === item.id);
-            if (originalContext) {
-              handleSelectContext(originalContext);
-            }
-          }}
-          size="xs"
-          placeholder="Search contexts by type or ID..."
-          sectionTitle="Contexts"
-          emptyStateTitle="No contexts found"
-          emptyStateDescription="Try a different search term"
-          renderItem={(item) => {
-            const originalContext = contexts.find((c) => `${c.type}:${c.id}` === item.id);
-            if (!originalContext) return null;
-
-            return (
-              <div className="flex flex-col items-start gap-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{originalContext.id}</span>
-                  <span className="text-xs text-foreground-400">({originalContext.type})</span>
-                </div>
-                {originalContext.data && Object.keys(originalContext.data).length > 0 && (
-                  <span className="text-xs text-foreground-400">{Object.keys(originalContext.data).join(', ')}</span>
-                )}
-              </div>
-            );
-          }}
+        <ContextSearchEditor
+          value={context}
+          schema={schema}
+          onUpdate={(updatedData) => onUpdate('context', updatedData)}
+          error={error ?? undefined}
         />
-        <div className="flex flex-1 flex-col gap-2 overflow-auto">
-          <EditableJsonViewer
-            value={displayValue}
-            onChange={handleContextChange}
-            className={ACCORDION_STYLES.jsonViewer}
-            schema={schema}
-          />
-          {error && <p className="text-destructive text-xs">{error}</p>}
-        </div>
         <div className="text-text-soft flex items-center gap-1.5 text-[10px] font-normal leading-[13px]">
-          <RiInformation2Line className="h-3 w-3 flex-shrink-0" />
+          <RiInformation2Line className="h-3 w-3 shrink-0" />
           <span>Changes here only affect the preview and won't be saved to the context.</span>
         </div>
       </AccordionContent>

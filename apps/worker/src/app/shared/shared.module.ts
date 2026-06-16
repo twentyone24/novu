@@ -2,20 +2,26 @@ import { Module } from '@nestjs/common';
 import {
   analyticsService,
   BulkCreateExecutionDetails,
+  CloudflareSchedulerService,
   ComputeJobWaitDurationService,
   CreateExecutionDetails,
   CreateNotificationJobs,
   CreateOrUpdateSubscriberUseCase,
   CreateTenant,
   cacheService,
+  clickHouseBatchService,
   clickHouseService,
   createNestLoggingModuleOptions,
   DalServiceHealthIndicator,
   DigestFilterSteps,
   ExecuteBridgeRequest,
+  ExecuteFrameworkRequest,
+  ExecuteStepResolverRequest,
   featureFlagsService,
   GetDecryptedSecretKey,
   GetTenant,
+  HttpClientService,
+  InMemoryLRUCacheService,
   InvalidateCacheService,
   LoggerModule,
   MetricsModule,
@@ -29,11 +35,14 @@ import {
   UpdateSubscriberChannel,
   UpdateTenant,
   WorkflowRunRepository,
+  WorkflowRunService,
 } from '@novu/application-generic';
 import {
+  AgentIntegrationRepository,
   ControlValuesRepository,
   DalService,
   EnvironmentRepository,
+  EnvironmentVariableRepository,
   ExecutionDetailsRepository,
   IntegrationRepository,
   JobRepository,
@@ -56,7 +65,9 @@ import { UNIQUE_WORKER_DEPENDENCIES } from '../../config/worker-init.config';
 import { ActiveJobsMetricService } from '../workflow/services';
 
 const DAL_MODELS = [
+  AgentIntegrationRepository,
   EnvironmentRepository,
+  EnvironmentVariableRepository,
   ExecutionDetailsRepository,
   NotificationTemplateRepository,
   SubscriberRepository,
@@ -93,12 +104,15 @@ const ANALYTICS_PROVIDERS = [
 
   // Services
   clickHouseService,
+  clickHouseBatchService,
+  WorkflowRunService,
 ];
 
 const PROVIDERS = [
   analyticsService,
   BulkCreateExecutionDetails,
   cacheService,
+  CloudflareSchedulerService,
   ComputeJobWaitDurationService,
   CreateExecutionDetails,
   CreateNotificationJobs,
@@ -107,6 +121,7 @@ const PROVIDERS = [
   DalServiceHealthIndicator,
   DigestFilterSteps,
   featureFlagsService,
+  InMemoryLRUCacheService,
   InvalidateCacheService,
   StorageHelperService,
   storageService,
@@ -119,7 +134,10 @@ const PROVIDERS = [
   ...DAL_MODELS,
   ActiveJobsMetricService,
   ExecuteBridgeRequest,
+  ExecuteFrameworkRequest,
+  ExecuteStepResolverRequest,
   GetDecryptedSecretKey,
+  HttpClientService,
   ...ANALYTICS_PROVIDERS,
 ];
 

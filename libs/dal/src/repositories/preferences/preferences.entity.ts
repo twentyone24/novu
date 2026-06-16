@@ -8,7 +8,7 @@ import type { UserId } from '../user';
 
 export type PreferencesDBModel = ChangePropsValueType<
   PreferencesEntity,
-  '_environmentId' | '_organizationId' | '_subscriberId' | '_templateId' | '_userId'
+  '_environmentId' | '_organizationId' | '_subscriberId' | '_templateId' | '_userId' | '_topicSubscriptionId'
 >;
 
 export class PreferencesEntity {
@@ -22,11 +22,22 @@ export class PreferencesEntity {
 
   _userId?: UserId;
 
+  // workflowEntityId
   _templateId?: string;
+
+  _topicSubscriptionId?: string;
 
   type: PreferencesTypeEnum;
 
   preferences: WorkflowPreferencesPartial;
 
   schedule?: Schedule;
+
+  contextKeys?: string[];
+
+  contextKeysHash?: string;
+
+  createdAt?: string;
+
+  updatedAt?: string;
 }

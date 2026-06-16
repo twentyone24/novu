@@ -96,7 +96,10 @@ const DefaultInbox = (props: DefaultInboxProps) => {
 
 export const Inbox = React.memo((props: InboxProps) => {
   const { subscriberId, ...propsWithoutSubscriberId } = props;
-  const subscriber = buildSubscriber({ subscriberId: props.subscriberId, subscriber: props.subscriber });
+  const subscriber = useMemo(
+    () => buildSubscriber({ subscriberId: props.subscriberId, subscriber: props.subscriber }),
+    [props.subscriberId, props.subscriber]
+  );
   const applicationIdentifier = props.applicationIdentifier ? props.applicationIdentifier : ''; // for keyless we provide an empty string, the api will generate a identifier
   const novu = useUnsafeNovu();
 
@@ -109,14 +112,17 @@ export const Inbox = React.memo((props: InboxProps) => {
   const providerProps = {
     applicationIdentifier,
     subscriberHash: props.subscriberHash,
+    contextHash: props.contextHash,
     backendUrl: props.backendUrl,
     socketUrl: props.socketUrl,
+    socketOptions: props.socketOptions,
     subscriber,
     defaultSchedule: props.defaultSchedule,
+    context: props.context,
   } satisfies StandardNovuOptions;
 
   return (
-    <InternalNovuProvider {...providerProps} userAgentType="components">
+    <InternalNovuProvider {...providerProps}>
       <InboxChild {...propsWithoutSubscriberId} applicationIdentifier={applicationIdentifier} subscriber={subscriber} />
     </InternalNovuProvider>
   );
@@ -135,10 +141,13 @@ const InboxChild = withRenderer(
       applicationIdentifier = '', // for keyless we provide an empty string, the api will generate a identifier
       subscriberId,
       subscriberHash,
+      contextHash,
       backendUrl,
       socketUrl,
+      socketOptions,
       subscriber,
       defaultSchedule,
+      context,
     } = props;
     const novu = useNovu();
 
@@ -154,10 +163,13 @@ const InboxChild = withRenderer(
         options: {
           applicationIdentifier,
           subscriberHash,
+          contextHash,
           backendUrl,
           socketUrl,
+          socketOptions,
           subscriber: buildSubscriber({ subscriberId, subscriber }),
           defaultSchedule,
+          context,
         },
       };
     }, [
@@ -170,9 +182,12 @@ const InboxChild = withRenderer(
       applicationIdentifier,
       subscriberId,
       subscriberHash,
+      contextHash,
       backendUrl,
       socketUrl,
+      socketOptions,
       subscriber,
+      context,
     ]);
 
     if (isWithChildrenProps(props)) {
@@ -220,6 +235,8 @@ const InboxChild = withRenderer(
     );
   })
 );
+
+InboxChild.displayName = 'InboxChild';
 
 function isWithChildrenProps(props: InboxProps): props is WithChildrenProps {
   return 'children' in props;

@@ -83,6 +83,10 @@ export class TierRestrictionsValidateUsecase {
       return [amountIssue, unitIssue].filter(Boolean);
     }
 
+    if (stepType === StepTypeEnum.DELAY && isDynamicDelayAction(command)) {
+      return [];
+    }
+
     if (stepType === StepTypeEnum.THROTTLE && isRegularThrottleAction(command)) {
       const throttleDurationMs = calculateThrottleDuration(command);
 
@@ -131,6 +135,17 @@ export class TierRestrictionsValidateUsecase {
   }
 
   private async getMaxThrottleInMs(command: TierRestrictionsValidateCommand, organization: OrganizationEntity) {
+    const throttleOverride = await this.featureFlagsService.getFlag({
+      key: FeatureFlagsKeysEnum.MAX_THROTTLE_WINDOW_DURATION_IN_MS_NUMBER,
+      defaultValue: 0,
+      environment: { _id: command.environmentId },
+      organization,
+    });
+
+    if (throttleOverride > 0) {
+      return throttleOverride;
+    }
+
     const systemLimit = await this.featureFlagsService.getFlag({
       key: FeatureFlagsKeysEnum.MAX_DEFER_DURATION_IN_MS_NUMBER,
       defaultValue: SYSTEM_LIMITS.DEFER_DURATION_MS,
@@ -138,7 +153,6 @@ export class TierRestrictionsValidateUsecase {
       organization,
     });
 
-    // If the system limit is not the default, we need to use it as the absolute limit for special cases instead of the tier limit
     const isSpecialLimit = systemLimit !== SYSTEM_LIMITS.DEFER_DURATION_MS;
     if (isSpecialLimit) {
       return systemLimit;
@@ -225,12 +239,21 @@ function calculateMilliseconds(amount: number, unit: DigestUnitEnum): number {
 const isCronExpression = (cron: string) => {
   return !!cron;
 };
+
 const isRegularDeferAction = (command: TierRestrictionsValidateCommand) => {
+  if (command.type === 'dynamic') {
+    return false;
+  }
+
   if (command.deferDurationMs) {
     return true;
   }
 
   return !!command.amount && isNumber(command.amount) && !!command.unit && isValidDigestUnit(command.unit);
+};
+
+const isDynamicDelayAction = (command: TierRestrictionsValidateCommand) => {
+  return command.type === 'dynamic' && !!command.dynamicKey;
 };
 
 function buildIssue(

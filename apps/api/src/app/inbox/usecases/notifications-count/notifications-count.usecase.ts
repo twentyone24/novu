@@ -1,11 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { buildMessageCountKey, CachedQuery } from '@novu/application-generic';
 import { MessageRepository, SubscriberRepository } from '@novu/dal';
-import { ChannelTypeEnum } from '@novu/shared';
+import { ChannelTypeEnum, normalizeTagGroups } from '@novu/shared';
 import type { NotificationFilter } from '../../utils/types';
 import type { NotificationsCountCommand } from './notifications-count.command';
 
-const MAX_NOTIFICATIONS_COUNT = 99;
+const MAX_NOTIFICATIONS_COUNT = 100;
 
 @Injectable()
 export class NotificationsCount {
@@ -47,23 +47,28 @@ export class NotificationsCount {
     }
 
     const getCountPromises = command.filters.map((filter) => {
+      const { tags: tagsFilter, ...filterRest } = filter;
       const severity = filter.severity
         ? Array.isArray(filter.severity)
           ? filter.severity
           : [filter.severity]
         : undefined;
 
+      const tagGroups = tagsFilter !== undefined ? normalizeTagGroups(tagsFilter) : undefined;
+
       return this.messageRepository.getCount(
         command.environmentId,
         subscriber._id,
         ChannelTypeEnum.IN_APP,
         {
-          ...filter,
+          ...filterRest,
+          ...(tagGroups !== undefined ? { tagGroups } : {}),
           severity,
         },
         {
           limit: MAX_NOTIFICATIONS_COUNT,
-        }
+        },
+        command.contextKeys
       );
     });
 

@@ -1,4 +1,14 @@
 import {
+  FieldFilterPartDto,
+  FilterPartsDto,
+  OnlineInLastFilterPartDto,
+  PreviousStepFilterPartDto,
+  RealtimeOnlineFilterPartDto,
+  StepFilterDto,
+  TenantFilterPartDto,
+  WebhookFilterPartDto,
+} from '@novu/application-generic';
+import {
   ExecutionDetailFeedItem,
   JobFeedItem,
   NotificationFeedItemEntity,
@@ -19,16 +29,6 @@ import {
   StepTypeEnum,
 } from '@novu/shared';
 import { MessageTemplateDto } from '../../../shared/dtos/message.template.dto';
-import {
-  FieldFilterPartDto,
-  FilterPartsDto,
-  OnlineInLastFilterPartDto,
-  PreviousStepFilterPartDto,
-  RealtimeOnlineFilterPartDto,
-  StepFilterDto,
-  TenantFilterPartDto,
-  WebhookFilterPartDto,
-} from '../../../shared/dtos/step-filter-dto';
 import {
   ActivityNotificationExecutionDetailResponseDto,
   ActivityNotificationJobResponseDto,
@@ -84,6 +84,7 @@ export function mapFeedItemToDto(entity: NotificationFeedItemEntity): ActivityNo
     template: entity.template ? buildTemplate(entity.template) : undefined,
     severity: entity.severity ?? SeverityLevelEnum.NONE,
     critical: entity.critical,
+    contextKeys: entity.contextKeys,
   };
 }
 
@@ -192,7 +193,7 @@ function isDigestTimedMetadata(item: IWorkflowStepMetadata): item is IDigestTime
   return 'type' in item && item.type === DigestTypeEnum.TIMED;
 }
 
-export function mapDigest(
+function mapDigest(
   digestData?:
     | (IWorkflowStepMetadata & {
         events?: any[];
@@ -247,6 +248,7 @@ export function mapDigest(
         ordinalValue: digestItem.timed?.ordinalValue,
         monthlyType: digestItem.timed?.monthlyType,
         cronExpression: digestItem.timed?.cronExpression,
+        untilDate: digestItem.timed?.untilDate,
       },
     };
   }

@@ -18,11 +18,11 @@ export function TimezoneSelect(props: TimezoneSelectProps) {
   const { value, disabled, readOnly, onChange, className, ...rest } = props;
   const [open, setOpen] = useState(false);
   const { options, parseTimezone } = useTimezoneSelect({ labelStyle: 'abbrev', displayValue: 'UTC' });
-  const listRef = useRef<HTMLDivElement>(null);
-  const scrollId = useRef<ReturnType<typeof setTimeout>>();
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const scrollId = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   return (
-    <Popover modal={true} open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="secondary"
@@ -40,7 +40,7 @@ export function TimezoneSelect(props: TimezoneSelectProps) {
             </div>
             {value ? (
               <TruncatedText className="text-foreground w-full min-w-0 flex-1 text-xs font-normal text-neutral-950">
-                {parseTimezone(value).label}
+                {parseTimezone(value)?.label ?? value}
               </TruncatedText>
             ) : (
               <TruncatedText className="w-full min-w-0 flex-1 text-xs font-normal text-neutral-400">
@@ -57,15 +57,17 @@ export function TimezoneSelect(props: TimezoneSelectProps) {
         <Command>
           <CommandInput
             placeholder="Search timezone..."
-            inputRootClassName="rounded-b-none before:ring-0 before:border-b has-[input:focus]:shadow-none focus-within:shadow-none"
+            inputRootClassName="rounded-b-none before:ring-0 before:border-b before:border-gray-200 has-[input:focus]:shadow-none focus-within:shadow-none"
             inlineLeadingNode={<RiSearchLine className="size-4 text-neutral-400" />}
             autoComplete="off"
             /**
              * Scroll to top bug workaround: https://github.com/pacocoursey/cmdk/issues/233#issuecomment-2015998940
              */
             onValueChange={() => {
-              // clear pending scroll
-              clearTimeout(scrollId.current);
+              if (scrollId.current) {
+                // clear pending scroll
+                clearTimeout(scrollId.current);
+              }
 
               // the setTimeout is used to create a new task
               // this is to make sure that we don't scroll until the user is done typing

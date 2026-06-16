@@ -11,6 +11,17 @@ import { NovuCore } from "../core.js";
 import { messagesDeleteByTransactionId } from "../funcs/messagesDeleteByTransactionId.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useNovuContext } from "./_context.js";
@@ -18,7 +29,9 @@ import { MutationHookOptions } from "./_types.js";
 
 export type MessagesDeleteByTransactionIdMutationVariables = {
   transactionId: string;
-  channel?: operations.Channel | undefined;
+  channel?:
+    | operations.MessagesControllerDeleteMessagesByTransactionIdQueryParamChannel
+    | undefined;
   idempotencyKey?: string | undefined;
   options?: RequestOptions;
 };
@@ -26,6 +39,18 @@ export type MessagesDeleteByTransactionIdMutationVariables = {
 export type MessagesDeleteByTransactionIdMutationData =
   | operations.MessagesControllerDeleteMessagesByTransactionIdResponse
   | undefined;
+
+export type MessagesDeleteByTransactionIdMutationError =
+  | errors.ErrorDto
+  | errors.ValidationErrorDto
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * Delete messages by transactionId
@@ -37,12 +62,12 @@ export type MessagesDeleteByTransactionIdMutationData =
 export function useMessagesDeleteByTransactionIdMutation(
   options?: MutationHookOptions<
     MessagesDeleteByTransactionIdMutationData,
-    Error,
+    MessagesDeleteByTransactionIdMutationError,
     MessagesDeleteByTransactionIdMutationVariables
   >,
 ): UseMutationResult<
   MessagesDeleteByTransactionIdMutationData,
-  Error,
+  MessagesDeleteByTransactionIdMutationError,
   MessagesDeleteByTransactionIdMutationVariables
 > {
   const client = useNovuContext();

@@ -5,28 +5,53 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { NovuCore } from "../core.js";
-import { subscribersNotificationsFeed } from "../funcs/subscribersNotificationsFeed.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useNovuContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildSubscribersNotificationsFeedQuery,
+  prefetchSubscribersNotificationsFeed,
+  queryKeySubscribersNotificationsFeed,
+  SubscribersNotificationsFeedQueryData,
+} from "./subscribersNotificationsFeed.core.js";
+export {
+  buildSubscribersNotificationsFeedQuery,
+  prefetchSubscribersNotificationsFeed,
+  queryKeySubscribersNotificationsFeed,
+  type SubscribersNotificationsFeedQueryData,
+};
 
-export type SubscribersNotificationsFeedQueryData =
-  operations.SubscribersV1ControllerGetNotificationsFeedResponse;
+export type SubscribersNotificationsFeedQueryError =
+  | errors.ErrorDto
+  | errors.ValidationErrorDto
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * Retrieve subscriber notifications
@@ -36,8 +61,14 @@ export type SubscribersNotificationsFeedQueryData =
  */
 export function useSubscribersNotificationsFeed(
   request: operations.SubscribersV1ControllerGetNotificationsFeedRequest,
-  options?: QueryHookOptions<SubscribersNotificationsFeedQueryData>,
-): UseQueryResult<SubscribersNotificationsFeedQueryData, Error> {
+  options?: QueryHookOptions<
+    SubscribersNotificationsFeedQueryData,
+    SubscribersNotificationsFeedQueryError
+  >,
+): UseQueryResult<
+  SubscribersNotificationsFeedQueryData,
+  SubscribersNotificationsFeedQueryError
+> {
   const client = useNovuContext();
   return useQuery({
     ...buildSubscribersNotificationsFeedQuery(
@@ -57,8 +88,14 @@ export function useSubscribersNotificationsFeed(
  */
 export function useSubscribersNotificationsFeedSuspense(
   request: operations.SubscribersV1ControllerGetNotificationsFeedRequest,
-  options?: SuspenseQueryHookOptions<SubscribersNotificationsFeedQueryData>,
-): UseSuspenseQueryResult<SubscribersNotificationsFeedQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    SubscribersNotificationsFeedQueryData,
+    SubscribersNotificationsFeedQueryError
+  >,
+): UseSuspenseQueryResult<
+  SubscribersNotificationsFeedQueryData,
+  SubscribersNotificationsFeedQueryError
+> {
   const client = useNovuContext();
   return useSuspenseQuery({
     ...buildSubscribersNotificationsFeedQuery(
@@ -67,19 +104,6 @@ export function useSubscribersNotificationsFeedSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchSubscribersNotificationsFeed(
-  queryClient: QueryClient,
-  client$: NovuCore,
-  request: operations.SubscribersV1ControllerGetNotificationsFeedRequest,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildSubscribersNotificationsFeedQuery(
-      client$,
-      request,
-    ),
   });
 }
 
@@ -134,55 +158,4 @@ export function invalidateAllSubscribersNotificationsFeed(
     ...filters,
     queryKey: ["@novu/api", "Notifications", "feed"],
   });
-}
-
-export function buildSubscribersNotificationsFeedQuery(
-  client$: NovuCore,
-  request: operations.SubscribersV1ControllerGetNotificationsFeedRequest,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<SubscribersNotificationsFeedQueryData>;
-} {
-  return {
-    queryKey: queryKeySubscribersNotificationsFeed(request.subscriberId, {
-      page: request.page,
-      limit: request.limit,
-      read: request.read,
-      seen: request.seen,
-      payload: request.payload,
-      idempotencyKey: request.idempotencyKey,
-    }),
-    queryFn: async function subscribersNotificationsFeedQueryFn(
-      ctx,
-    ): Promise<SubscribersNotificationsFeedQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(subscribersNotificationsFeed(
-        client$,
-        request,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeySubscribersNotificationsFeed(
-  subscriberId: string,
-  parameters: {
-    page?: number | undefined;
-    limit?: number | undefined;
-    read?: boolean | undefined;
-    seen?: boolean | undefined;
-    payload?: string | undefined;
-    idempotencyKey?: string | undefined;
-  },
-): QueryKey {
-  return ["@novu/api", "Notifications", "feed", subscriberId, parameters];
 }

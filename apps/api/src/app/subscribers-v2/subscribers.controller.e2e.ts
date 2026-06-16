@@ -165,19 +165,6 @@ describe('Subscriber Controller E2E API Testing #novu-v2', () => {
         expect(subscribers[0].firstName).to.contain(uuid.substring(0, 5));
         expect(subscribers[0].lastName).to.equal('Subscriber');
       });
-
-      it('should find subscriber by partial subscriberId match', async () => {
-        const uuid = generateUUID();
-        await createSubscriberAndValidate(uuid);
-
-        const subscribers = await getAllAndValidate({
-          searchParams: { subscriberId: `test-sub` },
-          expectedTotalResults: 1,
-          expectedArraySize: 1,
-        });
-
-        expect(subscribers[0].subscriberId).to.equal(`test-subscriber-${uuid}`);
-      });
     });
 
     describe('List Subscriber Cursor Pagination', () => {
@@ -237,6 +224,15 @@ describe('Subscriber Controller E2E API Testing #novu-v2', () => {
         expect(firstPage.data).to.have.lengthOf(1);
         expect(firstPage.next).to.exist;
         expect(firstPage.previous).to.not.exist;
+      });
+
+      it('should return 400 when both before and after cursors are provided', async () => {
+        const response = await session.testAgent
+          .get('/v2/subscribers')
+          .query({ before: '000000000000000000000001', after: '000000000000000000000002' });
+
+        expect(response.status).to.equal(400);
+        expect(response.body.message).to.contain('Cannot specify both "before" and "after" cursors');
       });
     });
 

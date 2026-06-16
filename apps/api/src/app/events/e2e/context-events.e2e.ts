@@ -1,3 +1,4 @@
+import { Novu } from '@novu/api';
 import {
   ContextRepository,
   JobRepository,
@@ -17,26 +18,23 @@ import {
 } from '@novu/shared';
 import { SubscribersService, UserSession } from '@novu/testing';
 import { expect } from 'chai';
+import { initNovuClassSdk } from '../../shared/helpers/e2e/sdk/e2e-sdk.helper';
 
 describe('Context functionality - /v1/events/trigger (POST) #novu-v2', () => {
   let session: UserSession;
   let workflow: WorkflowResponseDto;
   let subscriber: SubscriberEntity;
   let subscriberService: SubscribersService;
+  let novuClient: Novu;
   const contextRepository = new ContextRepository();
   const notificationRepository = new NotificationRepository();
   const messageRepository = new MessageRepository();
   const jobRepository = new JobRepository();
 
-  before(() => {
-    // Enable the context feature flag
-    // @ts-expect-error process.env is not typed
-    process.env.IS_CONTEXT_ENABLED = 'true';
-  });
-
   beforeEach(async () => {
     session = new UserSession();
     await session.initialize();
+    novuClient = initNovuClassSdk(session);
 
     // Create V2 workflow for context testing
     const workflowBody: CreateWorkflowDto = {
@@ -71,12 +69,6 @@ describe('Context functionality - /v1/events/trigger (POST) #novu-v2', () => {
     subscriber = await subscriberService.createSubscriber();
   });
 
-  after(() => {
-    // Clean up the feature flag
-    // @ts-expect-error process.env is not typed
-    delete process.env.IS_CONTEXT_ENABLED;
-  });
-
   afterEach(async () => {
     // Clean up contexts after each test
     await contextRepository.delete({
@@ -93,8 +85,8 @@ describe('Context functionality - /v1/events/trigger (POST) #novu-v2', () => {
     actor?: TriggerRecipientSubscriber,
     context?: ContextPayload
   ) {
-    const request = {
-      name: workflowInner.workflowId,
+    const triggerPayload = {
+      workflowId: workflowInner.workflowId,
       to: [{ subscriberId: newSubscriberIdInAppNotification, lastName: 'Smith', email: 'test@email.novu' }],
       payload: {
         organizationName: 'Umbrella Corp',
@@ -104,19 +96,14 @@ describe('Context functionality - /v1/events/trigger (POST) #novu-v2', () => {
       overrides,
       tenant,
       actor,
-      context,
-    };
+      ...(context && { context }),
+    } as Parameters<typeof novuClient.trigger>[0];
 
-    // TODO: Replace with SDK when available
-    const response = await session.testAgent
-      .post('/v1/events/trigger')
-      .send(request)
-      .set('Authorization', `ApiKey ${session.apiKey}`)
-      .expect(201);
+    const response = await novuClient.trigger(triggerPayload);
 
     // Validate standard response structure
-    expect(response.body.data.status).to.equal('processed');
-    expect(response.body.data.acknowledged).to.equal(true);
+    expect(response.result.status).to.equal('processed');
+    expect(response.result.acknowledged).to.equal(true);
 
     return response;
   }
@@ -163,7 +150,7 @@ describe('Context functionality - /v1/events/trigger (POST) #novu-v2', () => {
     expect(regionContext?.key).to.equal('region:us-east-1');
   });
 
-  it('should handle context upsert logic correctly', async () => {
+  it('should handle context find-or-create logic correctly (no updates)', async () => {
     const initialData = { name: 'Acme Corp', plan: 'basic' };
     const context1: ContextPayload = {
       tenant: {
@@ -203,12 +190,13 @@ describe('Context functionality - /v1/events/trigger (POST) #novu-v2', () => {
 
     expect(storedContext?.data).to.deep.equal(initialData);
 
-    // Third trigger with explicit data update
-    const updatedData = { name: 'Acme Corporation', plan: 'enterprise', region: 'us-west' };
+    // Third trigger with different data - should NOT update existing context
+    // this is to prevent accidental updates and overwrites
+    const attemptedUpdateData = { name: 'Acme Corporation', plan: 'enterprise', region: 'us-west' };
     const context3: ContextPayload = {
       tenant: {
         id: 'org-acme',
-        data: updatedData,
+        data: attemptedUpdateData,
       },
     };
 
@@ -216,7 +204,7 @@ describe('Context functionality - /v1/events/trigger (POST) #novu-v2', () => {
 
     await session.waitForJobCompletion(workflow._id);
 
-    // Verify context was updated, not duplicated
+    // Verify context was NOT updated - original data should remain
     const contexts = await contextRepository.find({
       _environmentId: session.environment._id,
       type: 'tenant',
@@ -224,27 +212,7 @@ describe('Context functionality - /v1/events/trigger (POST) #novu-v2', () => {
     });
 
     expect(contexts).to.have.length(1); // Still only one context
-    expect(contexts[0].data).to.deep.equal(updatedData); // Data should be updated
-
-    // Fourth trigger with empty data object (should update to empty)
-    const context4: ContextPayload = {
-      tenant: {
-        id: 'org-acme',
-        data: {},
-      },
-    };
-
-    await sendTrigger(workflow, subscriber.subscriberId, {}, {}, undefined, undefined, context4);
-
-    await session.waitForJobCompletion(workflow._id);
-
-    storedContext = await contextRepository.findOne({
-      _environmentId: session.environment._id,
-      type: 'tenant',
-      id: 'org-acme',
-    });
-
-    expect(storedContext?.data).to.deep.equal({}); // Should be updated to empty object
+    expect(contexts[0].data).to.deep.equal(initialData); // Data should NOT be updated - original data preserved
   });
 
   it('should reject invalid context payload', async () => {
@@ -374,7 +342,7 @@ describe('Context functionality - /v1/events/trigger (POST) #novu-v2', () => {
 
     expect(contexts).to.have.length(0);
 
-    // Verify notification entity has no contextKeys
+    // Verify notification entity has empty contextKeys array
     const notifications = await notificationRepository.find({
       _environmentId: session.environment._id,
       _subscriberId: subscriber._id,
@@ -382,9 +350,10 @@ describe('Context functionality - /v1/events/trigger (POST) #novu-v2', () => {
 
     expect(notifications).to.have.length(1);
     const notification = notifications[0];
-    expect(notification.contextKeys).to.satisfy((keys: any) => !keys);
+    expect(notification.contextKeys).to.be.an('array');
+    expect(notification.contextKeys).to.have.length(0);
 
-    // Verify message entities have no contextKeys
+    // Verify message entities have empty contextKeys array
     const messages = await messageRepository.find({
       _environmentId: session.environment._id,
       _subscriberId: subscriber._id,
@@ -393,10 +362,11 @@ describe('Context functionality - /v1/events/trigger (POST) #novu-v2', () => {
     expect(messages.length).to.be.greaterThan(0);
 
     for (const message of messages) {
-      expect(message.contextKeys).to.satisfy((keys: any) => !keys);
+      expect(message.contextKeys).to.be.an('array');
+      expect(message.contextKeys).to.have.length(0);
     }
 
-    // Verify job entities have no contextKeys
+    // Verify job entities have empty contextKeys array
     const jobs = await jobRepository.find({
       _environmentId: session.environment._id,
       _subscriberId: subscriber._id,
@@ -405,7 +375,8 @@ describe('Context functionality - /v1/events/trigger (POST) #novu-v2', () => {
     expect(jobs.length).to.be.greaterThan(0);
 
     for (const job of jobs) {
-      expect(job.contextKeys).to.satisfy((keys: any) => !keys);
+      expect(job.contextKeys).to.be.an('array');
+      expect(job.contextKeys).to.have.length(0);
     }
   });
 });

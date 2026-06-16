@@ -83,7 +83,7 @@ describe('MarkNotificationAs', () => {
     };
 
     getSubscriberMock.execute.resolves(mockSubscriber);
-    messageRepositoryMock.findOne.resolves(undefined);
+    messageRepositoryMock.findOneForInbox.resolves(undefined);
 
     try {
       await updateNotification.execute(command);
@@ -104,8 +104,8 @@ describe('MarkNotificationAs', () => {
     const updatedMessageMock = { ...mockMessage, read: true };
 
     getSubscriberMock.execute.resolves(mockSubscriber);
-    messageRepositoryMock.findOne.onFirstCall().resolves(mockMessage);
-    messageRepositoryMock.findOne.onSecondCall().resolves(updatedMessageMock);
+    messageRepositoryMock.findOneForInbox.onFirstCall().resolves(mockMessage);
+    messageRepositoryMock.findOneForInbox.onSecondCall().resolves(updatedMessageMock);
     markManyNotificationsAsMock.execute.resolves();
 
     const updatedMessage = await updateNotification.execute(command);
@@ -120,6 +120,7 @@ describe('MarkNotificationAs', () => {
         read: command.read,
         archived: command.archived,
         snoozedUntil: command.snoozedUntil,
+        contextKeys: command.contextKeys,
       }),
     ]);
     expect(mapToDto(updatedMessageMock)).to.deep.equal(updatedMessage);
@@ -135,7 +136,8 @@ describe('MarkNotificationAs', () => {
     };
 
     getSubscriberMock.execute.resolves(mockSubscriber);
-    messageRepositoryMock.findOne.resolves(mockMessage);
+    messageRepositoryMock.findOneForInbox.onFirstCall().resolves(mockMessage);
+    messageRepositoryMock.findOneForInbox.onSecondCall().resolves(mockMessage);
 
     await updateNotification.execute(command);
 

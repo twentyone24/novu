@@ -1,5 +1,6 @@
 import { RiAngularjsFill, RiJavascriptFill, RiNextjsFill, RiReactjsFill, RiRemixRunFill } from 'react-icons/ri';
-import { API_HOSTNAME, IS_EU, WEBSOCKET_HOSTNAME } from '@/config';
+import { API_HOSTNAME, IS_EU } from '@/config';
+import { apiHostnameManager } from '@/utils/api-hostname-manager';
 import { Language } from '../primitives/code-block';
 import { getFrameworkPrompt } from './ai-prompts/simple-prompt-getter';
 
@@ -23,10 +24,13 @@ export interface InstallationStep {
   buttonText?: string;
   buttonAction?: () => void;
   copyText?: string;
+  applicationIdentifier?: string;
+  subscriberId?: string;
 }
 
 const isDefaultApi = API_HOSTNAME === 'https://api.novu.co';
-const isDefaultWs = WEBSOCKET_HOSTNAME === 'https://ws.novu.co';
+const currentWebSocketHostname = apiHostnameManager.getWebSocketHostname();
+const isDefaultWs = currentWebSocketHostname === 'https://ws.novu.co';
 
 // Convert https:// to wss:// for WebSocket URLs
 const getWebSocketUrl = (url: string) => {
@@ -34,10 +38,10 @@ const getWebSocketUrl = (url: string) => {
   return url.replace(/^https:\/\//, 'wss://');
 };
 
-const websocketUrl = getWebSocketUrl(WEBSOCKET_HOSTNAME);
+const websocketUrl = getWebSocketUrl(currentWebSocketHostname);
 
 // Shared helpers to minimize duplication
-const cliFlags = `${isDefaultApi && IS_EU ? ' --region=eu' : ''}${!isDefaultApi ? ` --backendUrl ${API_HOSTNAME}` : ''}${!isDefaultWs ? ` --socketUrl ${WEBSOCKET_HOSTNAME}` : ''}`;
+const cliFlags = `${isDefaultApi && IS_EU ? ' --region=eu' : ''}${!isDefaultApi ? ` --backendUrl ${API_HOSTNAME}` : ''}${!isDefaultWs ? ` --socketUrl ${currentWebSocketHostname}` : ''}`;
 
 function optionalAttrProps(indent: string): string {
   return `${!isDefaultApi ? `\n${indent}${`backendUrl="${API_HOSTNAME}"`}` : ''}${!isDefaultWs ? `\n${indent}${`socketUrl="${websocketUrl}"`}` : ''}`;
@@ -67,7 +71,7 @@ function stepsByMethod(
   return manualSteps;
 }
 
-export const customizationTip = {
+const customizationTip = {
   title: 'Tip:',
   description: (
     <>
@@ -85,7 +89,7 @@ export const customizationTip = {
   ),
 };
 
-export const commonInstallStep = (packageName: string): InstallationStep => ({
+const commonInstallStep = (packageName: string): InstallationStep => ({
   title: 'Install the package',
   description: `${packageName} is the package that powers the notification center.`,
   code: `npm install ${packageName}`,
@@ -93,7 +97,7 @@ export const commonInstallStep = (packageName: string): InstallationStep => ({
   codeTitle: 'Terminal',
 });
 
-export const commonCLIInstallStep = (): InstallationStep => ({
+const commonCLIInstallStep = (): InstallationStep => ({
   title: 'Run the CLI command in an existing project',
   description: `You'll notice a new folder in your project called inbox. This is where you'll find the inbox component boilerplate code. \n You can customize the <Inbox /> component to match your app theme.`,
   code: `npx add-inbox@latest --appId YOUR_APPLICATION_IDENTIFIER --subscriberId YOUR_SUBSCRIBER_ID${cliFlags}`,
@@ -101,7 +105,7 @@ export const commonCLIInstallStep = (): InstallationStep => ({
   codeTitle: 'Terminal',
 });
 
-export const commonAIAssistInstallStep = (
+const commonAIAssistInstallStep = (
   frameworkName: string,
   applicationIdentifier: string,
   subscriberId: string
@@ -111,6 +115,8 @@ export const commonAIAssistInstallStep = (
   buttonText: 'Copy AI prompt',
   copyText: getFrameworkPrompt(frameworkName, applicationIdentifier, IS_EU ? 'eu' : 'us', subscriberId),
   codeLanguage: 'shell',
+  applicationIdentifier,
+  subscriberId,
 });
 
 export const getFrameworks = (
@@ -422,6 +428,3 @@ novu.mountComponent({
     ),
   },
 ];
-
-// Export a default frameworks array for backward compatibility
-export const frameworks = getFrameworks('manual');

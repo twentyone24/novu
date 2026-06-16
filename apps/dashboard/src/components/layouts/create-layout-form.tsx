@@ -1,4 +1,6 @@
-import { zodResolver } from '@hookform/resolvers/zod';
+/** biome-ignore-all lint/correctness/useUniqueElementIds: working correctly */
+
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { slugify } from '@novu/shared';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -13,20 +15,25 @@ import {
   FormMessage,
   FormRoot,
 } from '@/components/primitives/form/form';
+import { TranslationToggleSection } from '../workflow-editor/translation-toggle-section';
 
 interface CreateLayoutFormProps {
   onSubmit: (formData: z.infer<typeof layoutSchema>) => void;
   template?: {
     name: string;
+    isTranslationEnabled?: boolean;
   };
+  /** When true, changing the name does not overwrite the identifier (duplicate flow). */
+  disableIdentifierSlugSync?: boolean;
 }
 
-export function CreateLayoutForm({ onSubmit, template }: CreateLayoutFormProps) {
-  const form = useForm<z.infer<typeof layoutSchema>>({
-    resolver: zodResolver(layoutSchema),
+export function CreateLayoutForm({ onSubmit, template, disableIdentifierSlugSync }: CreateLayoutFormProps) {
+  const form = useForm({
+    resolver: standardSchemaResolver(layoutSchema),
     defaultValues: {
       name: template?.name ?? '',
       layoutId: slugify(template?.name ?? ''),
+      isTranslationEnabled: template?.isTranslationEnabled ?? false,
     },
   });
 
@@ -51,7 +58,10 @@ export function CreateLayoutForm({ onSubmit, template }: CreateLayoutFormProps) 
                   autoFocus
                   onChange={(e) => {
                     field.onChange(e);
-                    form.setValue('layoutId', slugify(e.target.value));
+
+                    if (!disableIdentifierSlugSync) {
+                      form.setValue('layoutId', slugify(e.target.value));
+                    }
                   }}
                 />
               </FormControl>
@@ -71,6 +81,14 @@ export function CreateLayoutForm({ onSubmit, template }: CreateLayoutFormProps) 
               </FormControl>
               <FormMessage />
             </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="isTranslationEnabled"
+          render={({ field }) => (
+            <TranslationToggleSection value={field.value ?? false} showManageLink={false} onChange={field.onChange} />
           )}
         />
       </FormRoot>

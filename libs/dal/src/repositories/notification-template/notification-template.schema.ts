@@ -271,11 +271,11 @@ notificationTemplateSchema.virtual('steps.variants.template', {
   justOne: true,
 });
 
-notificationTemplateSchema.path('steps').schema.set('toJSON', { virtuals: true });
-notificationTemplateSchema.path('steps').schema.set('toObject', { virtuals: true });
+notificationTemplateSchema.path('steps')?.schema?.set('toJSON', { virtuals: true });
+notificationTemplateSchema.path('steps')?.schema?.set('toObject', { virtuals: true });
 
-notificationTemplateSchema.path('steps.variants').schema.set('toJSON', { virtuals: true });
-notificationTemplateSchema.path('steps.variants').schema.set('toObject', { virtuals: true });
+notificationTemplateSchema.path('steps.variants')?.schema?.set('toJSON', { virtuals: true });
+notificationTemplateSchema.path('steps.variants')?.schema?.set('toObject', { virtuals: true });
 
 notificationTemplateSchema.virtual('notificationGroup', {
   ref: 'NotificationGroup',
@@ -330,7 +330,12 @@ notificationTemplateSchema.index({
   name: 1,
 });
 
-notificationTemplateSchema.plugin(mongooseDelete, { deletedAt: true, deletedBy: true, overrideMethods: 'all' });
+notificationTemplateSchema.plugin(mongooseDelete, {
+  deletedAt: true,
+  deletedBy: true,
+  overrideMethods: 'all',
+  use$neOperator: false,
+});
 
 export const NotificationTemplate =
   (mongoose.models.NotificationTemplate as mongoose.Model<NotificationTemplateDBModel>) ||

@@ -1,12 +1,21 @@
 import { Injectable } from '@nestjs/common';
-import { InstrumentUsecase, PinoLogger, StepRunRepository } from '@novu/application-generic';
+import {
+  DeliveryTrendCountsRepository,
+  FeatureFlagsService,
+  InstrumentUsecase,
+  PinoLogger,
+  StepRunRepository,
+} from '@novu/application-generic';
+import { FeatureFlagsKeysEnum } from '@novu/shared';
 import { ChartDataPointDto } from '../../dtos/get-charts.response.dto';
 import { BuildDeliveryTrendChartCommand } from './build-delivery-trend-chart.command';
 
 @Injectable()
 export class BuildDeliveryTrendChart {
   constructor(
+    private deliveryTrendCountsRepository: DeliveryTrendCountsRepository,
     private stepRunRepository: StepRunRepository,
+    private featureFlagsService: FeatureFlagsService,
     private logger: PinoLogger
   ) {
     this.logger.setContext(BuildDeliveryTrendChart.name);
@@ -14,14 +23,43 @@ export class BuildDeliveryTrendChart {
 
   @InstrumentUsecase()
   async execute(command: BuildDeliveryTrendChartCommand): Promise<ChartDataPointDto[]> {
-    const { environmentId, organizationId, startDate, endDate } = command;
+    const { environmentId, organizationId, startDate, endDate, workflowIds } = command;
 
-    const stepRuns = await this.stepRunRepository.getDeliveryTrendData(
-      environmentId,
-      organizationId,
-      startDate,
-      endDate
-    );
+    const featureFlagContext = {
+      organization: { _id: organizationId },
+      environment: { _id: environmentId },
+    };
+
+    const [isGlobalEnabled, isDedicatedEnabled] = await Promise.all([
+      this.featureFlagsService.getFlag({
+        key: FeatureFlagsKeysEnum.IS_ANALYTIC_V2_LOGS_READ_GLOBAL_ENABLED,
+        defaultValue: false,
+        ...featureFlagContext,
+      }),
+      this.featureFlagsService.getFlag({
+        key: FeatureFlagsKeysEnum.IS_ANALYTIC_V2_DELIVERY_TREND_READ_ENABLED,
+        defaultValue: false,
+        ...featureFlagContext,
+      }),
+    ]);
+
+    const useNewQuery = isGlobalEnabled || isDedicatedEnabled;
+
+    const stepRuns = useNewQuery
+      ? await this.deliveryTrendCountsRepository.getDeliveryTrendData(
+          environmentId,
+          organizationId,
+          startDate,
+          endDate,
+          workflowIds
+        )
+      : await this.stepRunRepository.getDeliveryTrendData(
+          environmentId,
+          organizationId,
+          startDate,
+          endDate,
+          workflowIds
+        );
 
     const chartDataMap = new Map<string, Map<string, number>>();
 

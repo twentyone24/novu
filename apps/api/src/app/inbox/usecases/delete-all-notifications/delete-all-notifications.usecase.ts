@@ -9,7 +9,7 @@ import {
   WebSocketsQueueService,
 } from '@novu/application-generic';
 import { EnvironmentEntity, EnvironmentRepository, MessageEntity, MessageRepository } from '@novu/dal';
-import { WebhookEventEnum, WebhookObjectTypeEnum, WebSocketEventEnum } from '@novu/shared';
+import { normalizeTagGroups, WebhookEventEnum, WebhookObjectTypeEnum, WebSocketEventEnum } from '@novu/shared';
 
 import { GetSubscriber } from '../../../subscribers/usecases/get-subscriber';
 import { AnalyticsEventsEnum } from '../../utils';
@@ -61,20 +61,19 @@ export class DeleteAllNotifications {
       filters.data = parsedData;
     }
 
+    if (command.filters.tags !== undefined) {
+      filters.tagGroups = normalizeTagGroups(command.filters.tags);
+      delete filters.tags;
+    }
+
     const deletedMessages = await this.messageRepository.deleteMessagesWithFilters({
       environmentId: command.environmentId,
       subscriberId: subscriber._id,
+      contextKeys: command.contextKeys,
       filters,
     });
 
     await this.sendWebhookEvents(command, deletedMessages);
-
-    await this.invalidateCache.invalidateQuery({
-      key: buildFeedKey().invalidate({
-        subscriberId: command.subscriberId,
-        _environmentId: command.environmentId,
-      }),
-    });
 
     await this.invalidateCache.invalidateQuery({
       key: buildMessageCountKey().invalidate({
@@ -87,6 +86,7 @@ export class DeleteAllNotifications {
       _organization: command.organizationId,
       _subscriberId: subscriber._id,
       filters: command.filters,
+      contextKeys: command.contextKeys,
     });
 
     this.webSocketsQueueService.add({
@@ -95,6 +95,7 @@ export class DeleteAllNotifications {
         event: WebSocketEventEnum.UNREAD,
         userId: subscriber._id,
         _environmentId: command.environmentId,
+        contextKeys: command.contextKeys ?? [],
       },
       groupId: subscriber._organizationId,
     });

@@ -2,14 +2,13 @@ import { Module } from '@nestjs/common';
 import {
   analyticsService,
   CacheInMemoryProviderService,
-  CalculateLimitNovuIntegration,
   CreateOrUpdateSubscriberUseCase,
   cacheService,
   featureFlagsService,
-  GetNovuProviderCredentials,
   GetPreferences,
   GetSubscriberTemplatePreference,
   GetWorkflowByIdsUseCase,
+  InMemoryLRUCacheService,
   InvalidateCacheService,
   UpdateSubscriber,
   UpdateSubscriberChannel,
@@ -17,6 +16,7 @@ import {
 } from '@novu/application-generic';
 import {
   CommunityOrganizationRepository,
+  ContextRepository,
   EnvironmentRepository,
   IntegrationRepository,
   MessageRepository,
@@ -28,21 +28,13 @@ import {
   TopicSubscribersRepository,
   WorkflowOverrideRepository,
 } from '@novu/dal';
-import { ChannelConnectionsModule } from '../channel-connections/channel-connections.module';
-import { ChannelEndpointsModule } from '../channel-endpoints/channel-endpoints.module';
 import { InboxModule } from '../inbox/inbox.module';
 import { UpdatePreferences } from '../inbox/usecases/update-preferences/update-preferences.usecase';
 import { OutboundWebhooksModule } from '../outbound-webhooks/outbound-webhooks.module';
 import { GetSubscriberGlobalPreference } from '../subscribers/usecases/get-subscriber-global-preference';
 import { GetSubscriberPreference } from '../subscribers/usecases/get-subscriber-preference';
 import { TopicsV2Module } from '../topics-v2/topics-v2.module';
-import { ChannelConnectionsController } from './channel-connections.controller';
-import { ChannelEndpointsController } from './channel-endpoints.controller';
 import { SubscribersController } from './subscribers.controller';
-import { ChatOauthCallback } from './usecases/chat-oauth-callback/chat-oauth-callback.usecase';
-import { SlackOauthCallback } from './usecases/chat-oauth-callback/slack-oauth-callback/slack-oauth-callback.usecase';
-import { GenerateChatOauthUrl } from './usecases/generate-chat-oath-url/generate-chat-oauth-url.usecase';
-import { GenerateSlackOauthUrl } from './usecases/generate-chat-oath-url/generate-slack-oath-url/generate-slack-oauth-url.usecase';
 import { GetSubscriber } from './usecases/get-subscriber/get-subscriber.usecase';
 import { GetSubscriberPreferences } from './usecases/get-subscriber-preferences/get-subscriber-preferences.usecase';
 import { ListSubscribersUseCase } from './usecases/list-subscribers/list-subscribers.usecase';
@@ -70,10 +62,6 @@ const USE_CASES = [
   GetSubscriberTemplatePreference,
   UpsertPreferences,
   GetWorkflowByIdsUseCase,
-  ChatOauthCallback,
-  SlackOauthCallback,
-  GenerateSlackOauthUrl,
-  GenerateChatOauthUrl,
 ];
 
 const DAL_MODELS = [
@@ -85,17 +73,12 @@ const DAL_MODELS = [
   WorkflowOverrideRepository,
   TenantRepository,
   MessageRepository,
+  ContextRepository,
 ];
 
 @Module({
-  imports: [
-    TopicsV2Module,
-    InboxModule,
-    OutboundWebhooksModule.forRoot(),
-    ChannelConnectionsModule,
-    ChannelEndpointsModule,
-  ],
-  controllers: [SubscribersController, ChannelEndpointsController, ChannelConnectionsController],
+  imports: [TopicsV2Module, InboxModule, OutboundWebhooksModule.forRoot()],
+  controllers: [SubscribersController],
   providers: [
     ...USE_CASES,
     ...DAL_MODELS,
@@ -105,8 +88,7 @@ const DAL_MODELS = [
     CommunityOrganizationRepository,
     featureFlagsService,
     EnvironmentRepository,
-    GetNovuProviderCredentials,
-    CalculateLimitNovuIntegration,
+    InMemoryLRUCacheService,
   ],
 })
 export class SubscribersModule {}

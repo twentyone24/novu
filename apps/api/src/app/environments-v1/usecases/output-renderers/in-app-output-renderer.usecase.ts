@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { InstrumentUsecase, PinoLogger, sanitizeHtmlInObject } from '@novu/application-generic';
-import { NotificationTemplateEntity } from '@novu/dal';
+import { LocalizationResourceEnum, NotificationTemplateEntity } from '@novu/dal';
 import { InAppRenderOutput } from '@novu/shared';
 import { BaseTranslationRendererUsecase } from './base-translation-renderer.usecase';
 import { RenderCommand } from './render-command';
@@ -30,9 +30,10 @@ export class InAppOutputRendererUsecase extends BaseTranslationRendererUsecase {
       variables: renderCommand.fullPayloadForRender,
       environmentId: _environmentId,
       organizationId: _organizationId,
-      workflowId,
+      resourceId: workflowId,
+      resourceType: LocalizationResourceEnum.WORKFLOW,
       locale: renderCommand.locale,
-      dbWorkflow: renderCommand.dbWorkflow,
+      resourceEntity: renderCommand.dbWorkflow,
       organization: renderCommand.organization,
     });
 
@@ -42,8 +43,18 @@ export class InAppOutputRendererUsecase extends BaseTranslationRendererUsecase {
 
     const { data, ...restOutputControls } = translatedControls;
 
+    const sanitized = sanitizeHtmlInObject(restOutputControls);
+
+    const { body, subject, ...otherSanitizedControls } = sanitized;
+
+    /**
+     * We need to remove the subject and body from the output if they are empty.
+     * Otherwise, the ajv anyOf validation will fail as it will try to make the minLength validation.
+     */
     return {
-      ...sanitizeHtmlInObject(restOutputControls),
+      ...otherSanitizedControls,
+      ...(subject && typeof subject === 'string' && subject.length > 0 ? { subject } : {}),
+      ...(body && typeof body === 'string' && body.length > 0 ? { body } : {}),
       ...(data ? { data } : {}),
     } as any;
   }

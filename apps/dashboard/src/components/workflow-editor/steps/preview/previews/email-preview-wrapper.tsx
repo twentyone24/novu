@@ -10,7 +10,6 @@ import {
   EmailPreviewContentMobile,
   EmailPreviewHeader,
   EmailPreviewSubject,
-  EmailPreviewSubjectMobile,
 } from '@/components/workflow-editor/steps/email/email-preview';
 import { EmailTabsSection } from '@/components/workflow-editor/steps/email/email-tabs-section';
 import { cn } from '@/utils/ui';
@@ -20,6 +19,7 @@ type EmailCorePreviewProps = {
   isPreviewPending: boolean;
   isCustomHtmlEditor?: boolean;
   resourceOrigin: ResourceOriginEnum;
+  isStepResolver?: boolean;
 };
 
 const fadeVariants = {
@@ -32,6 +32,7 @@ export function EmailCorePreview({
   isPreviewPending,
   isCustomHtmlEditor,
   resourceOrigin,
+  isStepResolver,
 }: EmailCorePreviewProps) {
   const [activeTab, setActiveTab] = useState('desktop');
 
@@ -44,6 +45,7 @@ export function EmailCorePreview({
     return {
       subject: previewData.result.preview?.subject || '',
       body: previewData.result.preview?.body || '',
+      from: previewData.result.preview?.from,
     };
   }, [previewData?.result]);
 
@@ -77,7 +79,7 @@ export function EmailCorePreview({
       <div className="">
         <div className="bg-bg-white overflow-auto rounded-lg border border-neutral-200">
           <div className="flex w-full items-center justify-between px-3 pb-0 pt-3">
-            <EmailPreviewHeader />
+            <EmailPreviewHeader previewFrom={emailPreviewContent?.from} />
             <div>
               <TabsList>
                 <TabsTrigger value="mobile">
@@ -106,10 +108,17 @@ export function EmailCorePreview({
                   {emailPreviewContent ? (
                     <>
                       <TabsContent value="mobile">
-                        <div className="w-full bg-neutral-100">
+                        <div className="border-b px-2">
+                          <EmailPreviewSubject subject={emailPreviewContent.subject} />
+                        </div>
+                        <div className={cn(isCustomHtmlEditor ? '' : 'w-full bg-neutral-50 py-8')}>
                           <EmailPreviewContentMobile className="mx-auto">
-                            <EmailPreviewSubjectMobile subject={emailPreviewContent.subject} />
-                            <EmailPreviewBodyMobile body={emailPreviewContent.body} resourceOrigin={resourceOrigin} />
+                            <EmailPreviewBodyMobile
+                              className="bg-background"
+                              body={emailPreviewContent.body}
+                              resourceOrigin={resourceOrigin}
+                              isStepResolver={isStepResolver}
+                            />
                           </EmailPreviewContentMobile>
                         </div>
                       </TabsContent>
@@ -121,6 +130,7 @@ export function EmailCorePreview({
                           <EmailPreviewBody
                             body={emailPreviewContent.body}
                             resourceOrigin={resourceOrigin}
+                            isStepResolver={isStepResolver}
                             className={isCustomHtmlEditor ? 'bg-background max-w-auto max-w-none rounded-lg' : ''}
                           />
                         </div>

@@ -17,12 +17,18 @@ export interface IProvider {
   }>;
 }
 
+export interface IEmailAlternative {
+  contentType: string;
+  content: string | Buffer;
+}
+
 export interface IEmailOptions {
   to: string[];
   subject: string;
   html: string;
   from?: string;
   text?: string;
+  alternatives?: IEmailAlternative[];
   attachments?: IAttachmentOptions[];
   id?: string;
   replyTo?: string;
@@ -51,6 +57,8 @@ export interface IPushOptions {
   title: string;
   content: string;
   payload: object;
+  /** Novu message id; used by some providers (e.g. APNS) for collapse-id when not set in overrides. */
+  messageId?: string;
   overrides?: {
     type?: 'notification' | 'data';
     data?: { [key: string]: string };
@@ -73,6 +81,7 @@ export interface IPushOptions {
     channelId?: string;
     categoryId?: string;
     mutableContent?: boolean;
+    collapseId?: string;
     android?: { [key: string]: { [key: string]: string } | string };
     apns?: {
       headers?: { [key: string]: string };
@@ -133,6 +142,14 @@ export enum EmailEventStatusEnum {
   COMPLAINT = 'complaint',
 }
 
+export enum PushEventStatusEnum {
+  DELIVERED = 'delivered',
+  OPENED = 'opened',
+  DISMISSED = 'dismissed',
+  CLICKED = 'clicked',
+  FAILED = 'failed',
+}
+
 export enum SmsEventStatusEnum {
   CREATED = 'created',
   DELIVERED = 'delivered',
@@ -146,7 +163,7 @@ export enum SmsEventStatusEnum {
 }
 
 export interface IEventBody {
-  status: EmailEventStatusEnum | SmsEventStatusEnum;
+  status: EmailEventStatusEnum | SmsEventStatusEnum | PushEventStatusEnum;
   date: string;
   externalId?: string;
   attempts?: number;
@@ -161,6 +178,10 @@ export interface IEmailEventBody extends IEventBody {
 
 export interface ISMSEventBody extends IEventBody {
   status: SmsEventStatusEnum;
+}
+
+export interface IPushEventBody extends IEventBody {
+  status: PushEventStatusEnum;
 }
 
 export interface IEmailProvider extends IProvider {
@@ -198,6 +219,8 @@ export interface IChatProvider extends IProvider {
 }
 
 export interface IPushProvider extends IProvider {
+  isTokenInvalid?: (errorMessage: string) => boolean;
+
   sendMessage(options: IPushOptions, bridgeProviderData: Record<string, unknown>): Promise<ISendMessageSuccessResponse>;
 
   channelType: ChannelTypeEnum.PUSH;

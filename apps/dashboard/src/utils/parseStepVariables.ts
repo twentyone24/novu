@@ -2,11 +2,17 @@ import { Completion } from '@codemirror/autocomplete';
 import type { JSONSchemaDefinition } from '@novu/shared';
 import { JSONSchema7 } from 'json-schema';
 import { isAllowedAlias } from '@/components/maily/repeat-block-aliases';
+import { SYSTEM_VARIABLE_DEFINITIONS } from '@/components/variables/system-variable-definitions';
 import {
   DIGEST_VARIABLES,
   DIGEST_VARIABLES_ENUM,
   getDynamicDigestVariable,
 } from '../components/variable/utils/digest-variables';
+import { isNamespaceOnlyVariable } from './liquid';
+
+function normalizeArrayNotation(path: string): string {
+  return path.replace(/\[(\d+)\]/g, '.$1');
+}
 
 export interface LiquidVariable {
   type?: 'variable' | 'digest' | 'new-variable' | 'local';
@@ -121,7 +127,7 @@ export function parseStepVariables(
 
             if (value.items) {
               const items = Array.isArray(value.items) ? value.items[0] : value.items;
-              extractProperties(items, `${fullPath}[0]`);
+              extractProperties(items, `${fullPath}.0`);
             }
           } else if (value.type === 'object') {
             result.namespaces.push({ name: fullPath });
@@ -183,6 +189,16 @@ export function parseStepVariables(
   }
 
   function isAllowedVariable(variable: LiquidVariable): boolean {
+    // Check for namespace-only variables (invalid)
+    if (isNamespaceOnlyVariable(variable.name)) {
+      return false;
+    }
+
+    // Built-in env system variables are always valid — injected at runtime, not in schema
+    if (SYSTEM_VARIABLE_DEFINITIONS.some(({ key }) => variable.name === key)) {
+      return true;
+    }
+
     if (isPayloadSchemaEnabled && variable.name.startsWith('payload.')) {
       return true;
     }
@@ -196,8 +212,9 @@ export function parseStepVariables(
 
     const pathWithFilters = variable.aliasFor || variable.name;
     const [path] = pathWithFilters.split('|');
+    const normalizedPath = normalizeArrayNotation(path);
 
-    if (result.primitives.some((primitive) => primitive.name === path)) {
+    if (result.primitives.some((primitive) => normalizeArrayNotation(primitive.name) === normalizedPath)) {
       return true;
     }
 

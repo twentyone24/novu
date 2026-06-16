@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDataRef } from './use-data-ref';
 
 type PreviewContextState<D, E extends Record<keyof D, string | null>> = {
   accordionValue: string[];
@@ -36,75 +37,79 @@ export function usePreviewContext<D, E extends Record<keyof D, string | null>>({
     localParsedData: parseJsonValue(value),
   }));
   const isUpdatingRef = useRef(false);
-  const lastValueRef = useRef(value);
+  const lastSyncedValueRef = useRef(value);
+  const latestValueRef = useRef(value);
+  latestValueRef.current = value;
+  const onDataPersistRef = useDataRef(onDataPersist);
+  const parseJsonValueRef = useDataRef(parseJsonValue);
   const parsedData = useMemo(() => parseJsonValue(value), [parseJsonValue, value]);
+
+  // Wraps onChange to synchronously track the latest value in a ref,
+  // so that consecutive calls within the same render cycle read fresh data.
+  const trackedOnChange = useCallback(
+    (newValue: string): Error | null => {
+      const error = onChange(newValue);
+      if (!error) {
+        latestValueRef.current = newValue;
+      }
+
+      return error;
+    },
+    [onChange]
+  );
 
   // Sync external value changes with local state
   useEffect(() => {
-    if (value === lastValueRef.current || isUpdatingRef.current) {
+    if (value === lastSyncedValueRef.current || isUpdatingRef.current) {
       return;
     }
 
-    lastValueRef.current = value;
+    lastSyncedValueRef.current = value;
     setState((prev) => ({
       ...prev,
       localParsedData: parsedData,
     }));
   }, [value, parsedData]);
 
-  const setError = useCallback((section: keyof E, error: string | null) => {
-    setState((prev) => ({
-      ...prev,
-      errors: { ...prev.errors, [section]: error },
-    }));
-  }, []);
-
-  const updateLocalData = useCallback(
-    (section: keyof D, updatedData: any) => {
-      setState((prev) => {
-        const updatedParsedData = { ...prev.localParsedData, [section]: updatedData };
-
-        onDataPersist?.(updatedParsedData);
-
-        return {
-          ...prev,
-          localParsedData: updatedParsedData,
-        };
-      });
-    },
-    [onDataPersist]
-  );
-
-  const updateJsonSection = useCallback(
+  const updatePreviewSection = useCallback(
     (section: keyof D, updatedData: any) => {
       if (isUpdatingRef.current) return;
 
       isUpdatingRef.current = true;
 
       try {
-        const currentData = parseJsonValue(value);
+        const currentData = parseJsonValueRef.current(latestValueRef.current);
         const newData = { ...currentData, [section]: updatedData };
         const stringified = JSON.stringify(newData, null, 2);
 
-        const error = onChange(stringified);
+        const error = trackedOnChange(stringified);
 
         if (error) {
-          setError(section, error.message);
+          setState((prev) => ({
+            ...prev,
+            errors: { ...prev.errors, [section]: error.message },
+          }));
         } else {
-          updateLocalData(section, updatedData);
-          setError(section, null);
+          onDataPersistRef.current?.(newData);
+          setState((prev) => ({
+            ...prev,
+            localParsedData: newData,
+            errors: { ...prev.errors, [section]: null },
+          }));
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to update JSON';
-        setError(section, errorMessage);
+        setState((prev) => ({
+          ...prev,
+          errors: { ...prev.errors, [section]: errorMessage },
+        }));
       } finally {
-        // Use setTimeout to ensure the ref is reset after the current execution cycle
         setTimeout(() => {
           isUpdatingRef.current = false;
         }, 0);
       }
     },
-    [onChange, value, setError, updateLocalData, parseJsonValue]
+    [trackedOnChange]
   );
 
   const setAccordionValue = useCallback((value: string[]) => {
@@ -115,7 +120,8 @@ export function usePreviewContext<D, E extends Record<keyof D, string | null>>({
     accordionValue: state.accordionValue,
     setAccordionValue,
     errors: state.errors,
-    localParsedData: state.localParsedData,
-    updateJsonSection,
+    previewContext: state.localParsedData,
+    updatePreviewSection,
+    trackedOnChange,
   };
 }

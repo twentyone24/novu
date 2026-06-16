@@ -6,6 +6,7 @@ import { generateObjectId } from '../../utils/generate-id';
 import { Prettify } from '../../utils/prettify.type';
 import { FeatureFlagsService } from '../feature-flags/feature-flags.service';
 import { ClickHouseService, InsertOptions } from './clickhouse.service';
+import { ClickHouseBatchService } from './clickhouse-batch.service';
 
 // Define operators as const assertion to maintain literal types
 const CLICKHOUSE_OPERATORS = [
@@ -26,10 +27,13 @@ const CLICKHOUSE_OPERATORS = [
   'GLOBAL NOT IN',
   'IS NULL',
   'IS NOT NULL',
+  'has',
+  'hasAny',
+  'hasAll',
 ] as const;
 
 // Define array operators that require array values
-type ArrayOperators = 'IN' | 'NOT IN' | 'GLOBAL IN' | 'GLOBAL NOT IN';
+type ArrayOperators = 'IN' | 'NOT IN' | 'GLOBAL IN' | 'GLOBAL NOT IN' | 'hasAny' | 'hasAll';
 
 // Define null operators that don't require values
 type NullOperators = 'IS NULL' | 'IS NOT NULL';
@@ -96,7 +100,8 @@ export abstract class LogRepository<TSchema extends ClickhouseSchema<any>, TEnha
     protected readonly logger: PinoLogger,
     protected readonly schema: TSchema,
     protected readonly schemaOrderBy: SchemaKeys<TSchema>[],
-    protected readonly featureFlagsService: FeatureFlagsService
+    protected readonly featureFlagsService: FeatureFlagsService,
+    protected readonly batchService?: ClickHouseBatchService
   ) {
     this.initialize();
   }
@@ -118,6 +123,11 @@ export abstract class LogRepository<TSchema extends ClickhouseSchema<any>, TEnha
 
   private getColumnType(column: string): string {
     return this.schema.schema[column]?.type?.toString() || 'String';
+  }
+
+  private isArrayColumn(column: string): boolean {
+    const typeString = this.getColumnType(column);
+    return typeString.startsWith('Array(');
   }
 
   private validateColumnName(columnName: SchemaKeys<TSchema>): void {
@@ -174,14 +184,15 @@ export abstract class LogRepository<TSchema extends ClickhouseSchema<any>, TEnha
     let allConditions: WhereCondition<InferClickhouseSchemaType<TSchema>>[] = [];
 
     if ('__unsafe' in rawWhere) {
-      // Unsafe mode - log for monitoring but allow
-      this.logger.warn('Using unsafe WHERE clause without tenant enforcement', {
-        table: this.table,
-        conditionsCount: rawWhere.conditions.length,
-      });
+      this.logger.warn(
+        {
+          table: this.table,
+          conditionsCount: rawWhere.conditions.length,
+        },
+        'Using unsafe WHERE clause without tenant enforcement'
+      );
       allConditions = rawWhere.conditions;
     } else {
-      // Safe mode - enforce tenant context
       const enforcedConditions = this.buildEnforcedConditions(rawWhere.enforced);
       allConditions = [...enforcedConditions, ...(rawWhere.conditions || [])];
     }
@@ -245,9 +256,20 @@ export abstract class LogRepository<TSchema extends ClickhouseSchema<any>, TEnha
       params[paramName] = value;
 
       let paramType = this.getColumnType(String(field));
-      const arrayOperators: ArrayOperators[] = ['IN', 'NOT IN', 'GLOBAL IN', 'GLOBAL NOT IN'];
+      const arrayOperators: ArrayOperators[] = ['IN', 'NOT IN', 'GLOBAL IN', 'GLOBAL NOT IN', 'hasAny', 'hasAll'];
+      const arrayFunctionOperators = ['has', 'hasAny', 'hasAll'];
+
+      // For array operators with array values, wrap non-array columns with Array()
+      // Array columns (e.g., context_keys: Array(String)) should not be double-wrapped
       if (arrayOperators.includes(operator as ArrayOperators) && Array.isArray(value)) {
-        paramType = `Array(${paramType})`;
+        if (!this.isArrayColumn(String(field))) {
+          paramType = `Array(${paramType})`;
+        }
+      }
+
+      // ClickHouse array functions use function syntax: has(array, value)
+      if (arrayFunctionOperators.includes(operator)) {
+        return `${operator}(${String(field)}, {${paramName}:${paramType}})`;
       }
 
       return `${String(field)} ${operator} {${paramName}:${paramType}}`;
@@ -267,12 +289,76 @@ export abstract class LogRepository<TSchema extends ClickhouseSchema<any>, TEnha
     },
     options: InsertOptions
   ): Promise<void> {
-    // Use provided id (e.g., ID for request entities), otherwise generate a new unique id
     const id: string = data?.id || `${this.identifierPrefix}${generateObjectId()}`;
     const expirationDate = await this.getExpirationDate(context);
     const expiresAt = LogRepository.formatDateTime64(expirationDate);
 
-    await this.clickhouseService.insert(this.table, [{ ...data, id, expires_at: expiresAt }], options);
+    const row = { ...data, id, expires_at: expiresAt };
+
+    const shouldUseBatching = await this.shouldUseBatching(context);
+
+    if (shouldUseBatching && this.batchService) {
+      const batchConfig = this.getBatchConfig();
+      this.batchService.add(this.table, row, {
+        maxBatchSize: batchConfig.maxBatchSize,
+        flushIntervalMs: batchConfig.flushIntervalMs,
+        insertOptions: options,
+      });
+    } else {
+      await this.clickhouseService.insert(this.table, [row], options);
+    }
+  }
+
+  protected async shouldUseBatching(context: {
+    organizationId?: string;
+    environmentId?: string;
+    userId?: string;
+  }): Promise<boolean> {
+    if (!this.batchService || !this.clickhouseService.client) {
+      return false;
+    }
+
+    try {
+      const isBatchingEnabled = await this.featureFlagsService.getFlag({
+        key: FeatureFlagsKeysEnum.IS_CLICKHOUSE_BATCHING_ENABLED,
+        defaultValue: false,
+        organization: context.organizationId ? { _id: context.organizationId } : undefined,
+        environment: context.environmentId ? { _id: context.environmentId } : undefined,
+        user: context.userId ? { _id: context.userId } : undefined,
+      });
+
+      return isBatchingEnabled;
+    } catch (error) {
+      this.logger.warn(
+        {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          table: this.table,
+        },
+        'Failed to check batching feature flag, falling back to direct insert'
+      );
+
+      return false;
+    }
+  }
+
+  protected getBatchConfig(): { maxBatchSize: number; flushIntervalMs: number } {
+    const tableName = this.table.toUpperCase();
+    const defaultMaxBatchSize = 500;
+    const defaultFlushIntervalMs = 3000; // 3 seconds
+
+    const maxBatchSizeEnv = process.env[`${tableName}_BATCH_SIZE`];
+    const parsedMaxBatchSize = maxBatchSizeEnv ? parseInt(maxBatchSizeEnv, 10) : defaultMaxBatchSize;
+    const maxBatchSize =
+      Number.isFinite(parsedMaxBatchSize) && parsedMaxBatchSize > 0 ? parsedMaxBatchSize : defaultMaxBatchSize;
+
+    const flushIntervalMsEnv = process.env[`${tableName}_FLUSH_INTERVAL_MS`];
+    const parsedFlushIntervalMs = flushIntervalMsEnv ? parseInt(flushIntervalMsEnv, 10) : defaultFlushIntervalMs;
+    const flushIntervalMs =
+      Number.isFinite(parsedFlushIntervalMs) && parsedFlushIntervalMs > 0
+        ? parsedFlushIntervalMs
+        : defaultFlushIntervalMs;
+
+    return { maxBatchSize, flushIntervalMs };
   }
 
   protected async insertMany(
@@ -288,11 +374,22 @@ export abstract class LogRepository<TSchema extends ClickhouseSchema<any>, TEnha
     const expirationDate = await this.getExpirationDate(context);
     const expiresAt = LogRepository.formatDateTime64(expirationDate);
 
-    await this.clickhouseService.insert(
-      this.table,
-      data.map((item, index) => ({ ...item, id: ids[index], expires_at: expiresAt })),
-      options
-    );
+    const rows = data.map((item, index) => ({ ...item, id: ids[index], expires_at: expiresAt }));
+
+    const shouldUseBatching = await this.shouldUseBatching(context);
+
+    if (shouldUseBatching && this.batchService) {
+      const batchConfig = this.getBatchConfig();
+      for (const row of rows) {
+        this.batchService.add(this.table, row, {
+          maxBatchSize: batchConfig.maxBatchSize,
+          flushIntervalMs: batchConfig.flushIntervalMs,
+          insertOptions: options,
+        });
+      }
+    } else {
+      await this.clickhouseService.insert(this.table, rows, options);
+    }
   }
 
   // Overload for column array selection
@@ -593,6 +690,66 @@ export class QueryBuilder<T> {
     this.where(field, '<=', max);
 
     return this;
+  }
+
+  /**
+   * Check if an array field contains a specific value using ClickHouse has() function
+   *
+   * @param field Array field to check
+   * @param value Single value to look for in the array
+   *
+   * @example
+   * ```typescript
+   * // Check if context_keys array contains 'tenant:org-123'
+   * queryBuilder.whereHas('context_keys', 'tenant:org-123')
+   *
+   * // Generates SQL: WHERE has(context_keys, 'tenant:org-123')
+   * ```
+   */
+  whereHas<K extends keyof T>(field: K, value: T[K] extends readonly (infer U)[] ? U : T[K]): this {
+    return this.where(field, 'has', value as T[K]);
+  }
+
+  /**
+   * Check if an array field contains any of the specified values using ClickHouse hasAny() function
+   *
+   * @param field Array field to check
+   * @param values Array of values to look for (OR logic)
+   *
+   * @example
+   * ```typescript
+   * // Check if context_keys contains any of these values
+   * queryBuilder.whereHasAny('context_keys', ['tenant:org-123', 'region:us-east-1'])
+   *
+   * // Generates SQL: WHERE hasAny(context_keys, ['tenant:org-123', 'region:us-east-1'])
+   * ```
+   */
+  whereHasAny<K extends keyof T>(field: K, values: T[K]): this {
+    // Type assertion needed because where() expects T[K][] for ArrayOperators,
+    // but for array fields T[K] is already an array (e.g., string[])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return this.where(field, 'hasAny', values as any);
+  }
+
+  /**
+   * Check if an array field contains all of the specified values using ClickHouse hasAll() function
+   *
+   * @param field Array field to check
+   * @param values Array of values that must all be present (AND logic)
+   *
+   * @example
+   * ```typescript
+   * // Check if context_keys contains all of these values
+   * queryBuilder.whereHasAll('context_keys', ['tenant:org-123', 'region:us-east-1'])
+   *
+   * // Generates SQL: WHERE hasAll(context_keys, ['tenant:org-123', 'region:us-east-1'])
+   * ```
+   */
+  whereHasAll<K extends keyof T>(field: K, values: T[K]): this {
+    // Type assertion needed because where() expects T[K][] for ArrayOperators,
+    // but for array fields T[K] is already an array (e.g., string[])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return this.where(field, 'hasAll', values as any);
   }
 
   /**

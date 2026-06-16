@@ -5,31 +5,55 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { NovuCore } from "../core.js";
-import { environmentsGetTags } from "../funcs/environmentsGetTags.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { useNovuContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildEnvironmentsGetTagsQuery,
+  EnvironmentsGetTagsQueryData,
+  prefetchEnvironmentsGetTags,
+  queryKeyEnvironmentsGetTags,
+} from "./environmentsGetTags.core.js";
+export {
+  buildEnvironmentsGetTagsQuery,
+  type EnvironmentsGetTagsQueryData,
+  prefetchEnvironmentsGetTags,
+  queryKeyEnvironmentsGetTags,
+};
 
-export type EnvironmentsGetTagsQueryData =
-  operations.EnvironmentsControllerGetEnvironmentTagsResponse;
+export type EnvironmentsGetTagsQueryError =
+  | errors.ErrorDto
+  | errors.ValidationErrorDto
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
- * Get environment tags
+ * List environment tags
  *
  * @remarks
  * Retrieve all unique tags used in workflows within the specified environment. These tags can be used for filtering workflows.
@@ -37,8 +61,11 @@ export type EnvironmentsGetTagsQueryData =
 export function useEnvironmentsGetTags(
   environmentId: string,
   idempotencyKey?: string | undefined,
-  options?: QueryHookOptions<EnvironmentsGetTagsQueryData>,
-): UseQueryResult<EnvironmentsGetTagsQueryData, Error> {
+  options?: QueryHookOptions<
+    EnvironmentsGetTagsQueryData,
+    EnvironmentsGetTagsQueryError
+  >,
+): UseQueryResult<EnvironmentsGetTagsQueryData, EnvironmentsGetTagsQueryError> {
   const client = useNovuContext();
   return useQuery({
     ...buildEnvironmentsGetTagsQuery(
@@ -52,7 +79,7 @@ export function useEnvironmentsGetTags(
 }
 
 /**
- * Get environment tags
+ * List environment tags
  *
  * @remarks
  * Retrieve all unique tags used in workflows within the specified environment. These tags can be used for filtering workflows.
@@ -60,8 +87,14 @@ export function useEnvironmentsGetTags(
 export function useEnvironmentsGetTagsSuspense(
   environmentId: string,
   idempotencyKey?: string | undefined,
-  options?: SuspenseQueryHookOptions<EnvironmentsGetTagsQueryData>,
-): UseSuspenseQueryResult<EnvironmentsGetTagsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    EnvironmentsGetTagsQueryData,
+    EnvironmentsGetTagsQueryError
+  >,
+): UseSuspenseQueryResult<
+  EnvironmentsGetTagsQueryData,
+  EnvironmentsGetTagsQueryError
+> {
   const client = useNovuContext();
   return useSuspenseQuery({
     ...buildEnvironmentsGetTagsQuery(
@@ -71,21 +104,6 @@ export function useEnvironmentsGetTagsSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchEnvironmentsGetTags(
-  queryClient: QueryClient,
-  client$: NovuCore,
-  environmentId: string,
-  idempotencyKey?: string | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildEnvironmentsGetTagsQuery(
-      client$,
-      environmentId,
-      idempotencyKey,
-    ),
   });
 }
 
@@ -123,43 +141,4 @@ export function invalidateAllEnvironmentsGetTags(
     ...filters,
     queryKey: ["@novu/api", "Environments", "getTags"],
   });
-}
-
-export function buildEnvironmentsGetTagsQuery(
-  client$: NovuCore,
-  environmentId: string,
-  idempotencyKey?: string | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<EnvironmentsGetTagsQueryData>;
-} {
-  return {
-    queryKey: queryKeyEnvironmentsGetTags(environmentId, { idempotencyKey }),
-    queryFn: async function environmentsGetTagsQueryFn(
-      ctx,
-    ): Promise<EnvironmentsGetTagsQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(environmentsGetTags(
-        client$,
-        environmentId,
-        idempotencyKey,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyEnvironmentsGetTags(
-  environmentId: string,
-  parameters: { idempotencyKey?: string | undefined },
-): QueryKey {
-  return ["@novu/api", "Environments", "getTags", environmentId, parameters];
 }

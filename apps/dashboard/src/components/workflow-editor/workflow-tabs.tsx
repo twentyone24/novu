@@ -1,72 +1,148 @@
-import { PermissionsEnum } from '@novu/shared';
-import { useCallback, useState } from 'react';
-import { RiArrowDownSLine, RiCodeSSlashLine, RiFileCopyLine, RiPlayCircleLine } from 'react-icons/ri';
-import { Link, useMatch, useNavigate } from 'react-router-dom';
+import {
+  AiAgentTypeEnum,
+  AiResourceTypeEnum,
+  AiWorkflowSuggestion,
+  EnvironmentTypeEnum,
+  FeatureFlagsKeysEnum,
+  PermissionsEnum,
+  ResourceOriginEnum,
+  StepTypeEnum,
+} from '@novu/shared';
+import { FC, SVGProps, useCallback, useMemo, useState } from 'react';
+import { IconType } from 'react-icons/lib';
+import {
+  RiArrowDownSLine,
+  RiCodeSSlashLine,
+  RiFileCopyLine,
+  RiListCheck3,
+  RiPlayCircleLine,
+  RiQuillPenLine,
+} from 'react-icons/ri';
+import { Link, useMatch, useNavigate, useParams } from 'react-router-dom';
 import { useWorkflow } from '@/components/workflow-editor/workflow-provider';
-
+import { IS_AI_FEATURES_ENABLED } from '@/config';
 import { useAuth } from '@/context/auth/hooks';
 import { useEnvironment } from '@/context/environment/hooks';
+import { useDeleteWorkflow } from '@/hooks/use-delete-workflow';
 import { useFeatureFlag } from '@/hooks/use-feature-flag';
 import { useFetchApiKeys } from '@/hooks/use-fetch-api-keys';
+import { useFetchWorkflowTestData } from '@/hooks/use-fetch-workflow-test-data';
 import { useHasPermission } from '@/hooks/use-has-permission';
+import { useIsPayloadSchemaEnabled } from '@/hooks/use-is-payload-schema-enabled';
 import { useTriggerWorkflow } from '@/hooks/use-trigger-workflow';
-import { useWorkflowPayloadPersistence } from '@/hooks/use-workflow-payload-persistence';
 import { generatePostmanCollection, generateTriggerCurlCommand } from '@/utils/code-snippets';
 import { Protect } from '@/utils/protect';
 import { buildRoute, ROUTES } from '@/utils/routes';
+import { AiChatProvider, NovuCopilotPanel, useAiChat } from '../ai-sidekick';
+import { SidekickToast } from '../ai-sidekick/sidekick-toast';
+import { DeleteWorkflowDialog } from '../delete-workflow-dialog';
+import { Code2 } from '../icons/code-2';
 import { Button } from '../primitives/button';
 import { ButtonGroupItem, ButtonGroupRoot } from '../primitives/button-group';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../primitives/dropdown-menu';
 import { ToastClose, ToastIcon } from '../primitives/sonner';
-import { showErrorToast, showToast } from '../primitives/sonner-helpers';
+import { showErrorToast, showSuccessToast, showToast } from '../primitives/sonner-helpers';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../primitives/tabs';
+import { CopilotSidebar } from './steps/layout/copilot-sidebar';
+import { getInitialPayload, getInitialSubscriber } from './steps/utils/preview-context-storage.utils';
+import { TestWorkflowDrawer } from './test-workflow/test-workflow-drawer';
 import { TestWorkflowInstructions } from './test-workflow/test-workflow-instructions';
 import { WorkflowActivity } from './workflow-activity';
 import { WorkflowCanvas } from './workflow-canvas';
 
 export const WorkflowTabs = () => {
-  const { workflow } = useWorkflow();
-  const { currentEnvironment } = useEnvironment();
+  const { workflow, isPending: isWorkflowPending, refetch: refetchWorkflow } = useWorkflow();
+  const { currentEnvironment, areEnvironmentsInitialLoading } = useEnvironment();
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const isAiWorkflowGenerationEnabled =
+    useFeatureFlag(FeatureFlagsKeysEnum.IS_AI_WORKFLOW_GENERATION_ENABLED) && IS_AI_FEATURES_ENABLED;
   const activityMatch = useMatch(ROUTES.EDIT_WORKFLOW_ACTIVITY);
   const [isIntegrateDrawerOpen, setIsIntegrateDrawerOpen] = useState(false);
+  const [isTriggerDrawerOpen, setIsTriggerDrawerOpen] = useState(false);
+  const { workflowSlug = '' } = useParams<{ workflowSlug?: string; stepSlug?: string }>();
+  const { testData } = useFetchWorkflowTestData({ workflowSlug });
+  const isNewWorkflowSlug = workflowSlug === 'new';
 
   const { triggerWorkflow, isPending } = useTriggerWorkflow();
-  const { getInitialPayload } = useWorkflowPayloadPersistence({
-    workflowId: workflow?.workflowId || '',
-    environmentId: currentEnvironment?._id || '',
-  });
+  const isPayloadSchemaEnabled = useIsPayloadSchemaEnabled();
+
+  const userId = currentUser?._id;
+  const userFirstName = currentUser?.firstName;
+  const userLastName = currentUser?.lastName;
+  const userEmail = currentUser?.email;
+  const isDevEnvironment = currentEnvironment?.type === EnvironmentTypeEnum.DEV;
 
   // API key management
   const has = useHasPermission();
   const canReadApiKeys = has({ permission: PermissionsEnum.API_KEY_READ });
   const { data: apiKeysResponse } = useFetchApiKeys({ enabled: canReadApiKeys });
   const apiKey = canReadApiKeys ? (apiKeysResponse?.data?.[0]?.key ?? 'your-api-key-here') : 'your-api-key-here';
+  const isExternalWorkflow = !workflow || workflow.origin === ResourceOriginEnum.EXTERNAL;
+  const isReadOnly =
+    isNewWorkflowSlug ||
+    isExternalWorkflow ||
+    !has({ permission: PermissionsEnum.WORKFLOW_WRITE }) ||
+    !isDevEnvironment;
+  const showCopilot = isAiWorkflowGenerationEnabled && isDevEnvironment && !isExternalWorkflow;
+
+  // Memoize subscriber data and payload for integration instructions
+  // Use the most recently tested subscriber for this workflow, fallback to current user
+  const subscriberData = useMemo(() => {
+    if (!workflow?.workflowId || !currentEnvironment?._id) {
+      return { subscriberId: 'subscriber-id' };
+    }
+
+    const userFields = userId
+      ? {
+          _id: userId,
+          firstName: userFirstName ?? undefined,
+          lastName: userLastName ?? undefined,
+          email: userEmail ?? undefined,
+        }
+      : undefined;
+
+    const initialSubscriber = getInitialSubscriber(workflow.workflowId, currentEnvironment._id, userFields);
+
+    const data: Record<string, string> = {
+      subscriberId: initialSubscriber?.subscriberId ?? 'subscriber-id',
+    };
+
+    if (initialSubscriber?.firstName) {
+      data.firstName = initialSubscriber.firstName;
+    }
+    if (initialSubscriber?.lastName) {
+      data.lastName = initialSubscriber.lastName;
+    }
+    if (initialSubscriber?.email) {
+      data.email = initialSubscriber.email;
+    }
+
+    return data;
+  }, [workflow?.workflowId, currentEnvironment?._id, userId, userFirstName, userLastName, userEmail]);
+
+  const integrationPayload = useMemo(() => {
+    if (!workflow?.workflowId || !currentEnvironment?._id) {
+      return {};
+    }
+    return getInitialPayload(workflow.workflowId, currentEnvironment._id, workflow, isPayloadSchemaEnabled);
+  }, [workflow, currentEnvironment?._id, isPayloadSchemaEnabled]);
 
   const handleIntegrateWorkflowClick = () => {
     setIsIntegrateDrawerOpen(true);
   };
 
   const handleCopyPostmanCollection = useCallback(async () => {
-    if (!workflow?.workflowId || !currentUser) {
+    if (!workflow?.workflowId || !currentUser || !currentEnvironment?._id) {
       showErrorToast('Workflow information or user is missing');
       return;
     }
 
     try {
-      const payload = getInitialPayload(workflow);
-      const subscriberData = {
-        subscriberId: currentUser._id,
-        firstName: currentUser.firstName ?? undefined,
-        lastName: currentUser.lastName ?? undefined,
-        email: currentUser.email ?? undefined,
-      };
-
       const postmanCollection = generatePostmanCollection({
         workflowId: workflow.workflowId,
         to: subscriberData,
-        payload,
+        payload: integrationPayload,
         apiKey,
       });
 
@@ -90,27 +166,19 @@ export const WorkflowTabs = () => {
     } catch {
       showErrorToast('Failed to copy Postman collection', 'Postman Error');
     }
-  }, [workflow, currentUser, apiKey, getInitialPayload]);
+  }, [workflow, currentUser, currentEnvironment?._id, apiKey, subscriberData, integrationPayload]);
 
   const handleCopyCurl = useCallback(async () => {
-    if (!workflow?.workflowId || !currentUser) {
+    if (!workflow?.workflowId || !currentUser || !currentEnvironment?._id) {
       showErrorToast('Workflow information or user is missing');
       return;
     }
 
     try {
-      const payload = getInitialPayload(workflow);
-      const subscriberData = {
-        subscriberId: currentUser._id,
-        firstName: currentUser.firstName ?? undefined,
-        lastName: currentUser.lastName ?? undefined,
-        email: currentUser.email ?? undefined,
-      };
-
       const curlCommand = generateTriggerCurlCommand({
         workflowId: workflow.workflowId,
         to: subscriberData,
-        payload: JSON.stringify(payload),
+        payload: JSON.stringify(integrationPayload),
         apiKey: apiKey,
       });
 
@@ -130,29 +198,21 @@ export const WorkflowTabs = () => {
     } catch {
       showErrorToast('Failed to copy cURL command', 'Copy Error');
     }
-  }, [workflow, currentUser, apiKey, getInitialPayload]);
+  }, [workflow, currentUser, currentEnvironment?._id, apiKey, subscriberData, integrationPayload]);
 
   const handleFireAndForget = useCallback(async () => {
-    if (!workflow || !currentUser) {
+    if (!workflow || !currentUser || !currentEnvironment?._id) {
       showErrorToast('Workflow or user information is missing');
       return;
     }
 
     try {
-      const payload = getInitialPayload(workflow);
-      const subscriberData = {
-        subscriberId: currentUser._id,
-        firstName: currentUser.firstName ?? undefined,
-        lastName: currentUser.lastName ?? undefined,
-        email: currentUser.email ?? undefined,
-      };
-
       const {
         data: { transactionId },
       } = await triggerWorkflow({
         name: workflow.workflowId ?? '',
         to: subscriberData,
-        payload: payload,
+        payload: integrationPayload,
       });
 
       if (!transactionId) {
@@ -227,11 +287,10 @@ export const WorkflowTabs = () => {
                   mode="ghost"
                   size="xs"
                   onClick={() => {
-                    const activityUrl =
-                      buildRoute(ROUTES.EDIT_WORKFLOW_ACTIVITY, {
-                        environmentSlug: currentEnvironment?.slug ?? '',
-                        workflowSlug: workflow?.slug ?? '',
-                      }) + `?transactionId=${transactionId}`;
+                    const activityUrl = `${buildRoute(ROUTES.EDIT_WORKFLOW_ACTIVITY, {
+                      environmentSlug: currentEnvironment?.slug ?? '',
+                      workflowSlug: workflow?.slug ?? '',
+                    })}?transactionId=${transactionId}`;
                     navigate(activityUrl);
                     close();
                   }}
@@ -257,34 +316,149 @@ export const WorkflowTabs = () => {
         'Failed to trigger workflow'
       );
     }
-  }, [workflow, currentUser, triggerWorkflow, getInitialPayload, navigate, currentEnvironment]);
+  }, [
+    workflow,
+    currentUser,
+    currentEnvironment?._id,
+    currentEnvironment?.slug,
+    triggerWorkflow,
+    navigate,
+    subscriberData,
+    integrationPayload,
+  ]);
 
   // Determine current tab based on URL
   const currentTab = activityMatch ? 'activity' : 'workflow';
 
-  return (
-    <div className="flex h-full flex-1 flex-nowrap">
-      <Tabs defaultValue="workflow" className="-mt-px flex h-full flex-1 flex-col" value={currentTab}>
+  const { deleteWorkflow, isPending: isDeletePending } = useDeleteWorkflow();
+
+  const newChatSuggestions = useMemo(() => {
+    const suggestions: { label: AiWorkflowSuggestion; icon: IconType | FC<SVGProps<SVGSVGElement>> }[] = [
+      { label: AiWorkflowSuggestion.AUTOCOMPLETE, icon: RiListCheck3 },
+    ];
+
+    const hasAnySteps = (workflow?.steps?.length ?? 0) > 0;
+    if (hasAnySteps) {
+      suggestions.push({ label: AiWorkflowSuggestion.APPLY_CONDITIONS, icon: Code2 });
+    }
+
+    const hasContentSteps = workflow?.steps.some((step) =>
+      [StepTypeEnum.EMAIL, StepTypeEnum.SMS, StepTypeEnum.PUSH, StepTypeEnum.IN_APP, StepTypeEnum.CHAT].includes(
+        step.type
+      )
+    );
+    if (hasContentSteps) {
+      suggestions.push({ label: AiWorkflowSuggestion.IMPROVE_MESSAGING, icon: RiQuillPenLine });
+    }
+
+    if (workflow?.steps.some((step) => Object.keys(step.issues?.controls ?? {}).length > 0)) {
+      suggestions.push({ label: AiWorkflowSuggestion.FIX_WORKFLOW_ISSUES, icon: RiListCheck3 });
+    }
+
+    return suggestions;
+  }, [workflow]);
+
+  const aiChatConfig = useMemo(
+    () => ({
+      resourceType: AiResourceTypeEnum.WORKFLOW,
+      resourceId: workflow?._id,
+      newChatSuggestions,
+      agentType: AiAgentTypeEnum.GENERATE_WORKFLOW,
+      metadata: { workflowId: workflow?._id },
+      isResourceLoading: isWorkflowPending,
+      onRefetchResource: () => refetchWorkflow({ cancelRefetch: true }),
+      onData: (data: { type: string }) => {
+        if (
+          data.type === 'data-step-added' ||
+          data.type === 'data-workflow-completed' ||
+          data.type === 'data-step-updated' ||
+          data.type === 'data-step-removed' ||
+          data.type === 'data-step-moved' ||
+          data.type === 'data-workflow-metadata-updated' ||
+          data.type === 'data-payload-schema-updated'
+        ) {
+          refetchWorkflow({ cancelRefetch: true });
+        }
+      },
+      onKeepSuccess: () => showSuccessToast('Changes are successfully applied'),
+      onKeepError: () => showErrorToast('Failed to apply changes'),
+      firstMessageRevert: workflow
+        ? {
+            renderDialog: (props: {
+              open: boolean;
+              onOpenChange: (open: boolean) => void;
+              onConfirm: () => Promise<void>;
+            }) => (
+              <DeleteWorkflowDialog
+                workflow={workflow}
+                open={props.open}
+                onOpenChange={props.onOpenChange}
+                onConfirm={props.onConfirm}
+                isLoading={isDeletePending}
+              />
+            ),
+            onConfirm: async () => {
+              await deleteWorkflow({ workflowSlug: workflow.slug });
+              navigate(buildRoute(ROUTES.WORKFLOWS, { environmentSlug: currentEnvironment?.slug ?? '' }));
+            },
+          }
+        : undefined,
+    }),
+    [
+      workflow,
+      isWorkflowPending,
+      newChatSuggestions,
+      refetchWorkflow,
+      deleteWorkflow,
+      isDeletePending,
+      navigate,
+      currentEnvironment?.slug,
+    ]
+  );
+
+  const content = (
+    <div className="flex h-full w-full flex-1 flex-nowrap">
+      <Tabs defaultValue="workflow" className="-mt-px flex h-full max-w-full flex-1 flex-col" value={currentTab}>
         <TabsList variant="regular" className="items-center">
-          <TabsTrigger value="workflow" asChild variant="regular" size="lg">
-            <Link
-              to={buildRoute(ROUTES.EDIT_WORKFLOW, {
-                environmentSlug: currentEnvironment?.slug ?? '',
-                workflowSlug: workflow?.slug ?? '',
-              })}
-            >
-              Workflow
-            </Link>
+          <TabsTrigger
+            value="workflow"
+            asChild
+            variant="regular"
+            size="lg"
+            disabled={isWorkflowPending || areEnvironmentsInitialLoading}
+          >
+            {currentEnvironment && workflow ? (
+              <Link
+                to={buildRoute(ROUTES.EDIT_WORKFLOW, {
+                  environmentSlug: currentEnvironment?.slug ?? '',
+                  workflowSlug: workflow?.slug ?? '',
+                })}
+              >
+                Workflow
+              </Link>
+            ) : (
+              <span>Workflow</span>
+            )}
           </TabsTrigger>
-          <TabsTrigger value="activity" asChild variant="regular" size="lg">
-            <Link
-              to={buildRoute(ROUTES.EDIT_WORKFLOW_ACTIVITY, {
-                environmentSlug: currentEnvironment?.slug ?? '',
-                workflowSlug: workflow?.slug ?? '',
-              })}
-            >
-              Activity
-            </Link>
+          <TabsTrigger
+            value="activity"
+            asChild
+            variant="regular"
+            size="lg"
+            disabled={isWorkflowPending || areEnvironmentsInitialLoading}
+          >
+            {currentEnvironment && workflow ? (
+              <Link
+                to={buildRoute(ROUTES.EDIT_WORKFLOW_ACTIVITY, {
+                  environmentSlug: currentEnvironment?.slug ?? '',
+                  workflowSlug: workflow?.slug ?? '',
+                })}
+              >
+                Activity
+              </Link>
+            ) : (
+              <span>Activity</span>
+            )}
           </TabsTrigger>
           <div className="my-auto ml-auto flex items-center gap-2">
             <Protect permission={PermissionsEnum.EVENT_WRITE}>
@@ -304,14 +478,7 @@ export const WorkflowTabs = () => {
                     size="xs"
                     mode="gradient"
                     className="rounded-l-lg rounded-r-none border-none p-2 text-white text-xs"
-                    onClick={() => {
-                      navigate(
-                        buildRoute(ROUTES.TRIGGER_WORKFLOW, {
-                          environmentSlug: currentEnvironment?.slug ?? '',
-                          workflowSlug: workflow?.slug ?? '',
-                        })
-                      );
-                    }}
+                    onClick={() => setIsTriggerDrawerOpen(true)}
                   >
                     Test Workflow
                   </Button>
@@ -347,10 +514,21 @@ export const WorkflowTabs = () => {
             </Protect>
           </div>
         </TabsList>
-        <TabsContent value="workflow" className="mt-0 h-full w-full">
-          <WorkflowCanvas steps={workflow?.steps || []} />
+        <TabsContent value="workflow" className="flex mt-0 h-full max-w-full overflow-hidden">
+          {showCopilot ? (
+            <WorkflowCopilotSidebar>
+              <div className="relative h-full min-w-0 flex-1">
+                <WorkflowCanvas isReadOnly={isReadOnly} steps={workflow?.steps || []} />
+                <WorkflowCanvasToast />
+              </div>
+            </WorkflowCopilotSidebar>
+          ) : (
+            <div className="relative flex-1">
+              <WorkflowCanvas isReadOnly={isReadOnly} steps={workflow?.steps || []} />
+            </div>
+          )}
         </TabsContent>
-        <TabsContent value="activity" className="mt-0 h-full w-full">
+        <TabsContent value="activity" className="mt-0 h-full max-w-full">
           <WorkflowActivity />
         </TabsContent>
       </Tabs>
@@ -359,9 +537,52 @@ export const WorkflowTabs = () => {
         isOpen={isIntegrateDrawerOpen}
         onClose={() => setIsIntegrateDrawerOpen(false)}
         workflow={workflow}
-        to={{}}
-        payload="{}"
+        to={subscriberData}
+        payload={JSON.stringify(integrationPayload, null, 2)}
       />
+      <TestWorkflowDrawer isOpen={isTriggerDrawerOpen} onOpenChange={setIsTriggerDrawerOpen} testData={testData} />
     </div>
   );
+
+  return showCopilot ? <AiChatProvider config={aiChatConfig}>{content}</AiChatProvider> : content;
 };
+
+function WorkflowCopilotSidebar({ children }: { children: React.ReactNode }) {
+  const { isGenerating } = useAiChat();
+
+  return (
+    <CopilotSidebar
+      copilotContent={<NovuCopilotPanel hideHeader />}
+      isGenerating={isGenerating}
+      autoSaveId="workflow-editor-copilot-layout"
+    >
+      {children}
+    </CopilotSidebar>
+  );
+}
+
+function WorkflowCanvasToast() {
+  const {
+    isGenerating,
+    isReviewingChanges,
+    isActionPending,
+    lastUserMessageId,
+    handleStop,
+    handleKeepAll,
+    handleDiscard,
+  } = useAiChat();
+
+  const isVisible = isGenerating || isReviewingChanges;
+  const variant = isGenerating ? 'generating' : 'reviewing';
+
+  return (
+    <SidekickToast
+      isVisible={isVisible}
+      variant={variant}
+      isActionPending={isActionPending}
+      onCancel={handleStop}
+      onKeepAll={handleKeepAll}
+      onDiscard={() => lastUserMessageId && handleDiscard(lastUserMessageId)}
+    />
+  );
+}

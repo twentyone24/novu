@@ -12,6 +12,7 @@ import { useEnhancedVariableValidation } from '@/hooks/use-enhanced-variable-val
 import { useFeatureFlag } from '@/hooks/use-feature-flag';
 import { IsAllowedVariable, LiquidVariable } from '@/utils/parseStepVariables';
 import { cn } from '@/utils/ui';
+import { LocalizationResourceEnum } from '../../../types/translations';
 
 const variants = cva('relative w-full', {
   variants: {
@@ -42,6 +43,7 @@ type ControlInputProps = {
   indentWithTab?: boolean;
   enableTranslations?: boolean;
   disabled?: boolean;
+  readOnly?: boolean;
 };
 
 export function ControlInput({
@@ -59,12 +61,14 @@ export function ControlInput({
   isAllowedVariable,
   enableTranslations = false,
   disabled = false,
+  readOnly = false,
 }: ControlInputProps) {
   const viewRef = useRef<EditorView | null>(null);
   const lastCompletionRef = useRef<CompletionRange | null>(null);
   const { workflow, digestStepBeforeCurrent } = useWorkflow();
+  const resourceId = workflow?.workflowId || '';
+  const resourceType = LocalizationResourceEnum.WORKFLOW;
   const { getSchemaPropertyByKey, isPayloadSchemaEnabled, currentSchema } = useWorkflowSchema();
-  const isContextEnabled = useFeatureFlag(FeatureFlagsKeysEnum.IS_CONTEXT_ENABLED);
   const {
     handleCreateNewVariable,
     isPayloadSchemaDrawerOpen,
@@ -87,8 +91,10 @@ export function ControlInput({
     viewRef,
     lastCompletionRef,
     onChange,
-    workflow,
+    resourceId,
+    resourceType,
     enableTranslations,
+    isTranslationEnabledOnResource: !!workflow?.isTranslationEnabled,
   });
 
   const { enhancedIsAllowedVariable } = useEnhancedVariableValidation({
@@ -122,7 +128,7 @@ export function ControlInput({
       completionSources={translationCompletionSource}
       isPayloadSchemaEnabled={isPayloadSchemaEnabled}
       isTranslationEnabled={shouldEnableTranslations}
-      isContextEnabled={isContextEnabled}
+      isContextEnabled={true}
       getSchemaPropertyByKey={getSchemaPropertyByKey}
       extensions={extensions}
       digestStepName={digestStepBeforeCurrent?.stepId}
@@ -130,8 +136,11 @@ export function ControlInput({
       onManageSchemaClick={openSchemaDrawer}
       onCreateNewVariable={handleCreateNewVariable}
       disabled={disabled}
+      readOnly={readOnly}
     >
       <EditorOverlays
+        resourceId={resourceId}
+        resourceType={resourceType}
         isTranslationPopoverOpen={isTranslationPopoverOpen}
         selectedTranslation={selectedTranslation}
         onTranslationPopoverOpenChange={handleTranslationPopoverOpenChange}
@@ -149,6 +158,7 @@ export function ControlInput({
         }}
         highlightedVariableKey={highlightedVariableKey}
         enableTranslations={shouldEnableTranslations}
+        translationValueInput={ControlInput}
       />
     </VariableEditor>
   );

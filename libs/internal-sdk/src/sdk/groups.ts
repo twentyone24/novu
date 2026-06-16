@@ -17,7 +17,8 @@ export class Groups extends ClientSDK {
    * Delete an entire translation group and all its translations
    */
   async delete(
-    resourceType: operations.ResourceType,
+    resourceType:
+      operations.TranslationControllerDeleteTranslationGroupEndpointPathParamResourceType,
     resourceId: string,
     idempotencyKey?: string | undefined,
     options?: RequestOptions,
@@ -35,7 +36,7 @@ export class Groups extends ClientSDK {
    * Retrieve a translation group
    *
    * @remarks
-   * Retrieves a single translation group by resource type (workflow) and resource ID (workflowId)
+   * Retrieves a single translation group by resource type (workflow, layout) and resource ID (workflowId, layoutId)
    */
   async retrieve(
     resourceType:

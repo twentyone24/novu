@@ -1,59 +1,50 @@
+import {
+  CreateTranslationRequestDto,
+  GetMasterJsonResponseDto,
+  ImportMasterJsonResponseDto,
+  TranslationGroupDto,
+  TranslationResponseDto,
+  UploadTranslationsResponseDto,
+} from '@novu/api/models/components';
 import { IEnvironment } from '@novu/shared';
-import { LocalizationResourceEnum } from '@/types/translations';
 import { delV2, getV2, postV2 } from './api.client';
 
+// Shared resource type from SDK
+type ResourceType = TranslationGroupDto['resourceType'];
+
+// Request types
 export type TranslationsFilter = {
   query?: string;
   limit?: number;
   offset?: number;
 };
 
-export type TranslationGroup = {
+export type SaveTranslationRequest = CreateTranslationRequestDto;
+
+export type DeleteTranslationGroupRequest = {
   resourceId: string;
-  resourceName: string;
-  resourceType: LocalizationResourceEnum;
-  locales: string[];
-  createdAt: string;
-  updatedAt: string;
-  outdatedLocales?: string[];
+  resourceType: ResourceType;
 };
 
-export type Translation = {
+export type UploadTranslationsRequest = {
   resourceId: string;
-  resourceType: LocalizationResourceEnum;
-  locale: string;
-  content: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
+  resourceType: ResourceType;
+  files: File[];
 };
 
+export type UploadMasterJsonRequest = {
+  file: File;
+};
+
+// Response types
 export type GetTranslationsListResponse = {
-  data: TranslationGroup[];
+  data: TranslationGroupDto[];
   total: number;
   limit: number;
   offset: number;
 };
 
-export type GetTranslationsResponse = {
-  data: Translation[];
-  total: number;
-};
-
-export type UploadTranslationsRequest = {
-  resourceId: string;
-  resourceType: LocalizationResourceEnum;
-  files: File[];
-};
-
-export type UploadTranslationsResponse = {
-  data: {
-    totalFiles: number;
-    successfulUploads: number;
-    failedUploads: number;
-    errors: string[];
-  };
-};
-
+// API functions
 export const getTranslationsList = async ({
   environment,
   query,
@@ -82,15 +73,12 @@ export const getTranslationGroup = async ({
 }: {
   environment: IEnvironment;
   resourceId: string;
-  resourceType: LocalizationResourceEnum;
-}): Promise<TranslationGroup> => {
+  resourceType: ResourceType;
+}): Promise<TranslationGroupDto> => {
   const endpoint = `/translations/group/${resourceType}/${resourceId}`;
-  const response = await getV2<{ data: TranslationGroup }>(endpoint, { environment });
-  return response.data;
-};
+  const response = await getV2<{ data: TranslationGroupDto }>(endpoint, { environment });
 
-export type GetTranslationResponse = {
-  data: Translation;
+  return response.data;
 };
 
 export const getTranslation = async ({
@@ -101,23 +89,13 @@ export const getTranslation = async ({
 }: {
   environment: IEnvironment;
   resourceId: string;
-  resourceType: LocalizationResourceEnum;
+  resourceType: ResourceType;
   locale: string;
-}): Promise<Translation> => {
+}): Promise<TranslationResponseDto> => {
   const endpoint = `/translations/${resourceType}/${resourceId}/${locale}`;
-  const response = await getV2<GetTranslationResponse>(endpoint, { environment });
+  const response = await getV2<{ data: TranslationResponseDto }>(endpoint, { environment });
+
   return response.data;
-};
-
-export type SaveTranslationRequest = {
-  resourceId: string;
-  resourceType: LocalizationResourceEnum;
-  locale: string;
-  content: Record<string, unknown>;
-};
-
-export type SaveTranslationResponse = {
-  data: Translation;
 };
 
 export const saveTranslation = async ({
@@ -126,40 +104,14 @@ export const saveTranslation = async ({
   resourceType,
   locale,
   content,
-}: SaveTranslationRequest & { environment: IEnvironment }): Promise<Translation> => {
+}: SaveTranslationRequest & { environment: IEnvironment }): Promise<TranslationResponseDto> => {
   const endpoint = '/translations';
-  const response = await postV2<SaveTranslationResponse>(endpoint, {
-    body: {
-      resourceId,
-      resourceType,
-      locale,
-      content,
-    },
+  const response = await postV2<{ data: TranslationResponseDto }>(endpoint, {
+    body: { resourceId, resourceType, locale, content },
     environment,
   });
+
   return response.data;
-};
-
-export type DeleteTranslationRequest = {
-  resourceId: string;
-  resourceType: LocalizationResourceEnum;
-  locale: string;
-};
-
-export const deleteTranslation = async ({
-  environment,
-  resourceId,
-  resourceType,
-  locale,
-}: DeleteTranslationRequest & { environment: IEnvironment }): Promise<void> => {
-  const endpoint = `/translations/${resourceType}/${resourceId}/${locale}`;
-
-  await delV2(endpoint, { environment });
-};
-
-export type DeleteTranslationGroupRequest = {
-  resourceId: string;
-  resourceType: LocalizationResourceEnum;
 };
 
 export const deleteTranslationGroup = async ({
@@ -177,27 +129,22 @@ export const uploadTranslations = async ({
   resourceId,
   resourceType,
   files,
-}: UploadTranslationsRequest & { environment: IEnvironment }): Promise<UploadTranslationsResponse['data']> => {
+}: UploadTranslationsRequest & { environment: IEnvironment }): Promise<UploadTranslationsResponseDto> => {
   const formData = new FormData();
-
   formData.append('resourceId', resourceId);
   formData.append('resourceType', resourceType);
 
-  files.forEach((file) => {
+  for (const file of files) {
     formData.append('files', file);
-  });
+  }
 
   const endpoint = '/translations/upload';
-  const response = await postV2<UploadTranslationsResponse>(endpoint, {
+  const response = await postV2<{ data: UploadTranslationsResponseDto }>(endpoint, {
     body: formData,
     environment,
   });
 
   return response.data;
-};
-
-export type GetMasterJsonResponse = {
-  data: Record<string, unknown>;
 };
 
 export const getMasterJson = async ({
@@ -206,38 +153,25 @@ export const getMasterJson = async ({
 }: {
   environment: IEnvironment;
   locale: string;
-}): Promise<Record<string, unknown>> => {
+}): Promise<GetMasterJsonResponseDto> => {
   const searchParams = new URLSearchParams();
   searchParams.append('locale', locale);
 
   const endpoint = `/translations/master-json?${searchParams.toString()}`;
-  const response = await getV2<GetMasterJsonResponse>(endpoint, { environment });
+  const response = await getV2<{ data: GetMasterJsonResponseDto }>(endpoint, { environment });
+
   return response.data;
-};
-
-export type UploadMasterJsonRequest = {
-  file: File;
-};
-
-export type UploadMasterJsonResponse = {
-  data: {
-    success: boolean;
-    message: string;
-    successful?: string[];
-    failed?: string[];
-  };
 };
 
 export const uploadMasterJson = async ({
   environment,
   file,
-}: UploadMasterJsonRequest & { environment: IEnvironment }): Promise<UploadMasterJsonResponse['data']> => {
+}: UploadMasterJsonRequest & { environment: IEnvironment }): Promise<ImportMasterJsonResponseDto> => {
   const formData = new FormData();
-
   formData.append('file', file);
 
   const endpoint = '/translations/master-json/upload';
-  const response = await postV2<UploadMasterJsonResponse>(endpoint, {
+  const response = await postV2<{ data: ImportMasterJsonResponseDto }>(endpoint, {
     body: formData,
     environment,
   });

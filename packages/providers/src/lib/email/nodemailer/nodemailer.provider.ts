@@ -53,6 +53,8 @@ export class NodemailerProvider extends BaseProvider implements IEmailProvider {
       host: this.config.host,
       port: this.config.port,
       secure: this.config.secure,
+      connectionTimeout: 10000,
+      socketTimeout: 10000,
       auth: authEnabled
         ? {
             user: this.config.user,
@@ -96,7 +98,8 @@ export class NodemailerProvider extends BaseProvider implements IEmailProvider {
     bridgeProviderData: WithPassthrough<Record<string, unknown>> = {}
   ): Promise<ISendMessageSuccessResponse> {
     const mailData = this.createMailData(options);
-    const info = await this.transports.sendMail(this.transform(bridgeProviderData, mailData).body);
+    const merged = this.transform(bridgeProviderData, mailData);
+    const info = await this.transports.sendMail(merged.body);
 
     return {
       id: info?.messageId,
@@ -134,6 +137,7 @@ export class NodemailerProvider extends BaseProvider implements IEmailProvider {
       subject: options.subject,
       html: options.html,
       text: options.text,
+      ...(options.alternatives?.length ? { alternatives: options.alternatives } : {}),
       cc: options.cc,
       attachments: options.attachments?.map((attachment) => ({
         filename: attachment?.name,
@@ -148,6 +152,10 @@ export class NodemailerProvider extends BaseProvider implements IEmailProvider {
 
     if (options.replyTo) {
       sendMailOptions.replyTo = options.replyTo;
+    }
+
+    if (options.headers && Object.keys(options.headers).length > 0) {
+      sendMailOptions.headers = options.headers;
     }
 
     return sendMailOptions;

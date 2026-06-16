@@ -16,9 +16,6 @@ import {
   validateEndpointForType,
 } from '@novu/application-generic';
 import {
-  ChannelConnectionRepository,
-  ChannelEndpointEntity,
-  ChannelEndpointRepository,
   IntegrationEntity,
   MessageEntity,
   MessageRepository,
@@ -30,35 +27,32 @@ import {
   ChannelTypeEnum,
   ChatProviderIdEnum,
   DeliveryLifecycleDetail,
-  DeliveryLifecycleStatus,
+  DeliveryLifecycleStatusEnum,
   ENDPOINT_TYPES,
   ExecutionDetailsSourceEnum,
   ExecutionDetailsStatusEnum,
   IChannelSettings,
-  makeResourceKey,
   ProvidersIdEnum,
-  RESOURCE,
   WebhookEventEnum,
   WebhookObjectTypeEnum,
 } from '@novu/shared';
 import { ChannelData, ISendMessageSuccessResponse } from '@novu/stateless';
 import { addBreadcrumb } from '@sentry/node';
 import { PlatformException } from '../../../shared/utils';
+import { ResolveChannelEndpointsCommand } from './channel-endpoint-resolution/resolve-channel-endpoints.command';
+import {
+  IntegrationEndpoints,
+  ResolveChannelEndpoints,
+} from './channel-endpoint-resolution/resolve-channel-endpoints.usecase';
 import { SendMessageBase } from './send-message.base';
 import { SendMessageChannelCommand } from './send-message-channel.command';
 import { SendMessageResult, SendMessageStatus } from './send-message-type.usecase';
 
 const LOG_CONTEXT = 'SendMessageChat';
 
-type IntegrationChannelData = {
-  integrationIdentifier: string;
-  providerId: ProvidersIdEnum;
-  channelData: ChannelData[];
-};
-
 type UnifiedChannel = {
   type: 'new' | 'legacy';
-  data: IntegrationChannelData | IChannelSettings;
+  data: IntegrationEndpoints | IChannelSettings;
 };
 
 type MessageContext = {
@@ -82,8 +76,7 @@ export class SendMessageChat extends SendMessageBase {
     protected createExecutionDetails: CreateExecutionDetails,
     protected moduleRef: ModuleRef,
     private sendWebhookMessage: SendWebhookMessage,
-    private channelEndpointRepository: ChannelEndpointRepository,
-    private channelConnectionRepository: ChannelConnectionRepository
+    private resolveChannelEndpoints: ResolveChannelEndpoints
   ) {
     super(
       messageRepository,
@@ -105,17 +98,27 @@ export class SendMessageChat extends SendMessageBase {
       // Phase 2: Resolve all channels into unified format
       const channels = await this.resolveAllChannels(command);
 
-      // Check if there are any active channels
       if (channels.length === 0) {
-        await this.createExecutionDetail(
-          command,
-          DetailEnum.SUBSCRIBER_NO_ACTIVE_CHANNEL,
-          ExecutionDetailsStatusEnum.FAILED
-        );
+        if (command.contextKeys.length > 0) {
+          await this.createExecutionDetail(
+            command,
+            DetailEnum.SUBSCRIBER_CONTEXT_NO_ACTIVE_CHANNEL,
+            ExecutionDetailsStatusEnum.WARNING
+          );
+        } else {
+          await this.createExecutionDetail(
+            command,
+            DetailEnum.SUBSCRIBER_NO_ACTIVE_CHANNEL,
+            ExecutionDetailsStatusEnum.WARNING
+          );
+        }
 
         return {
-          status: SendMessageStatus.FAILED,
-          errorMessage: DetailEnum.SUBSCRIBER_NO_ACTIVE_CHANNEL,
+          status: SendMessageStatus.SKIPPED,
+          deliveryLifecycleState: {
+            status: DeliveryLifecycleStatusEnum.SKIPPED,
+            detail: DeliveryLifecycleDetail.USER_MISSING_CREDENTIALS,
+          },
         };
       }
 
@@ -223,7 +226,7 @@ export class SendMessageChat extends SendMessageBase {
         if (channel.type === 'new') {
           result = await this.sendChannelMessage(
             messageContext.command,
-            channel.data as IntegrationChannelData,
+            channel.data as IntegrationEndpoints,
             messageContext.step,
             messageContext.content
           );
@@ -244,7 +247,7 @@ export class SendMessageChat extends SendMessageBase {
          */
         const channelId =
           channel.type === 'new'
-            ? (channel.data as IntegrationChannelData).providerId
+            ? (channel.data as IntegrationEndpoints).providerId
             : (channel.data as IChannelSettings).providerId;
         Logger.error(e, `Sending chat message to ${channel.type} channel ${channelId} failed`, LOG_CONTEXT);
       }
@@ -271,13 +274,13 @@ export class SendMessageChat extends SendMessageBase {
       await this.createExecutionDetail(
         command,
         DetailEnum.CHAT_SOME_CHANNELS_SKIPPED,
-        ExecutionDetailsStatusEnum.FAILED
+        ExecutionDetailsStatusEnum.WARNING
       );
 
       return {
         status: SendMessageStatus.SKIPPED,
         deliveryLifecycleState: {
-          status: DeliveryLifecycleStatus.SKIPPED,
+          status: DeliveryLifecycleStatusEnum.SKIPPED,
           detail: DeliveryLifecycleDetail.USER_MISSING_CREDENTIALS,
         },
       };
@@ -315,7 +318,7 @@ export class SendMessageChat extends SendMessageBase {
    */
   private async sendChannelMessage(
     command: SendMessageChannelCommand,
-    integrationChannelData: IntegrationChannelData,
+    integrationChannelData: IntegrationEndpoints,
     step: NotificationStepEntity,
     content: string
   ): Promise<SendMessageResult> {
@@ -454,65 +457,16 @@ export class SendMessageChat extends SendMessageBase {
     return null;
   }
 
-  private async getChannelEndpointGroups(command: SendMessageChannelCommand): Promise<IntegrationChannelData[]> {
-    const allChatEndpoints = await this.channelEndpointRepository.find({
-      _environmentId: command.environmentId,
-      _organizationId: command.organizationId,
-      resource: makeResourceKey(RESOURCE.SUBSCRIBER, command.subscriberId),
-      channel: ChannelTypeEnum.CHAT,
-    });
-
-    if (allChatEndpoints.length === 0) {
-      return [];
-    }
-
-    // Fetch all needed connections
-    const allConnectionIdentifiers = [
-      ...new Set(allChatEndpoints.map((endpoint) => endpoint.connectionIdentifier).filter(Boolean)),
-    ];
-
-    const allConnections = await this.channelConnectionRepository.find({
-      _environmentId: command.environmentId,
-      _organizationId: command.organizationId,
-      identifier: { $in: allConnectionIdentifiers },
-    });
-
-    // Build connection map for O(1) lookups
-    const connectionMap = new Map(allConnections.map((conn) => [conn.identifier, conn]));
-
-    // Group endpoints by integration
-    const integrationGroups = this.groupEndpointsByIntegration(allChatEndpoints);
-
-    return Object.entries(integrationGroups).map(([integrationIdentifier, endpoints]) => {
-      const channelData: ChannelData[] = endpoints.map((endpoint) => {
-        const connection = endpoint.connectionIdentifier ? connectionMap.get(endpoint.connectionIdentifier) : undefined;
-        const hasToken = connection?.auth && 'accessToken' in connection.auth;
-
-        return {
-          identifier: endpoint.identifier,
-          type: endpoint.type,
-          endpoint: endpoint.endpoint,
-          ...(hasToken && { token: connection.auth.accessToken || '' }),
-        } as ChannelData;
-      });
-
-      return {
-        integrationIdentifier,
-        providerId: endpoints[0].providerId,
-        channelData,
-      };
-    });
-  }
-
-  private groupEndpointsByIntegration(endpoints: ChannelEndpointEntity[]): Record<string, ChannelEndpointEntity[]> {
-    return endpoints.reduce(
-      (groups, endpoint) => {
-        const key = endpoint.integrationIdentifier;
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(endpoint);
-        return groups;
-      },
-      {} as Record<string, ChannelEndpointEntity[]>
+  private async getChannelEndpointGroups(command: SendMessageChannelCommand): Promise<IntegrationEndpoints[]> {
+    return this.resolveChannelEndpoints.execute(
+      ResolveChannelEndpointsCommand.create({
+        environmentId: command.environmentId,
+        organizationId: command.organizationId,
+        userId: command.userId,
+        subscriberId: command.subscriberId,
+        channelType: ChannelTypeEnum.CHAT,
+        contextKeys: command.contextKeys,
+      })
     );
   }
 
@@ -548,6 +502,15 @@ export class SendMessageChat extends SendMessageBase {
     }
 
     if (!integration) {
+      Logger.warn(
+        {
+          hasChatWebhookUrl: Boolean(chatWebhookUrl),
+          hasPhoneNumber: Boolean(phoneNumber),
+          messageId: String(message?._id ?? ''),
+        },
+        `${LOG_CONTEXT} — sendErrors: missing integration (unexpected if getAndValidateIntegration succeeded)`
+      );
+
       await this.sendErrorStatus(
         message,
         'warning',
@@ -642,7 +605,8 @@ export class SendMessageChat extends SendMessageBase {
       _jobId: command.jobId,
       tags: command.tags,
       severity: command.severity,
-      ...(command.contextKeys && { contextKeys: command.contextKeys }),
+      stepId: command.step.stepId,
+      contextKeys: command.contextKeys,
       ...(channelData &&
         channelData.length > 0 && { channelData: channelData.map((data) => this.redactChannelData(data)) }),
       ...additionalFields,
@@ -688,6 +652,20 @@ export class SendMessageChat extends SendMessageBase {
         : integrationId
           ? `Integration with integrationId: ${integrationId} is either deleted or not active`
           : `Integration is either deleted or not active`;
+
+      Logger.warn(
+        {
+          reason,
+          providerId,
+          hasIntegrationId: Boolean(integrationId),
+          hasIntegrationIdentifier: Boolean(integrationIdentifier),
+          environmentId: command.environmentId,
+          organizationId: command.organizationId,
+          jobId: String(command.job?._id ?? ''),
+          hasJobTenant: Boolean(command.job.tenant),
+        },
+        `${LOG_CONTEXT} — getAndValidateIntegration: no integration from SelectIntegration`
+      );
 
       await this.createExecutionDetail(
         command,
@@ -917,7 +895,7 @@ export class SendMessageChat extends SendMessageBase {
     return {
       status: SendMessageStatus.SKIPPED,
       deliveryLifecycleState: {
-        status: DeliveryLifecycleStatus.SKIPPED,
+        status: DeliveryLifecycleStatusEnum.SKIPPED,
         detail: lifecycleDetail,
       },
     };

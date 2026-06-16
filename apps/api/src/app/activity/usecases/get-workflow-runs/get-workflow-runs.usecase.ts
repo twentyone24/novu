@@ -11,6 +11,7 @@ import {
   WorkflowRunRepository,
   WorkflowRunStatusEnum,
 } from '@novu/application-generic';
+import { TopicSubscribersRepository } from '@novu/dal';
 import { SeverityLevelEnum } from '@novu/shared';
 import { WorkflowRunStatusDtoEnum } from '../../dtos/shared.dto';
 import { GetWorkflowRunsDto, GetWorkflowRunsResponseDto } from '../../dtos/workflow-runs-response.dto';
@@ -38,6 +39,7 @@ const workflowRunSelectColumns = [
   'delivery_lifecycle_status',
   'severity',
   'critical',
+  'context_keys',
 ] as const;
 type WorkflowRunFetchResult = Pick<WorkflowRun, (typeof workflowRunSelectColumns)[number]>;
 
@@ -58,25 +60,27 @@ const stepRunSelectColumns = [
 ] as const;
 type StepRunFetchResult = Pick<StepRun, (typeof stepRunSelectColumns)[number]>;
 
-const DEPLOYMENT_DATE = new Date('2025-09-04T00:00:00');
-
 @Injectable()
 export class GetWorkflowRuns {
   constructor(
     private workflowRunRepository: WorkflowRunRepository,
     private stepRunRepository: StepRunRepository,
+    private topicSubscribersRepository: TopicSubscribersRepository,
     private logger: PinoLogger
   ) {
     this.logger.setContext(GetWorkflowRuns.name);
   }
 
   async execute(command: GetWorkflowRunsCommand): Promise<GetWorkflowRunsResponseDto> {
-    this.logger.debug('Getting workflow runs with compound cursor-based pagination', {
-      organizationId: command.organizationId,
-      environmentId: command.environmentId,
-      limit: command.limit,
-      cursor: command.cursor ? 'present' : 'not-present',
-    });
+    this.logger.debug(
+      {
+        organizationId: command.organizationId,
+        environmentId: command.environmentId,
+        limit: command.limit,
+        cursor: command.cursor ? 'present' : 'not-present',
+      },
+      'Getting workflow runs with compound cursor-based pagination'
+    );
 
     try {
       const queryBuilder = new QueryBuilder<WorkflowRun>({
@@ -153,13 +157,33 @@ export class GetWorkflowRuns {
           });
         }
         queryBuilder.orWhere(orConditions);
-
-        // TODO: Remove this in a few weeks after deployment
-        queryBuilder.whereGreaterThanOrEqual('created_at', DEPLOYMENT_DATE);
       }
 
       if (command.topicKey) {
         queryBuilder.whereLike('topics', `%${command.topicKey}%`);
+      }
+
+      if (command.subscriptionId) {
+        const subscription = await this.topicSubscribersRepository.findOne({
+          _environmentId: command.environmentId,
+          identifier: command.subscriptionId,
+        });
+
+        if (subscription) {
+          queryBuilder.whereLike('topics', `%${subscription.topicKey}%`);
+          queryBuilder.whereLike('topics', `%${subscription.identifier}%`);
+          queryBuilder.whereEquals('external_subscriber_id', subscription.externalSubscriberId);
+        }
+      }
+
+      if (command.contextKeys !== undefined) {
+        if (command.contextKeys.length === 0) {
+          // Empty array = filter for records with no context (empty context_keys)
+          queryBuilder.whereEquals('context_keys', []);
+        } else {
+          // Non-empty array = filter for records containing all specified contexts
+          queryBuilder.whereHasAll('context_keys', command.contextKeys);
+        }
       }
 
       const safeWhere = queryBuilder.build();
@@ -168,10 +192,13 @@ export class GetWorkflowRuns {
       if (command.cursor) {
         try {
           cursor = this.decodeCursor(command.cursor);
-          this.logger.debug('Using compound cursor pagination', {
-            timestamp: cursor.created_at,
-            workflowRunId: cursor.workflow_run_id,
-          });
+          this.logger.debug(
+            {
+              timestamp: cursor.created_at,
+              workflowRunId: cursor.workflow_run_id,
+            },
+            'Using compound cursor pagination'
+          );
         } catch (error) {
           throw new BadRequestException('Invalid cursor format');
         }
@@ -213,13 +240,11 @@ export class GetWorkflowRuns {
       // Fetch step runs for all workflow runs efficiently
       const stepRunsByCompositeKey = await this.getStepRunsForWorkflowRuns(command, workflowRuns);
 
-      const data = await Promise.all(
-        workflowRuns.map((workflowRun) => {
-          const compositeKey = `${workflowRun.subscriber_id}:${workflowRun.transaction_id}`;
+      const data = workflowRuns.map((workflowRun) => {
+        const compositeKey = `${workflowRun.subscriber_id}:${workflowRun.transaction_id}`;
 
-          return this.mapWorkflowRunToDto(workflowRun, stepRunsByCompositeKey.get(compositeKey) || []);
-        })
-      );
+        return this.mapWorkflowRunToDto(workflowRun, stepRunsByCompositeKey.get(compositeKey) || []);
+      });
 
       return {
         data,
@@ -227,11 +252,15 @@ export class GetWorkflowRuns {
         previous: previousCursor,
       };
     } catch (error) {
-      this.logger.error('Failed to get workflow runs', {
-        error: error.message,
-        organizationId: command.organizationId,
-        environmentId: command.environmentId,
-      });
+      this.logger.error(
+        {
+          error: error.message,
+          organizationId: command.organizationId,
+          environmentId: command.environmentId,
+        },
+        'Failed to get workflow runs'
+      );
+
       throw error;
     }
   }
@@ -286,10 +315,13 @@ export class GetWorkflowRuns {
         workflow_run_id: lastItemOfPreviousPage.workflow_run_id,
       });
     } catch (error) {
-      this.logger.error('Failed to generate previous cursor', {
-        error: error.message,
-        currentCursor,
-      });
+      this.logger.error(
+        {
+          error: error.message,
+          currentCursor,
+        },
+        'Failed to generate previous cursor'
+      );
 
       return null;
     }
@@ -304,7 +336,11 @@ export class GetWorkflowRuns {
   }
 
   private decodeCursor(cursor: string): CursorData {
-    return JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8'));
+    try {
+      return JSON.parse(Buffer.from(cursor, 'base64').toString('utf-8'));
+    } catch {
+      throw new BadRequestException('Invalid cursor format');
+    }
   }
 
   /**
@@ -369,20 +405,20 @@ export class GetWorkflowRuns {
 
       return stepRunsByCompositeKey;
     } catch (error) {
-      this.logger.warn('Failed to get step runs for workflow runs', {
-        error: error.message,
-        transactionIds: workflowRuns.map((run) => run.transaction_id),
-        subscriberIds: workflowRuns.map((run) => run.subscriber_id),
-      });
+      this.logger.warn(
+        {
+          error: error.message,
+          transactionIds: workflowRuns.map((run) => run.transaction_id),
+          subscriberIds: workflowRuns.map((run) => run.subscriber_id),
+        },
+        'Failed to get step runs for workflow runs'
+      );
 
       return new Map();
     }
   }
 
-  private async mapWorkflowRunToDto(
-    workflowRun: WorkflowRunFetchResult,
-    stepRuns: StepRunFetchResult[]
-  ): Promise<GetWorkflowRunsDto> {
+  private mapWorkflowRunToDto(workflowRun: WorkflowRunFetchResult, stepRuns: StepRunFetchResult[]): GetWorkflowRunsDto {
     return {
       id: workflowRun.workflow_run_id,
       workflowId: workflowRun.workflow_id,
@@ -400,11 +436,14 @@ export class GetWorkflowRuns {
       steps: stepRuns.map((stepRun) => ({
         id: stepRun.id,
         stepRunId: stepRun.step_run_id,
+        stepId: stepRun.step_id,
         stepType: stepRun.step_type,
+        providerId: stepRun.provider_id || undefined,
         status: stepRun.status,
       })),
       severity: workflowRun.severity,
       critical: workflowRun.critical,
+      contextKeys: workflowRun.context_keys,
     };
   }
 }

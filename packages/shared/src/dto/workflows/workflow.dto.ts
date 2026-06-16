@@ -1,7 +1,12 @@
-import { SeverityLevelEnum } from '../../consts';
-import { ResourceOriginEnum, StepTypeEnum, WorkflowCreationSourceEnum, WorkflowPreferences } from '../../types';
-import { Slug } from '../../types/utils';
-import { RuntimeIssue } from '../../utils/issues';
+import {
+  ResourceOriginEnum,
+  RuntimeIssue,
+  SeverityLevelEnum,
+  Slug,
+  StepTypeEnum,
+  WorkflowCreationSourceEnum,
+  WorkflowPreferences,
+} from '@novu/shared';
 import type { JSONSchemaDto } from './json-schema-dto';
 import { StepCreateDto, StepListResponseDto, StepResponseDto, StepUpdateDto } from './step.dto';
 import { WorkflowStatusEnum } from './workflow-status-enum';
@@ -124,7 +129,9 @@ export type UpsertStepBody = StepCreateBody | UpdateStepBody;
 export type StepCreateBody = StepCreateDto;
 export type UpdateStepBody = StepUpdateDto;
 
-export type DuplicateWorkflowDto = Pick<CreateWorkflowDto, 'name' | 'tags' | 'description' | 'isTranslationEnabled'>;
+export type DuplicateWorkflowDto = Pick<CreateWorkflowDto, 'name' | 'tags' | 'description' | 'isTranslationEnabled'> & {
+  workflowId?: string;
+};
 
 export function isStepCreateBody(step: UpsertStepBody): step is StepCreateDto {
   return step && typeof step === 'object' && !(step as UpdateStepBody)._id;

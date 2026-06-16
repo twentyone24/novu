@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { AnalyticsService, PinoLogger } from '@novu/application-generic';
-import { OrganizationEntity, OrganizationRepository, UserRepository } from '@novu/dal';
+import { OrganizationEntity, OrganizationRepository } from '@novu/dal';
+import { ApiAuthSchemeEnum, MemberRoleEnum } from '@novu/shared';
 import { CreateEnvironmentCommand } from '../../../../environments-v1/usecases/create-environment/create-environment.command';
 import { CreateEnvironment } from '../../../../environments-v1/usecases/create-environment/create-environment.usecase';
 import { CreateNovuIntegrationsCommand } from '../../../../integrations/usecases/create-novu-integrations/create-novu-integrations.command';
@@ -27,7 +28,6 @@ export class SyncExternalOrganization {
   constructor(
     private readonly organizationRepository: OrganizationRepository,
     private readonly getOrganizationUsecase: GetOrganization,
-    private readonly userRepository: UserRepository,
     private readonly createEnvironmentUsecase: CreateEnvironment,
     private readonly createNovuIntegrations: CreateNovuIntegrations,
     private readonly upsertLayoutUsecase: UpsertLayout,
@@ -39,25 +39,20 @@ export class SyncExternalOrganization {
   }
 
   async execute(command: SyncExternalOrganizationCommand): Promise<OrganizationEntity> {
-    const user = await this.userRepository.findById(command.userId);
-    if (!user) throw new BadRequestException('User not found');
-    if (!user._id) {
-      this.logger.error({ err: 'User not found' }, 'User not found when syncing external organization');
-
-      throw new BadRequestException('User not found');
-    }
-
     const isSelfHosted = process.env.IS_SELF_HOSTED === 'true';
     const isEnterprise = process.env.NOVU_ENTERPRISE === 'true' || process.env.CI_EE_TEST === 'true';
 
-    const organization = await this.organizationRepository.create({
-      externalId: command.externalId,
-      apiServiceLevel: isSelfHosted && isEnterprise ? 'unlimited' : undefined,
-    });
+    const organization = await this.organizationRepository.create(
+      {
+        externalId: command.externalId,
+        apiServiceLevel: isSelfHosted && isEnterprise ? 'unlimited' : undefined,
+      },
+      { headers: command.headers }
+    );
 
     const devEnv = await this.createEnvironmentUsecase.execute(
       CreateEnvironmentCommand.create({
-        userId: user._id,
+        userId: command.userId,
         name: 'Development',
         organizationId: organization._id,
         system: true,
@@ -68,7 +63,7 @@ export class SyncExternalOrganization {
       CreateNovuIntegrationsCommand.create({
         environmentId: devEnv._id,
         organizationId: devEnv._organizationId,
-        userId: user._id,
+        userId: command.userId,
         name: devEnv.name,
       })
     );
@@ -77,7 +72,7 @@ export class SyncExternalOrganization {
       UpsertLayoutCommand.create({
         environmentId: devEnv._id,
         organizationId: devEnv._organizationId,
-        userId: user._id,
+        userId: command.userId,
         layoutDto: {
           name: 'Default layout',
           controlValues: {
@@ -92,7 +87,7 @@ export class SyncExternalOrganization {
 
     const prodEnv = await this.createEnvironmentUsecase.execute(
       CreateEnvironmentCommand.create({
-        userId: user._id,
+        userId: command.userId,
         name: 'Production',
         organizationId: organization._id,
         parentEnvironmentId: devEnv._id,
@@ -104,7 +99,7 @@ export class SyncExternalOrganization {
       CreateNovuIntegrationsCommand.create({
         environmentId: prodEnv._id,
         organizationId: prodEnv._organizationId,
-        userId: user._id,
+        userId: command.userId,
         name: prodEnv.name,
       })
     );
@@ -113,7 +108,7 @@ export class SyncExternalOrganization {
       UpsertLayoutCommand.create({
         environmentId: prodEnv._id,
         organizationId: prodEnv._organizationId,
-        userId: user._id,
+        userId: command.userId,
         layoutDto: {
           name: 'Default layout',
           controlValues: {
@@ -126,9 +121,9 @@ export class SyncExternalOrganization {
       })
     );
 
-    this.analyticsService.upsertGroup(organization._id, organization, user);
+    this.analyticsService.upsertGroup(organization._id, organization, { _id: command.userId });
 
-    this.analyticsService.track('[Authentication] - Create Organization', user._id, {
+    this.analyticsService.track('[Authentication] - Create Organization', command.userId, {
       _organization: organization._id,
     });
 
@@ -140,10 +135,49 @@ export class SyncExternalOrganization {
     );
 
     if (organizationAfterChanges !== null) {
-      await this.createCustomer(user.email, organizationAfterChanges._id);
+      await this.createCustomer(command.email, organizationAfterChanges._id);
+    }
+
+    const domain = organization.domain || this.extractDomainFromEmail(command.email);
+    if (domain) {
+      this.triggerBrandEnrichment(command.userId, organization._id, devEnv._id, domain).catch((error) =>
+        this.logger.error(error, 'Failed to trigger brand enrichment (fire-and-forget)')
+      );
     }
 
     return organizationAfterChanges as OrganizationEntity;
+  }
+
+  private extractDomainFromEmail(email: string): string | null {
+    const parts = email.split('@');
+    if (parts.length !== 2) return null;
+
+    return parts[1];
+  }
+
+  private async triggerBrandEnrichment(
+    userId: string,
+    organizationId: string,
+    environmentId: string,
+    domain: string
+  ): Promise<void> {
+    try {
+      const enrichUsecase = this.moduleRef.get('EnrichOrganizationBrand', { strict: false });
+
+      await enrichUsecase.execute({
+        user: {
+          _id: userId,
+          organizationId,
+          environmentId,
+          roles: [MemberRoleEnum.ADMIN],
+          permissions: [],
+          scheme: ApiAuthSchemeEnum.BEARER,
+        },
+        domain,
+      });
+    } catch (error) {
+      this.logger.warn({ err: error }, `EnrichOrganizationBrand has failed for ${domain}, skipping`);
+    }
   }
 
   private async createCustomer(billingEmail: string, organizationId: string) {

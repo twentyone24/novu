@@ -16,7 +16,15 @@ const stepTypeToClassname: Record<string, string | undefined> = {
   [StepTypeEnum.EMAIL]: 'sm:max-w-[800px]',
 };
 
-export const StepDrawer = ({ children, title }: { children: React.ReactNode; title?: string }) => {
+export const StepDrawer = ({
+  children,
+  title,
+  maxWidth,
+}: {
+  children: React.ReactNode;
+  title?: string;
+  maxWidth?: string;
+}) => {
   const id = useId();
   const navigate = useNavigate();
   const { workflow, step } = useWorkflow();
@@ -75,8 +83,8 @@ export const StepDrawer = ({ children, title }: { children: React.ReactNode; tit
               }}
               transition={transitionSetting}
               className={cn(
-                'bg-background fixed inset-y-0 right-0 z-50 flex h-full w-3/4 flex-col border-l shadow-lg outline-none sm:max-w-[600px]',
-                stepTypeToClassname[step.type]
+                'bg-background fixed inset-y-0 right-0 z-50 flex h-full w-3/4 flex-col border-l shadow-lg outline-hidden sm:max-w-[600px]',
+                maxWidth || stepTypeToClassname[step.type]
               )}
             >
               <VisuallyHidden>

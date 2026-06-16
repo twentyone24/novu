@@ -41,12 +41,24 @@ function parseFilters(searchParams: URLSearchParams): ActivityFilters {
     result.topicKey = topicKey;
   }
 
+  const subscriptionId = searchParams.get('subscriptionId');
+
+  if (subscriptionId) {
+    result.subscriptionId = subscriptionId;
+  }
+
   const dateRange = searchParams.get('dateRange');
   result.dateRange = dateRange || DEFAULT_DATE_RANGE;
 
   const severity = searchParams.get('severity')?.split(',').filter(Boolean);
   if (severity?.length) {
     result.severity = severity as SeverityLevelEnum[];
+  }
+
+  const contextKeys = searchParams.getAll('contextKeys');
+
+  if (contextKeys.length > 0) {
+    result.contextKeys = contextKeys;
   }
 
   return result;
@@ -62,7 +74,9 @@ function parseFilterValues(searchParams: URLSearchParams): ActivityFiltersData {
     transactionId: transactionIds.length > 0 ? transactionIds.join(', ') : '',
     subscriberId: searchParams.get('subscriberId') || '',
     topicKey: searchParams.get('topicKey') || '',
+    subscriptionId: searchParams.get('subscriptionId') || '',
     severity: (searchParams.get('severity')?.split(',').filter(Boolean) as SeverityLevelEnum[]) || [],
+    contextKeys: searchParams.getAll('contextKeys'),
   };
 }
 
@@ -130,6 +144,10 @@ export function useActivityUrlState(): ActivityUrlState & {
         newParams.set('topicKey', data.topicKey);
       }
 
+      if (data.subscriptionId) {
+        newParams.set('subscriptionId', data.subscriptionId);
+      }
+
       if (data.dateRange && data.dateRange !== DEFAULT_DATE_RANGE) {
         newParams.set('dateRange', data.dateRange);
       }
@@ -140,6 +158,12 @@ export function useActivityUrlState(): ActivityUrlState & {
 
       if (data.severity?.length) {
         newParams.set('severity', data.severity.join(','));
+      }
+
+      if (data.contextKeys?.length) {
+        for (const contextKey of data.contextKeys) {
+          newParams.append('contextKeys', contextKey);
+        }
       }
 
       setSearchParams(newParams, { replace: true });

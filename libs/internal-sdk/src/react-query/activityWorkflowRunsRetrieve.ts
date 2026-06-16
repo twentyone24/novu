@@ -5,28 +5,49 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { NovuCore } from "../core.js";
-import { activityWorkflowRunsRetrieve } from "../funcs/activityWorkflowRunsRetrieve.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import { unwrapAsync } from "../types/fp.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { useNovuContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  ActivityWorkflowRunsRetrieveQueryData,
+  buildActivityWorkflowRunsRetrieveQuery,
+  prefetchActivityWorkflowRunsRetrieve,
+  queryKeyActivityWorkflowRunsRetrieve,
+} from "./activityWorkflowRunsRetrieve.core.js";
+export {
+  type ActivityWorkflowRunsRetrieveQueryData,
+  buildActivityWorkflowRunsRetrieveQuery,
+  prefetchActivityWorkflowRunsRetrieve,
+  queryKeyActivityWorkflowRunsRetrieve,
+};
 
-export type ActivityWorkflowRunsRetrieveQueryData =
-  components.GetWorkflowRunResponseDto;
+export type ActivityWorkflowRunsRetrieveQueryError =
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * Retrieve workflow run
@@ -37,8 +58,14 @@ export type ActivityWorkflowRunsRetrieveQueryData =
 export function useActivityWorkflowRunsRetrieve(
   workflowRunId: string,
   idempotencyKey?: string | undefined,
-  options?: QueryHookOptions<ActivityWorkflowRunsRetrieveQueryData>,
-): UseQueryResult<ActivityWorkflowRunsRetrieveQueryData, Error> {
+  options?: QueryHookOptions<
+    ActivityWorkflowRunsRetrieveQueryData,
+    ActivityWorkflowRunsRetrieveQueryError
+  >,
+): UseQueryResult<
+  ActivityWorkflowRunsRetrieveQueryData,
+  ActivityWorkflowRunsRetrieveQueryError
+> {
   const client = useNovuContext();
   return useQuery({
     ...buildActivityWorkflowRunsRetrieveQuery(
@@ -60,8 +87,14 @@ export function useActivityWorkflowRunsRetrieve(
 export function useActivityWorkflowRunsRetrieveSuspense(
   workflowRunId: string,
   idempotencyKey?: string | undefined,
-  options?: SuspenseQueryHookOptions<ActivityWorkflowRunsRetrieveQueryData>,
-): UseSuspenseQueryResult<ActivityWorkflowRunsRetrieveQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ActivityWorkflowRunsRetrieveQueryData,
+    ActivityWorkflowRunsRetrieveQueryError
+  >,
+): UseSuspenseQueryResult<
+  ActivityWorkflowRunsRetrieveQueryData,
+  ActivityWorkflowRunsRetrieveQueryError
+> {
   const client = useNovuContext();
   return useSuspenseQuery({
     ...buildActivityWorkflowRunsRetrieveQuery(
@@ -71,21 +104,6 @@ export function useActivityWorkflowRunsRetrieveSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchActivityWorkflowRunsRetrieve(
-  queryClient: QueryClient,
-  client$: NovuCore,
-  workflowRunId: string,
-  idempotencyKey?: string | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildActivityWorkflowRunsRetrieveQuery(
-      client$,
-      workflowRunId,
-      idempotencyKey,
-    ),
   });
 }
 
@@ -123,45 +141,4 @@ export function invalidateAllActivityWorkflowRunsRetrieve(
     ...filters,
     queryKey: ["@novu/api", "WorkflowRuns", "retrieve"],
   });
-}
-
-export function buildActivityWorkflowRunsRetrieveQuery(
-  client$: NovuCore,
-  workflowRunId: string,
-  idempotencyKey?: string | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<ActivityWorkflowRunsRetrieveQueryData>;
-} {
-  return {
-    queryKey: queryKeyActivityWorkflowRunsRetrieve(workflowRunId, {
-      idempotencyKey,
-    }),
-    queryFn: async function activityWorkflowRunsRetrieveQueryFn(
-      ctx,
-    ): Promise<ActivityWorkflowRunsRetrieveQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(activityWorkflowRunsRetrieve(
-        client$,
-        workflowRunId,
-        idempotencyKey,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyActivityWorkflowRunsRetrieve(
-  workflowRunId: string,
-  parameters: { idempotencyKey?: string | undefined },
-): QueryKey {
-  return ["@novu/api", "WorkflowRuns", "retrieve", workflowRunId, parameters];
 }

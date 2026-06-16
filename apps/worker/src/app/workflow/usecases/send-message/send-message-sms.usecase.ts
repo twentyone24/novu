@@ -20,7 +20,7 @@ import { SmsOutput } from '@novu/framework/internal';
 import {
   ChannelTypeEnum,
   DeliveryLifecycleDetail,
-  DeliveryLifecycleStatus,
+  DeliveryLifecycleStatusEnum,
   ExecutionDetailsSourceEnum,
   ExecutionDetailsStatusEnum,
   WebhookEventEnum,
@@ -171,10 +171,11 @@ export class SendMessageSms extends SendMessageBase {
       payload: messagePayload,
       overrides,
       templateIdentifier: command.identifier,
+      stepId: command.step.stepId,
       _jobId: command.jobId,
       tags: command.tags,
       severity: command.severity,
-      ...(command.contextKeys && { contextKeys: command.contextKeys }),
+      contextKeys: command.contextKeys,
     });
 
     await this.createExecutionDetails.execute(
@@ -228,7 +229,7 @@ export class SendMessageSms extends SendMessageBase {
       return {
         status: SendMessageStatus.SKIPPED,
         deliveryLifecycleState: {
-          status: DeliveryLifecycleStatus.SKIPPED,
+          status: DeliveryLifecycleStatusEnum.SKIPPED,
           detail: DeliveryLifecycleDetail.USER_MISSING_PHONE,
         },
       };

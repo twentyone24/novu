@@ -15,7 +15,7 @@ import { Novu } from "@novu/api";
 
 const novu = new Novu({
   security: {
-    secretKey: "YOUR_SECRET_KEY_HERE",
+    bearerAuth: "<YOUR_BEARER_TOKEN_HERE>",
   },
 });
 
@@ -30,6 +30,10 @@ async function main() {
     },
     overrides: {},
     to: "SUBSCRIBER_ID",
+    actor: "<value>",
+    context: {
+      "key": "org-acme",
+    },
   });
 
   console.log(result);

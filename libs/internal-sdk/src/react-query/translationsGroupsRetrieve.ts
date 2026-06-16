@@ -5,43 +5,70 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { NovuCore } from "../core.js";
-import { translationsGroupsRetrieve } from "../funcs/translationsGroupsRetrieve.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useNovuContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildTranslationsGroupsRetrieveQuery,
+  prefetchTranslationsGroupsRetrieve,
+  queryKeyTranslationsGroupsRetrieve,
+  TranslationsGroupsRetrieveQueryData,
+} from "./translationsGroupsRetrieve.core.js";
+export {
+  buildTranslationsGroupsRetrieveQuery,
+  prefetchTranslationsGroupsRetrieve,
+  queryKeyTranslationsGroupsRetrieve,
+  type TranslationsGroupsRetrieveQueryData,
+};
 
-export type TranslationsGroupsRetrieveQueryData =
-  components.TranslationGroupDto;
+export type TranslationsGroupsRetrieveQueryError =
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * Retrieve a translation group
  *
  * @remarks
- * Retrieves a single translation group by resource type (workflow) and resource ID (workflowId)
+ * Retrieves a single translation group by resource type (workflow, layout) and resource ID (workflowId, layoutId)
  */
 export function useTranslationsGroupsRetrieve(
   resourceType:
     operations.TranslationControllerGetTranslationGroupEndpointPathParamResourceType,
   resourceId: string,
   idempotencyKey?: string | undefined,
-  options?: QueryHookOptions<TranslationsGroupsRetrieveQueryData>,
-): UseQueryResult<TranslationsGroupsRetrieveQueryData, Error> {
+  options?: QueryHookOptions<
+    TranslationsGroupsRetrieveQueryData,
+    TranslationsGroupsRetrieveQueryError
+  >,
+): UseQueryResult<
+  TranslationsGroupsRetrieveQueryData,
+  TranslationsGroupsRetrieveQueryError
+> {
   const client = useNovuContext();
   return useQuery({
     ...buildTranslationsGroupsRetrieveQuery(
@@ -59,15 +86,21 @@ export function useTranslationsGroupsRetrieve(
  * Retrieve a translation group
  *
  * @remarks
- * Retrieves a single translation group by resource type (workflow) and resource ID (workflowId)
+ * Retrieves a single translation group by resource type (workflow, layout) and resource ID (workflowId, layoutId)
  */
 export function useTranslationsGroupsRetrieveSuspense(
   resourceType:
     operations.TranslationControllerGetTranslationGroupEndpointPathParamResourceType,
   resourceId: string,
   idempotencyKey?: string | undefined,
-  options?: SuspenseQueryHookOptions<TranslationsGroupsRetrieveQueryData>,
-): UseSuspenseQueryResult<TranslationsGroupsRetrieveQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    TranslationsGroupsRetrieveQueryData,
+    TranslationsGroupsRetrieveQueryError
+  >,
+): UseSuspenseQueryResult<
+  TranslationsGroupsRetrieveQueryData,
+  TranslationsGroupsRetrieveQueryError
+> {
   const client = useNovuContext();
   return useSuspenseQuery({
     ...buildTranslationsGroupsRetrieveQuery(
@@ -78,24 +111,6 @@ export function useTranslationsGroupsRetrieveSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchTranslationsGroupsRetrieve(
-  queryClient: QueryClient,
-  client$: NovuCore,
-  resourceType:
-    operations.TranslationControllerGetTranslationGroupEndpointPathParamResourceType,
-  resourceId: string,
-  idempotencyKey?: string | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildTranslationsGroupsRetrieveQuery(
-      client$,
-      resourceType,
-      resourceId,
-      idempotencyKey,
-    ),
   });
 }
 
@@ -140,57 +155,4 @@ export function invalidateAllTranslationsGroupsRetrieve(
     ...filters,
     queryKey: ["@novu/api", "Groups", "retrieve"],
   });
-}
-
-export function buildTranslationsGroupsRetrieveQuery(
-  client$: NovuCore,
-  resourceType:
-    operations.TranslationControllerGetTranslationGroupEndpointPathParamResourceType,
-  resourceId: string,
-  idempotencyKey?: string | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<TranslationsGroupsRetrieveQueryData>;
-} {
-  return {
-    queryKey: queryKeyTranslationsGroupsRetrieve(resourceType, resourceId, {
-      idempotencyKey,
-    }),
-    queryFn: async function translationsGroupsRetrieveQueryFn(
-      ctx,
-    ): Promise<TranslationsGroupsRetrieveQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(translationsGroupsRetrieve(
-        client$,
-        resourceType,
-        resourceId,
-        idempotencyKey,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyTranslationsGroupsRetrieve(
-  resourceType:
-    operations.TranslationControllerGetTranslationGroupEndpointPathParamResourceType,
-  resourceId: string,
-  parameters: { idempotencyKey?: string | undefined },
-): QueryKey {
-  return [
-    "@novu/api",
-    "Groups",
-    "retrieve",
-    resourceType,
-    resourceId,
-    parameters,
-  ];
 }

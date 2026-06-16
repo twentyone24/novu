@@ -5,18 +5,23 @@ import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { cacheService, TracingModule } from '@novu/application-generic';
 import { Client, NovuModule } from '@novu/framework/nest';
-import { usageLimitsWorkflow } from '@novu/notifications';
+import { usageLimitsWorkflow, usageReportWorkflow } from '@novu/notifications';
 import { isClerkEnabled } from '@novu/shared';
 import { SentryModule } from '@sentry/nestjs/setup';
 import packageJson from '../package.json';
 import { ActivityModule } from './app/activity/activity.module';
+import { AgentsModule } from './app/agents/agents.module';
 import { AnalyticsModule } from './app/analytics/analytics.module';
 import { AuthModule } from './app/auth/auth.module';
 import { BlueprintModule } from './app/blueprint/blueprint.module';
 import { BridgeModule } from './app/bridge/bridge.module';
 import { ChangeModule } from './app/change/change.module';
+import { ChannelConnectionsModule } from './app/channel-connections/channel-connections.module';
+import { ChannelEndpointsModule } from './app/channel-endpoints/channel-endpoints.module';
 import { ContentTemplatesModule } from './app/content-templates/content-templates.module';
 import { ContextsModule } from './app/contexts/contexts.module';
+import { DomainsModule } from './app/domains/domains.module';
+import { EnvironmentVariablesModule } from './app/environment-variables/environment-variables.module';
 import { EnvironmentsModuleV1 } from './app/environments-v1/environments-v1.module';
 import { EnvironmentsModule } from './app/environments-v2/environments.module';
 import { EventsModule } from './app/events/events.module';
@@ -44,6 +49,7 @@ import { AnalyticsLogsInterceptor } from './app/shared/framework/analytics-logs.
 import { IdempotencyInterceptor } from './app/shared/framework/idempotency.interceptor';
 import { ProductFeatureInterceptor } from './app/shared/interceptors/product-feature.interceptor';
 import { SharedModule } from './app/shared/shared.module';
+import { StepResolversModule } from './app/step-resolvers/step-resolvers.module';
 import { StorageModule } from './app/storage/storage.module';
 import { SubscribersV1Module } from './app/subscribers/subscribersV1.module';
 import { SubscribersModule } from './app/subscribers-v2/subscribers.module';
@@ -72,6 +78,14 @@ const enterpriseImports = (): Array<Type | DynamicModule | Promise<DynamicModule
 
     if (require('@novu/ee-api')?.InboundWebhooksModule) {
       modules.push(require('@novu/ee-api')?.InboundWebhooksModule);
+    }
+
+    if (require('@novu/ee-ai')?.AiModule) {
+      modules.push(require('@novu/ee-ai')?.AiModule);
+    }
+
+    if (require('@novu/ee-api')?.ConversationsModule) {
+      modules.push(require('@novu/ee-api')?.ConversationsModule);
     }
 
     modules.push(SupportModule);
@@ -108,6 +122,8 @@ const baseModules: Array<Type | DynamicModule | Promise<DynamicModule> | Forward
   ContentTemplatesModule,
   OrganizationModule,
   ActivityModule,
+  AgentsModule,
+  DomainsModule.forRoot(),
   UserModule,
   IntegrationModule,
   InternalModule,
@@ -124,16 +140,19 @@ const baseModules: Array<Type | DynamicModule | Promise<DynamicModule> | Forward
   TopicsV2Module,
   BlueprintModule,
   TenantModule,
+  EnvironmentVariablesModule,
   StorageModule,
   WorkflowOverridesModule,
   RateLimitingModule,
-  WidgetsModule,
   TracingModule.register(packageJson.name, packageJson.version),
   BridgeModule,
   PreferencesModule,
   WorkflowModule,
   EnvironmentsModule,
   NovuModule,
+  ChannelConnectionsModule,
+  ChannelEndpointsModule,
+  StepResolversModule,
 ];
 
 const enterpriseModules = enterpriseImports();
@@ -193,7 +212,7 @@ modules.push(
         process.env.NOVU_STRICT_AUTHENTICATION_ENABLED === 'true',
     }),
     controllerDecorators: [ApiExcludeController()],
-    workflows: [usageLimitsWorkflow],
+    workflows: [usageLimitsWorkflow, usageReportWorkflow],
   })
 );
 

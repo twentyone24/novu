@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { StepFilterDto } from '@novu/application-generic';
 import {
   DaysEnum,
   DigestTypeEnum,
@@ -17,7 +18,6 @@ import {
   TriggerTypeEnum,
 } from '@novu/shared';
 import { IsArray, IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
-import { StepFilterDto } from '../../shared/dtos/step-filter-dto';
 
 export class DigestTimedConfigDto {
   @ApiPropertyOptional({ description: 'Time at which the digest is triggered' })
@@ -76,6 +76,11 @@ export class DigestTimedConfigDto {
   @IsOptional()
   @IsString()
   cronExpression?: string;
+
+  @ApiPropertyOptional({ description: 'Until date for scheduling' })
+  @IsOptional()
+  @IsString()
+  untilDate?: string;
 }
 
 export class DigestMetadataDto {
@@ -465,6 +470,9 @@ export class ActivityNotificationResponseDto {
 
   @ApiPropertyOptional({ description: 'Criticality of the notification', type: Boolean })
   critical?: boolean;
+
+  @ApiPropertyOptional({ description: 'Context (single or multi) in which the notification was sent', type: [String] })
+  contextKeys?: string[];
 }
 
 // Activities Response DTO

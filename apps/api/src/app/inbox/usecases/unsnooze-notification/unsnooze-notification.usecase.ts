@@ -7,7 +7,7 @@ import {
 } from '@novu/application-generic';
 import { ChannelTypeEnum, JobEntity, JobRepository, JobStatusEnum, MessageRepository } from '@novu/dal';
 import { ExecutionDetailsSourceEnum, ExecutionDetailsStatusEnum } from '@novu/shared';
-import { InboxNotification } from '../../utils/types';
+import { InboxNotificationDto } from '../../dtos/inbox-notification.dto';
 import { MarkNotificationAsCommand } from '../mark-notification-as/mark-notification-as.command';
 import { MarkNotificationAs } from '../mark-notification-as/mark-notification-as.usecase';
 import { UnsnoozeNotificationCommand } from './unsnooze-notification.command';
@@ -20,14 +20,17 @@ export class UnsnoozeNotification {
     private jobRepository: JobRepository,
     private markNotificationAs: MarkNotificationAs,
     private createExecutionDetails: CreateExecutionDetails
-  ) {}
+  ) {
+    this.logger.setContext(this.constructor.name);
+  }
 
-  async execute(command: UnsnoozeNotificationCommand): Promise<InboxNotification> {
+  async execute(command: UnsnoozeNotificationCommand): Promise<InboxNotificationDto> {
     const snoozedNotification = await this.messageRepository.findOne({
       _id: command.notificationId,
       _environmentId: command.environmentId,
       channel: ChannelTypeEnum.IN_APP,
       snoozedUntil: { $exists: true, $ne: null },
+      contextKeys: command.contextKeys,
     });
 
     if (!snoozedNotification) {
@@ -48,9 +51,9 @@ export class UnsnoozeNotification {
   private async unsnoozeNotification(
     command: UnsnoozeNotificationCommand,
     notificationId: string
-  ): Promise<InboxNotification> {
+  ): Promise<InboxNotificationDto> {
     let scheduledJob: JobEntity | null = null;
-    let unsnoozedNotification!: InboxNotification;
+    let unsnoozedNotification!: InboxNotificationDto;
 
     await this.messageRepository.withTransaction(async () => {
       scheduledJob = await this.jobRepository.findOneAndDelete({
@@ -68,6 +71,7 @@ export class UnsnoozeNotification {
           subscriberId: command.subscriberId,
           notificationId: command.notificationId,
           snoozedUntil: null,
+          contextKeys: command.contextKeys,
         })
       );
     });

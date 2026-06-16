@@ -1,28 +1,37 @@
-import { ApiExtraModels, ApiProperty, ApiPropertyOptional, getSchemaPath } from '@nestjs/swagger';
-import { StepTypeEnum } from '@novu/shared';
-import { IsEnum, IsObject, IsOptional, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional, getSchemaPath } from '@nestjs/swagger';
 import {
   ChatControlDto,
   CustomControlDto,
   DelayControlDto,
   DigestControlDto,
   EmailControlDto,
+  HttpRequestControlDto,
   InAppControlDto,
   PushControlDto,
   SmsControlDto,
   ThrottleControlDto,
-} from './controls';
+} from '@novu/application-generic';
+import { SLUG_IDENTIFIER_REGEX, StepTypeEnum, slugIdentifierFormatMessage } from '@novu/shared';
+import { IsEnum, IsObject, IsOptional, IsString, Matches } from 'class-validator';
 
 // Base DTO for common properties
 export class BaseStepConfigDto {
   @ApiProperty({
-    description: 'Unique identifier of the step',
+    description: 'Database identifier of the step. Used for updating the step.',
     type: 'string',
     required: false,
   })
   @IsString()
   @IsOptional()
   _id?: string;
+
+  @ApiPropertyOptional({ description: 'Unique identifier for the step' })
+  @IsString()
+  @Matches(SLUG_IDENTIFIER_REGEX, {
+    message: slugIdentifierFormatMessage('stepId'),
+  })
+  @IsOptional()
+  stepId?: string;
 
   @ApiProperty({
     description: 'Name of the step',
@@ -202,6 +211,25 @@ export class CustomStepUpsertDto extends BaseStepConfigDto {
   controlValues?: CustomControlDto | Record<string, unknown> | null;
 }
 
+export class HttpRequestStepUpsertDto extends BaseStepConfigDto {
+  @ApiProperty({
+    enum: StepTypeEnum,
+    enumName: 'StepTypeEnum',
+    default: StepTypeEnum.HTTP_REQUEST,
+    description: 'Type of the step',
+  })
+  @IsEnum(StepTypeEnum)
+  readonly type: StepTypeEnum = 'http_request' as StepTypeEnum;
+
+  @ApiPropertyOptional({
+    description: 'Control values for the HTTP Request step.',
+    oneOf: [{ $ref: getSchemaPath(HttpRequestControlDto) }, { type: 'object', additionalProperties: true }],
+  })
+  @IsOptional()
+  @IsObject()
+  controlValues?: HttpRequestControlDto | Record<string, unknown> | null;
+}
+
 /*
  * This export allows using StepUpsertDto as a type for the discriminated union.
  * The actual DTO used will be one of the specific step DTOs at runtime.
@@ -215,4 +243,5 @@ export type StepUpsertDto =
   | DelayStepUpsertDto
   | DigestStepUpsertDto
   | ThrottleStepUpsertDto
-  | CustomStepUpsertDto;
+  | CustomStepUpsertDto
+  | HttpRequestStepUpsertDto;

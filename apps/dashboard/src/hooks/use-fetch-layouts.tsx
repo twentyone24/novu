@@ -14,7 +14,7 @@ interface UseLayoutsParams {
 }
 
 export const useFetchLayouts = ({
-  limit = 12,
+  limit = 10,
   offset = 0,
   query = '',
   orderBy = '',
@@ -22,12 +22,14 @@ export const useFetchLayouts = ({
   refetchOnWindowFocus = true,
 }: UseLayoutsParams = {}) => {
   const { currentEnvironment } = useEnvironment();
+  const environmentId = currentEnvironment?._id;
+  const params = { limit, offset, query, orderBy, orderDirection };
 
   const layoutsQuery = useQuery({
-    queryKey: [QueryKeys.fetchLayouts, currentEnvironment?._id, { limit, offset, query, orderBy, orderDirection }],
-    queryFn: () => getLayouts({ environment: currentEnvironment!, limit, offset, query, orderBy, orderDirection }),
+    queryKey: [QueryKeys.fetchLayouts, environmentId, params],
+    queryFn: () => getLayouts({ environment: currentEnvironment!, ...params }),
     placeholderData: keepPreviousData,
-    enabled: !!currentEnvironment?._id,
+    enabled: !!environmentId,
     refetchOnWindowFocus,
   });
 

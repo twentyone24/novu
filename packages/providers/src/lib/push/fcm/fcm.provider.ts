@@ -11,6 +11,8 @@ export class FcmPushProvider extends BaseProvider implements IPushProvider {
   channelType = ChannelTypeEnum.PUSH as ChannelTypeEnum.PUSH;
   protected casing: CasingEnum = CasingEnum.SNAKE_CASE;
 
+  private readonly INVALID_TOKEN_ERRORS = ['Requested entity was not found'];
+
   private appName: string;
   private messaging: Messaging;
   constructor(
@@ -55,6 +57,7 @@ export class FcmPushProvider extends BaseProvider implements IPushProvider {
     }) || {};
 
     const payload = this.cleanPayload(options.payload);
+    const novuData = payload.__nvMessageId ? { __nvMessageId: payload.__nvMessageId } : {};
     const transformedBase = this.transform<MulticastMessage | TopicMessage>(bridgeProviderData, {});
 
     const commonProps: Partial<MulticastMessage & TopicMessage> = {
@@ -73,7 +76,7 @@ export class FcmPushProvider extends BaseProvider implements IPushProvider {
           title: options.title,
           body: options.content,
         },
-        data,
+        data: { ...novuData, ...data },
         ...commonProps,
       }).body;
 
@@ -98,7 +101,7 @@ export class FcmPushProvider extends BaseProvider implements IPushProvider {
           body: options.content,
           ...overridesData,
         };
-        multicastConfig.data = data;
+        multicastConfig.data = { ...novuData, ...data };
       }
 
       const multicastMessage = this.transform<MulticastMessage>(
@@ -129,6 +132,10 @@ export class FcmPushProvider extends BaseProvider implements IPushProvider {
             ),
       date: new Date().toISOString(),
     };
+  }
+
+  isTokenInvalid(errorMessage: string): boolean {
+    return this.INVALID_TOKEN_ERRORS.some((error) => errorMessage?.includes(error));
   }
 
   private cleanPayload(payload: object): Record<string, string> {

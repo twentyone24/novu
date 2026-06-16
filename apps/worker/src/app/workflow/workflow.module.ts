@@ -8,20 +8,21 @@ import {
   CompileTemplate,
   ConditionsFilter,
   CreateExecutionDetails,
+  ExecuteStepResolverRequest,
   GetDecryptedIntegrations,
-  GetLayoutUseCase,
+  GetLayoutUseCaseV0,
   GetNovuLayout,
   GetNovuProviderCredentials,
   GetPreferences,
   GetSubscriberSchedule,
   GetSubscriberTemplatePreference,
   GetTopicSubscribersUseCase,
+  InboundDomainRouteDelivery,
   InMemoryProviderService,
+  MsTeamsTokenService,
   NormalizeVariables,
   ProcessTenant,
   RedisThrottleService,
-  ResolveContextFromKeys,
-  ResolveContextFromPayload,
   SelectIntegration,
   SelectVariant,
   SendWebhookMessage,
@@ -29,8 +30,8 @@ import {
   TriggerBroadcast,
   TriggerEvent,
   TriggerMulticast,
+  VerifyPayload,
   WorkflowInMemoryProviderService,
-  WorkflowRunService,
 } from '@novu/application-generic';
 import {
   ChannelConnectionRepository,
@@ -38,6 +39,8 @@ import {
   CommunityOrganizationRepository,
   CommunityUserRepository,
   ContextRepository,
+  DomainRepository,
+  DomainRouteRepository,
   JobRepository,
   PreferencesRepository,
 } from '@novu/dal';
@@ -66,10 +69,14 @@ import {
   UpdateJobStatus,
   WebhookFilterBackoffStrategy,
 } from './usecases';
-import { AddDelayJob, AddJob, MergeOrCreateDigest } from './usecases/add-job';
+import { AddJob, MergeOrCreateDigest } from './usecases/add-job';
 import { InboundEmailParse } from './usecases/inbound-email-parse/inbound-email-parse.usecase';
+import { DomainRouteStrategy } from './usecases/inbound-email-parse/strategies/domain-route.strategy';
+import { ReplyToStrategy } from './usecases/inbound-email-parse/strategies/reply-to.strategy';
 import { NoopSendWebhookMessage } from './usecases/noop-send-webhook-message.usecase';
-import { ExecuteStepCustom } from './usecases/send-message/execute-step-custom.usecase';
+import { ResolveChannelEndpoints } from './usecases/send-message/channel-endpoint-resolution/resolve-channel-endpoints.usecase';
+import { ExecuteCodeFirstCustomStep } from './usecases/send-message/execute-code-first-custom-step.usecase';
+import { ExecuteHttpRequestStep } from './usecases/send-message/execute-http-request-step.usecase';
 import { StoreSubscriberJobs } from './usecases/store-subscriber-jobs';
 import { SubscriberJobBound } from './usecases/subscriber-job-bound/subscriber-job-bound.usecase';
 
@@ -97,6 +104,8 @@ const enterpriseImports = (): Array<Type | DynamicModule | Promise<DynamicModule
 };
 
 const REPOSITORIES = [
+  DomainRepository,
+  DomainRouteRepository,
   JobRepository,
   CommunityOrganizationRepository,
   PreferencesRepository,
@@ -143,7 +152,6 @@ const svixProvider: Provider = {
 };
 
 const USE_CASES = [
-  AddDelayJob,
   TierRestrictionsValidateUsecase,
   MergeOrCreateDigest,
   AddJob,
@@ -158,7 +166,7 @@ const USE_CASES = [
   GetDecryptedIntegrations,
   GetDigestEventsBackoff,
   GetDigestEventsRegular,
-  GetLayoutUseCase,
+  GetLayoutUseCaseV0,
   GetNovuLayout,
   GetNovuProviderCredentials,
   SelectIntegration,
@@ -176,11 +184,13 @@ const USE_CASES = [
   SendMessagePush,
   SendMessageSms,
   Throttle,
-  ExecuteStepCustom,
+  ExecuteCodeFirstCustomStep,
+  ExecuteHttpRequestStep,
   StoreSubscriberJobs,
   SetJobAsCompleted,
   SetJobAsFailed,
   TriggerEvent,
+  VerifyPayload,
   UpdateJobStatus,
   ProcessUnsnoozeJob,
   WebhookFilterBackoffStrategy,
@@ -190,15 +200,17 @@ const USE_CASES = [
   TriggerMulticast,
   CompileInAppTemplate,
   InboundEmailParse,
+  InboundDomainRouteDelivery,
+  ReplyToStrategy,
+  DomainRouteStrategy,
   ExecuteBridgeJob,
+  ExecuteStepResolverRequest,
   GetPreferences,
-  WorkflowRunService,
-  ResolveContextFromKeys,
-  ResolveContextFromPayload,
   GetSubscriberSchedule,
+  ResolveChannelEndpoints,
 ];
 
-const PROVIDERS: Provider[] = [RedisThrottleService];
+const PROVIDERS: Provider[] = [RedisThrottleService, MsTeamsTokenService];
 const activeWorkersToken: any = {
   provide: 'ACTIVE_WORKERS',
   useFactory: (...args: any[]) => {

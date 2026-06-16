@@ -1,6 +1,6 @@
+import { apiHostnameManager } from '@/utils/api-hostname-manager';
 import { useUser } from '@clerk/clerk-react';
 import { Inbox, InboxContent, InboxProps } from '@novu/react';
-import { API_HOSTNAME, WEBSOCKET_HOSTNAME } from '../../config';
 import { useAuth } from '../../context/auth/hooks';
 import { useFetchEnvironments } from '../../context/environment/hooks';
 
@@ -32,8 +32,8 @@ export function InboxPreviewContent() {
   const configuration: InboxProps = {
     applicationIdentifier: currentEnvironment?.identifier,
     subscriberId: user?.externalId as string,
-    backendUrl: API_HOSTNAME ?? 'https://api.novu.co',
-    socketUrl: WEBSOCKET_HOSTNAME ?? 'https://ws.novu.co',
+    backendUrl: apiHostnameManager.getHostname(),
+    socketUrl: apiHostnameManager.getWebSocketHostname(),
     localization: {
       'notifications.emptyNotice': 'Click Send Notification to see your first notification',
     },
@@ -52,7 +52,7 @@ export function InboxPreviewContent() {
           backgroundColor: 'white',
         },
         inboxContent: {
-          maxHeight: '460px',
+          maxHeight: '100%',
         },
         notificationListContainer: {
           minHeight: '100%',
@@ -69,7 +69,7 @@ export function InboxPreviewContent() {
   };
 
   return (
-    <div className="hide-inbox-footer nv-no-scrollbar mt-1 h-[470px] w-[370px] overflow-y-auto overflow-x-hidden">
+    <div className="hide-inbox-footer nv-no-scrollbar mt-1 h-full w-full overflow-y-auto overflow-x-hidden">
       <Inbox {...configuration}>
         <InboxContent />
       </Inbox>

@@ -46,6 +46,7 @@ const workflowRunSelectColumns = [
   'subscriber_to',
   'payload',
   'topics',
+  'context_keys',
   'created_at',
   'updated_at',
 ] as const;
@@ -74,7 +75,9 @@ export class GetActivity {
     private workflowRunRepository: WorkflowRunRepository,
     private logger: PinoLogger,
     private featureFlagsService: FeatureFlagsService
-  ) {}
+  ) {
+    this.logger.setContext(this.constructor.name);
+  }
 
   async execute(command: GetActivityCommand): Promise<ActivityNotificationResponseDto> {
     this.analyticsService.track('Get Activity Feed Item - [Activity Feed]', command.userId, {
@@ -105,11 +108,11 @@ export class GetActivity {
       }),
     ]);
 
-    this.logger.debug('feature flags', {
+    this.logger.debug({
       tracesEnabled,
       stepRunsEnabled,
       workflowRunsEnabled,
-    });
+    }, 'feature flags');
 
     let feedItem: NotificationFeedItemEntity | null = null;
 
@@ -337,6 +340,7 @@ export class GetActivity {
         jobs: [],
         to: mostRecentWorkflowRun.subscriber_to ? JSON.parse(mostRecentWorkflowRun.subscriber_to) : {},
         payload: mostRecentWorkflowRun.payload ? JSON.parse(mostRecentWorkflowRun.payload) : {},
+        contextKeys: mostRecentWorkflowRun.context_keys,
         createdAt: new Date(mostRecentWorkflowRun.created_at).toISOString(),
         updatedAt: new Date(mostRecentWorkflowRun.updated_at).toISOString(),
         channels: mostRecentWorkflowRun.channels ? JSON.parse(mostRecentWorkflowRun.channels) : [],

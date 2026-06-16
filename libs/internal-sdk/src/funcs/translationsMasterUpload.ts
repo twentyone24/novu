@@ -3,7 +3,13 @@
  */
 
 import { NovuCore } from "../core.js";
-import { encodeSimple } from "../lib/encodings.js";
+import { appendForm, encodeSimple, normalizeBlob } from "../lib/encodings.js";
+import {
+  bytesToBlob,
+  getContentTypeFromFileName,
+  readableStreamToArrayBuffer,
+} from "../lib/files.js";
+import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -23,16 +29,22 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { APICall, APIPromise } from "../types/async.js";
+import { isBlobLike } from "../types/blobs.js";
 import { Result } from "../types/fp.js";
+import { isReadableStream } from "../types/streams.js";
 
 /**
  * Upload master translations JSON file
  *
  * @remarks
  * Upload a master JSON file containing translations for multiple workflows. Locale is automatically detected from filename (e.g., en_US.json)
+ *
+ * This operation requires one of {@link Security.secretKey}, {@link Security.bearerAuth}, or {@link Security.secretKey} to be set on the `security` parameter when initializing the SDK.
  */
 export function translationsMasterUpload(
   client: NovuCore,
+  requestBody:
+    operations.TranslationControllerUploadMasterJsonEndpointRequestBody,
   idempotencyKey?: string | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -50,6 +62,7 @@ export function translationsMasterUpload(
 > {
   return new APIPromise($do(
     client,
+    requestBody,
     idempotencyKey,
     options,
   ));
@@ -57,6 +70,8 @@ export function translationsMasterUpload(
 
 async function $do(
   client: NovuCore,
+  requestBody:
+    operations.TranslationControllerUploadMasterJsonEndpointRequestBody,
   idempotencyKey?: string | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -77,6 +92,7 @@ async function $do(
 > {
   const input: operations.TranslationControllerUploadMasterJsonEndpointRequest =
     {
+      requestBody: requestBody,
       idempotencyKey: idempotencyKey,
     };
 
@@ -92,7 +108,37 @@ async function $do(
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = new FormData();
+
+  if (isBlobLike(payload.RequestBody.file)) {
+    const file = payload.RequestBody.file;
+    const blob = await normalizeBlob(file);
+    const name = "name" in file ? (file.name as string) : undefined;
+    appendForm(body, "file", blob, name);
+  } else if (isReadableStream(payload.RequestBody.file.content)) {
+    const buffer = await readableStreamToArrayBuffer(
+      payload.RequestBody.file.content,
+    );
+    const contentType =
+      getContentTypeFromFileName(payload.RequestBody.file.fileName)
+      || "application/octet-stream";
+    appendForm(
+      body,
+      "file",
+      bytesToBlob(buffer, contentType),
+      payload.RequestBody.file.fileName,
+    );
+  } else {
+    const contentType =
+      getContentTypeFromFileName(payload.RequestBody.file.fileName)
+      || "application/octet-stream";
+    appendForm(
+      body,
+      "file",
+      bytesToBlob(payload.RequestBody.file.content, contentType),
+      payload.RequestBody.file.fileName,
+    );
+  }
 
   const path = pathToFunc("/v2/translations/master-json/upload")();
 
@@ -106,13 +152,13 @@ async function $do(
   }));
 
   const securityInput = await extractSecurity(client._options.security);
-  const requestSecurity = resolveGlobalSecurity(securityInput);
+  const requestSecurity = resolveGlobalSecurity(securityInput, [0, 1]);
 
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
     operationID: "TranslationController_uploadMasterJsonEndpoint",
-    oAuth2Scopes: [],
+    oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
 
@@ -150,7 +196,8 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    errorCodes: ["4XX", "5XX"],
+    isErrorStatusCode: (statusCode: number) =>
+      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });

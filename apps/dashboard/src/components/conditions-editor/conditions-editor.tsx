@@ -29,17 +29,17 @@ export interface EnhancedField extends Field {
   format?: string;
 }
 
-const ruleActionsClassName = `[&>[data-actions="true"]]:opacity-0 [&:hover>[data-actions="true"]]:opacity-100 [&>[data-actions="true"]:has(~[data-radix-popper-content-wrapper])]:opacity-100`;
-const groupActionsClassName = `[&_.ruleGroup-header>[data-actions="true"]]:opacity-0 [&_.ruleGroup-header:hover>[data-actions="true"]]:opacity-100 [&_.ruleGroup-header>[data-actions="true"]:has(~[data-radix-popper-content-wrapper])]:opacity-100`;
-const nestedGroupClassName = `[&.ruleGroup_.ruleGroup]:p-3 [&.ruleGroup_.ruleGroup]:bg-neutral-50 [&.ruleGroup_.ruleGroup]:rounded-md [&.ruleGroup_.ruleGroup]:border [&.ruleGroup_.ruleGroup]:border-solid [&.ruleGroup_.ruleGroup]:border-neutral-100`;
-const ruleGroupClassName = `[&.ruleGroup]:[background:transparent] [&.ruleGroup]:[border:none] [&.ruleGroup]:p-0 ${nestedGroupClassName} [&_.ruleGroup-body_.rule]:items-start ${groupActionsClassName}`;
+const ruleActionsClassName = `*:data-[actions="true"]:opacity-0! [&:hover>[data-actions="true"]]:opacity-100! [&>[data-actions="true"]:has(~[data-radix-popper-content-wrapper])]:opacity-100!`;
+const groupActionsClassName = `[&_.ruleGroup-header>[data-actions="true"]]:opacity-0! [&_.ruleGroup-header:hover>[data-actions="true"]]:opacity-100! [&_.ruleGroup-header>[data-actions="true"]:has(~[data-radix-popper-content-wrapper])]:opacity-100!`;
+const nestedGroupClassName = `[&.ruleGroup_.ruleGroup]:p-3! [&.ruleGroup_.ruleGroup]:bg-neutral-50! [&.ruleGroup_.ruleGroup]:rounded-md! [&.ruleGroup_.ruleGroup]:border! [&.ruleGroup_.ruleGroup]:border-solid! [&.ruleGroup_.ruleGroup]:border-neutral-100!`;
+const ruleGroupClassName = `[&.ruleGroup]:bg-transparent! [&.ruleGroup]:border-none! [&.ruleGroup]:p-0! ${nestedGroupClassName} [&_.ruleGroup-body_.rule]:items-start! ${groupActionsClassName}`;
 const ruleClassName = `${ruleActionsClassName}`;
 
 const controlClassnames = {
   ruleGroup: ruleGroupClassName,
   rule: ruleClassName,
   queryBuilder:
-    'queryBuilder-branches [&_.rule]:before:border-stroke-soft [&_.rule]:after:border-stroke-soft [&_.ruleGroup_.ruleGroup]:before:border-stroke-soft [&_.ruleGroup_.ruleGroup]:after:border-stroke-soft',
+    'queryBuilder-branches [&_.rule]:before:border-stroke-soft! [&_.rule]:after:border-stroke-soft! [&_.ruleGroup_.ruleGroup]:before:border-stroke-soft! [&_.ruleGroup_.ruleGroup]:after:border-stroke-soft!',
 };
 
 const translations: Partial<Translations> = {
@@ -76,6 +76,7 @@ function InternalConditionsEditor({
   onQueryChange,
   saveForm,
   enhancedVariables,
+  disabled,
 }: {
   fields: EnhancedField[];
   variables: LiquidVariable[];
@@ -84,6 +85,7 @@ function InternalConditionsEditor({
   onQueryChange: (query: RuleGroupType) => void;
   saveForm: () => void;
   enhancedVariables?: EnhancedLiquidVariable[];
+  disabled?: boolean;
 }) {
   const fieldDataMap = useMemo(() => {
     if (!enhancedVariables) return new Map();
@@ -217,6 +219,7 @@ function InternalConditionsEditor({
       resetOnFieldChange={false}
       getOperators={getOperators}
       getValueEditorType={getValueEditorType}
+      disabled={disabled}
     />
   );
 }
@@ -240,6 +243,7 @@ export function ConditionsEditor({
   variables,
   isAllowedVariable,
   enhancedVariables,
+  disabled,
 }: {
   query: RuleGroupType;
   onQueryChange: (query: RuleGroupType) => void;
@@ -248,6 +252,7 @@ export function ConditionsEditor({
   variables: LiquidVariable[];
   isAllowedVariable: IsAllowedVariable;
   enhancedVariables?: EnhancedLiquidVariable[];
+  disabled?: boolean;
 }) {
   return (
     <ConditionsEditorProvider query={query} onQueryChange={onQueryChange}>
@@ -259,6 +264,7 @@ export function ConditionsEditor({
         onQueryChange={onQueryChange}
         saveForm={saveForm}
         enhancedVariables={enhancedVariables}
+        disabled={disabled}
       />
     </ConditionsEditorProvider>
   );

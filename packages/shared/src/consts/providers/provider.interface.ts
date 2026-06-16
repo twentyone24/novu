@@ -3,6 +3,11 @@ import { ChannelTypeEnum, ConfigurationKey, CredentialsKeyEnum, ProvidersIdEnum 
 export type ConfigConfiguration = {
   key: ConfigurationKey;
   value?: unknown;
+  placeholder?: string;
+  dropdown?: Array<{
+    name: string;
+    value: string | null;
+  }>;
   displayName: string;
   description?: string;
   type: CredentialsType;
@@ -11,6 +16,7 @@ export type ConfigConfiguration = {
     text: string;
     url: string;
   }>;
+  tooltip?: string;
 };
 
 export interface ILogoFileName {
@@ -37,13 +43,48 @@ export interface IProviderConfig {
   betaVersion?: boolean;
 }
 
-type CredentialsType = 'string' | 'dropdown' | 'switch' | 'textarea' | 'text' | 'number' | 'inboundWebhook' | 'boolean';
+export type ProviderColorToken =
+  | 'neutral'
+  | 'stable'
+  | 'information'
+  | 'feature'
+  | 'destructive'
+  | 'verified'
+  | 'alert'
+  | 'highlighted'
+  | 'warning';
+
+type CredentialsType =
+  | 'string'
+  | 'dropdown'
+  | 'switch'
+  | 'textarea'
+  | 'text'
+  | 'number'
+  | 'inboundWebhook'
+  | 'boolean'
+  | 'pushResources'
+  | 'crossChannelConfigs'
+  | 'inboxCount';
+
+type CredentialTypeToTS = {
+  string: string;
+  number: number;
+  boolean: boolean;
+  switch: boolean;
+};
+
+export type CredentialsFromConfig<T extends readonly IConfigCredential[]> = {
+  // biome-ignore lint/suspicious/noExplicitAny: unmapped credential types intentionally fall back to any
+  [K in T[number] as K['key']]: K['type'] extends keyof CredentialTypeToTS ? CredentialTypeToTS[K['type']] : any;
+};
 
 export interface IConfigCredential {
   key: CredentialsKeyEnum;
   value?: unknown;
   displayName: string;
   description?: string;
+  placeholder?: string;
   type: CredentialsType;
   required: boolean;
   tooltip?: {

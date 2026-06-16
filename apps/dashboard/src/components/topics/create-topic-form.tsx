@@ -1,4 +1,5 @@
-import { zodResolver } from '@hookform/resolvers/zod';
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
+import { slugify } from '@novu/shared';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Link } from 'react-router-dom';
@@ -40,19 +41,6 @@ type CreateTopicFormProps = {
   onSubmitStart?: () => void;
 };
 
-// Converts a name to a slug (kebab-case)
-function slugify(text: string): string {
-  return text
-    .toString()
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '-') // Replace spaces with -
-    .replace(/[^\w-]+/g, '') // Remove all non-word chars
-    .replace(/--+/g, '-') // Replace multiple - with single -
-    .replace(/^-+/, '') // Trim - from start of text
-    .replace(/-+$/, ''); // Trim - from end of text
-}
-
 export const CreateTopicForm = (props: CreateTopicFormProps) => {
   const { onSuccess, onError, onSubmitStart } = props;
   const track = useTelemetry();
@@ -87,12 +75,12 @@ export const CreateTopicForm = (props: CreateTopicFormProps) => {
     },
   });
 
-  const form = useForm<z.infer<typeof TopicFormSchema>>({
+  const form = useForm({
     defaultValues: {
       name: '',
       key: '',
     },
-    resolver: zodResolver(TopicFormSchema),
+    resolver: standardSchemaResolver(TopicFormSchema),
     shouldFocusError: false,
     mode: 'onSubmit',
     reValidateMode: 'onChange',

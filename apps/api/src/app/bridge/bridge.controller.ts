@@ -17,6 +17,8 @@ import { ApiExcludeController } from '@nestjs/swagger';
 import {
   AnalyticsService,
   ExternalApiAccessible,
+  PreviewStep,
+  PreviewStepCommand,
   RequirePermissions,
   SkipPermissionsCheck,
   UserSession,
@@ -37,7 +39,6 @@ import { ValidateBridgeUrlRequestDto } from './dtos/validate-bridge-url-request.
 import { ValidateBridgeUrlResponseDto } from './dtos/validate-bridge-url-response.dto';
 import { GetBridgeStatusCommand } from './usecases/get-bridge-status/get-bridge-status.command';
 import { GetBridgeStatus } from './usecases/get-bridge-status/get-bridge-status.usecase';
-import { PreviewStep, PreviewStepCommand } from './usecases/preview-step';
 import { StoreControlValuesCommand, StoreControlValuesUseCase } from './usecases/store-control-values';
 import { SyncCommand } from './usecases/sync';
 import { Sync } from './usecases/sync/sync.usecase';
@@ -80,8 +81,8 @@ export class BridgeController {
       PreviewStepCommand.create({
         workflowId,
         stepId,
-        controls: data.controls,
-        payload: data.payload,
+        controls: data?.controls,
+        payload: data?.payload,
         environmentId: user.environmentId,
         organizationId: user.organizationId,
         userId: user._id,
@@ -167,7 +168,9 @@ export class BridgeController {
   ) {
     const workflowExist = await this.notificationTemplateRepository.findByTriggerIdentifier(
       user.environmentId,
-      workflowId
+      workflowId,
+      undefined,
+      false
     );
     if (!workflowExist) {
       throw new NotFoundException('Workflow not found');
@@ -202,7 +205,7 @@ export class BridgeController {
       StoreControlValuesCommand.create({
         stepId,
         workflowId,
-        controlValues: body.variables,
+        controlValues: body?.variables,
         environmentId: user.environmentId,
         organizationId: user.organizationId,
         userId: user._id,

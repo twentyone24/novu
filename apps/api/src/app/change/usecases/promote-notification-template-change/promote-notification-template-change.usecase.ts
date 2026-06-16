@@ -1,6 +1,7 @@
 import { forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import {
   buildGroupedBlueprintsKey,
+  computeWorkflowStatus,
   DeletePreferencesCommand,
   DeletePreferencesUseCase,
   InvalidateCacheService,
@@ -188,6 +189,7 @@ export class PromoteNotificationTemplateChange implements INotificationTemplateC
         _notificationGroupId: notificationGroup._id,
         isBlueprint: command.organizationId === this.blueprintOrganizationId,
         blueprintId: newItem.blueprintId,
+        status: computeWorkflowStatus(newItem.active, steps),
         ...(newItem.data ? { data: newItem.data } : {}),
       };
 
@@ -229,6 +231,7 @@ export class PromoteNotificationTemplateChange implements INotificationTemplateC
         steps,
         _notificationGroupId: notificationGroup._id,
         isBlueprint: command.organizationId === this.blueprintOrganizationId,
+        status: computeWorkflowStatus(newItem.active, steps),
         ...(newItem.data ? { data: newItem.data } : {}),
       }
     );

@@ -1,9 +1,9 @@
-import { AnalyticsService } from '@novu/application-generic';
+import { ModuleRef } from '@nestjs/core';
+import { AnalyticsService, GetLayoutUseCase, PinoLogger } from '@novu/application-generic';
 import { ControlValuesRepository } from '@novu/dal';
 import { ChannelTypeEnum, ControlValuesLevelEnum, ResourceOriginEnum, ResourceTypeEnum } from '@novu/shared';
 import { expect } from 'chai';
 import sinon from 'sinon';
-import { GetLayoutUseCase } from '../get-layout';
 import { UpsertLayout } from '../upsert-layout';
 import { DuplicateLayoutCommand } from './duplicate-layout.command';
 import { DuplicateLayoutUseCase } from './duplicate-layout.use-case';
@@ -13,6 +13,8 @@ describe('DuplicateLayoutUseCase', () => {
   let upsertLayoutUseCaseMock: sinon.SinonStubbedInstance<UpsertLayout>;
   let controlValuesRepositoryMock: sinon.SinonStubbedInstance<ControlValuesRepository>;
   let analyticsServiceMock: sinon.SinonStubbedInstance<AnalyticsService>;
+  let moduleRefMock: sinon.SinonStubbedInstance<ModuleRef>;
+  let pinoLoggerMock: sinon.SinonStubbedInstance<PinoLogger>;
   let duplicateLayoutUseCase: DuplicateLayoutUseCase;
 
   const mockUser = {
@@ -77,12 +79,16 @@ describe('DuplicateLayoutUseCase', () => {
     upsertLayoutUseCaseMock = sinon.createStubInstance(UpsertLayout);
     controlValuesRepositoryMock = sinon.createStubInstance(ControlValuesRepository);
     analyticsServiceMock = sinon.createStubInstance(AnalyticsService);
+    moduleRefMock = sinon.createStubInstance(ModuleRef);
+    pinoLoggerMock = sinon.createStubInstance(PinoLogger);
 
     duplicateLayoutUseCase = new DuplicateLayoutUseCase(
       getLayoutUseCaseMock as any,
       upsertLayoutUseCaseMock as any,
       controlValuesRepositoryMock as any,
-      analyticsServiceMock as any
+      analyticsServiceMock as any,
+      moduleRefMock as any,
+      pinoLoggerMock as any
     );
 
     // Default mocks
@@ -130,6 +136,7 @@ describe('DuplicateLayoutUseCase', () => {
       expect(upsertLayoutUseCaseMock.execute.calledOnce).to.be.true;
       const upsertCommand = upsertLayoutUseCaseMock.execute.firstCall.args[0];
       expect(upsertCommand.layoutDto.name).to.equal('Duplicated Layout');
+      expect(upsertCommand.layoutDto.layoutId).to.be.undefined;
       expect(upsertCommand.layoutDto.controlValues).to.deep.equal(mockOriginalControlValues.controls);
       expect(upsertCommand.userId).to.deep.equal(mockUser._id);
       expect(upsertCommand.environmentId).to.deep.equal(mockUser.environmentId);
@@ -225,6 +232,27 @@ describe('DuplicateLayoutUseCase', () => {
       expect(upsertLayoutUseCaseMock.execute.calledOnce).to.be.true;
       const upsertCommand = upsertLayoutUseCaseMock.execute.firstCall.args[0];
       expect(upsertCommand.layoutDto.name).to.equal('Custom Duplicated Name');
+    });
+
+    it('should pass custom layoutId override to upsert', async () => {
+      const customOverrides = {
+        name: 'My Layout (Copy)',
+        layoutId: 'my-custom-layout-id',
+      };
+
+      const command = DuplicateLayoutCommand.create({
+        layoutIdOrInternalId: 'original_layout_identifier',
+        overrides: customOverrides,
+        userId: mockUser._id,
+        environmentId: mockUser.environmentId,
+        organizationId: mockUser.organizationId,
+      });
+
+      await duplicateLayoutUseCase.execute(command);
+
+      expect(upsertLayoutUseCaseMock.execute.calledOnce).to.be.true;
+      const upsertCommand = upsertLayoutUseCaseMock.execute.firstCall.args[0];
+      expect(upsertCommand.layoutDto.layoutId).to.equal('my-custom-layout-id');
     });
 
     it('should propagate error from v1 use case', async () => {

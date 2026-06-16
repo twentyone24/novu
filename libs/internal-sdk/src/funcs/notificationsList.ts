@@ -4,6 +4,7 @@
 
 import { NovuCore } from "../core.js";
 import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -30,9 +31,11 @@ import { Result } from "../types/fp.js";
  *
  * @remarks
  * List all notification events (triggered events) for the current environment.
- *     This API supports filtering by **channels**, **templates**, **emails**, **subscriberIds**, **transactionId**, **topicKey**.
+ *     This API supports filtering by **channels**, **templates**, **emails**, **subscriberIds**, **transactionId**, **topicKey**, **severity**, **contextKeys**.
  *     Checkout all available filters in the query section.
  *     This API returns event triggers, to list each channel notifications, check messages APIs.
+ *
+ * This operation requires either {@link Security.bearerAuth} or {@link Security.secretKey} to be set on the `security` parameter when initializing the SDK.
  */
 export function notificationsList(
   client: NovuCore,
@@ -101,12 +104,14 @@ async function $do(
     "after": payload.after,
     "before": payload.before,
     "channels": payload.channels,
+    "contextKeys": payload.contextKeys,
     "emails": payload.emails,
     "limit": payload.limit,
     "page": payload.page,
     "search": payload.search,
     "severity": payload.severity,
     "subscriberIds": payload.subscriberIds,
+    "subscriptionId": payload.subscriptionId,
     "templates": payload.templates,
     "topicKey": payload.topicKey,
     "transactionId": payload.transactionId,
@@ -122,13 +127,13 @@ async function $do(
   }));
 
   const securityInput = await extractSecurity(client._options.security);
-  const requestSecurity = resolveGlobalSecurity(securityInput);
+  const requestSecurity = resolveGlobalSecurity(securityInput, [1, 0]);
 
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
     operationID: "NotificationsController_listNotifications",
-    oAuth2Scopes: [],
+    oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
 
@@ -167,23 +172,8 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    errorCodes: [
-      "400",
-      "401",
-      "403",
-      "404",
-      "405",
-      "409",
-      "413",
-      "414",
-      "415",
-      "422",
-      "429",
-      "4XX",
-      "500",
-      "503",
-      "5XX",
-    ],
+    isErrorStatusCode: (statusCode: number) =>
+      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });

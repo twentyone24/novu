@@ -1,6 +1,5 @@
 import { ContextPayload, ISubscriberResponseDto, SubscriberDto, WorkflowResponseDto } from '@novu/shared';
 import { JSONSchema7 } from 'json-schema';
-import { type ContextResponseDto } from '@/api/contexts';
 
 export type PayloadData = Record<string, unknown>;
 export type PreviewSubscriberData = Partial<SubscriberDto>;
@@ -16,11 +15,14 @@ export type PreviewContextPanelProps = {
   onLocaleChange?: (locale: string) => void;
 };
 
+export type EnvData = Record<string, string>;
+
 export type ParsedData = {
   payload: PayloadData;
   subscriber: PreviewSubscriberData;
   steps: StepsData;
   context: ContextPayload;
+  env: EnvData;
 };
 
 export type ValidationErrors = {
@@ -28,6 +30,7 @@ export type ValidationErrors = {
   subscriber: string | null;
   steps: string | null;
   context: string | null;
+  env: string | null;
 };
 
 export type AccordionSectionProps = {
@@ -54,6 +57,7 @@ export type SubscriberSectionProps = Omit<AccordionSectionProps, 'errors' | 'loc
   onUpdate: (section: 'subscriber', data: PreviewSubscriberData) => void;
   onSubscriberSelect: (subscriber: ISubscriberResponseDto) => void;
   onClearPersisted?: () => void;
+  onEditSubscriber?: () => void;
 };
 
 export type ContextSectionProps = Omit<AccordionSectionProps, 'errors' | 'localParsedData' | 'onUpdate'> & {
@@ -61,6 +65,12 @@ export type ContextSectionProps = Omit<AccordionSectionProps, 'errors' | 'localP
   context: ContextPayload;
   schema?: JSONSchema7;
   onUpdate: (section: 'context', data: ContextPayload) => void;
-  onContextSelect: (context: ContextResponseDto) => void;
   onClearPersisted?: () => void;
+  className?: string;
+};
+
+export type EnvSectionProps = {
+  schema?: JSONSchema7;
+  env: EnvData;
+  onUpdate: (section: 'env', data: EnvData) => void;
 };

@@ -1,6 +1,8 @@
+import type { RulesLogic } from 'json-logic-js';
 import { NovuError } from './utils/errors';
 
-export type { FiltersCountResponse, ListNotificationsResponse, Notification } from './notifications';
+export type { FiltersCountResponse, ListNotificationsResponse } from './notifications';
+export type { Notification } from './notifications/notification';
 export type { Preference } from './preferences/preference';
 export type { Schedule } from './preferences/schedule';
 export type { NovuError } from './utils/errors';
@@ -59,6 +61,13 @@ export enum SocketType {
   PARTY_SOCKET = 'partysocket',
 }
 
+export type SocketTypeOption = 'cloud' | 'self-hosted';
+
+export type NovuSocketOptions = {
+  socketType?: SocketTypeOption;
+  [key: string]: unknown;
+};
+
 export enum SeverityLevelEnum {
   HIGH = 'high',
   MEDIUM = 'medium',
@@ -86,6 +95,7 @@ export type Session = {
   isDevelopmentMode: boolean;
   maxSnoozeDurationHours: number;
   applicationIdentifier?: string;
+  contextKeys?: string[];
 };
 
 export type Subscriber = {
@@ -126,6 +136,27 @@ export type Workflow = {
   severity: SeverityLevelEnum;
 };
 
+export type TagsFilterOrGroup = { or: string[] };
+
+export type TagsFilterAndForm = { and: TagsFilterOrGroup[] };
+
+/**
+ * Inbox tag filter: a **single** OR-group as `string[]` or `{ or: string[] }`, or **multiple** OR-groups (AND of OR) as `{ and: [{ or: string[] }, ...] }`.
+ *
+ * @example Single OR-group — match notifications tagged `promo` **or** `sale`
+ * ```ts
+ * const tags: TagsFilter = ['promo', 'sale'];
+ * ```
+ *
+ * @example AND of OR-groups — match (`urgent` **or** `critical`) **and** (`billing`)
+ * ```ts
+ * const tags: TagsFilter = {
+ *   and: [{ or: ['urgent', 'critical'] }, { or: ['billing'] }],
+ * };
+ * ```
+ */
+export type TagsFilter = string[] | TagsFilterOrGroup | TagsFilterAndForm;
+
 export type InboxNotification = {
   id: string;
   transactionId: string;
@@ -154,13 +185,15 @@ export type InboxNotification = {
 };
 
 export type NotificationFilter = {
-  tags?: string[];
+  tags?: TagsFilter;
   read?: boolean;
   archived?: boolean;
   snoozed?: boolean;
   seen?: boolean;
   data?: Record<string, unknown>;
   severity?: SeverityLevelEnum | SeverityLevelEnum[];
+  createdGte?: number;
+  createdLte?: number;
 };
 
 export type ChannelPreference = {
@@ -204,9 +237,20 @@ export type DefaultSchedule = {
   weeklySchedule?: WeeklySchedule;
 };
 
+export type ContextValue =
+  | string
+  | {
+      id: string;
+      data?: Record<string, unknown>;
+    };
+
+export type Context = Partial<Record<string, ContextValue>>;
+
 export type PreferencesResponse = {
   level: PreferenceLevel;
   enabled: boolean;
+  condition?: RulesLogic;
+  subscriptionId?: string;
   channels: ChannelPreference;
   overrides?: IPreferenceOverride[];
   workflow?: Workflow;
@@ -227,7 +271,27 @@ export type IPreferenceOverride = {
   source: PreferenceOverrideSourceEnum;
 };
 
+export type SubscriptionPreferenceResponse = Omit<
+  PreferencesResponse,
+  'subscriptionId' | 'workflow' | 'schedule' | 'level' | 'channels'
+> & {
+  subscriptionId: string;
+  workflow: Workflow;
+};
+
+export type SubscriptionResponse = {
+  id: string;
+  identifier: string;
+  name?: string;
+  preferences?: Array<SubscriptionPreferenceResponse>;
+};
+
 export type TODO = any;
+
+export type Options = {
+  refetch?: boolean;
+  useCache?: boolean;
+};
 
 export type Result<D = undefined, E = NovuError> = Promise<{
   data?: D;
@@ -239,14 +303,21 @@ type KeylessNovuOptions = {} & { [K in string]?: never }; // empty object,disall
 export type StandardNovuOptions = {
   /** @deprecated Use apiUrl instead  */
   backendUrl?: string;
-  /** @internal Should be used internally for testing purposes */
-  __userAgent?: string;
   applicationIdentifier: string;
   subscriberHash?: string;
+  contextHash?: string;
   apiUrl?: string;
   socketUrl?: string;
+  /**
+   * Custom socket configuration options. These options will be merged with the default socket configuration.
+   * Use `socketType` to explicitly select the socket implementation: `'cloud'` for PartySocket or `'self-hosted'` for socket.io.
+   * For socket.io-client connections, supports all socket.io-client options (e.g., `path`, `reconnectionDelay`, `timeout`, etc.).
+   * For PartySocket connections, options are applied to the WebSocket instance.
+   */
+  socketOptions?: NovuSocketOptions;
   useCache?: boolean;
   defaultSchedule?: DefaultSchedule;
+  context?: Context;
 } & (
   | {
       // TODO: Backward compatibility support - remove in future versions (see NV-5801)

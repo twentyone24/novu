@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 
-export function TimelineStepNumber({ index }: { index: number }) {
+function TimelineStepNumber({ index }: { index: number }) {
   return (
     <div className="text-label-xs bg-bg-weak text-text-strong flex h-6 w-6 shrink-0 items-center justify-center rounded-full p-0.5 text-xs font-medium shadow-[0px_0px_0px_1px_#FFF,0px_0px_0px_2px_#E1E4EA]">
       {index + 1}
@@ -8,11 +8,11 @@ export function TimelineStepNumber({ index }: { index: number }) {
   );
 }
 
-export function TimelineLine({ variant = 'default' }: { variant?: 'default' | 'continuous' }) {
+function TimelineLine({ variant = 'default' }: { variant?: 'default' | 'continuous' }) {
   if (variant === 'continuous') {
     return (
       <div
-        className="absolute bottom-0 left-3 top-0 w-[1px] -translate-x-1/2"
+        className="absolute bottom-0 left-3 top-0 w-px -translate-x-1/2"
         style={{
           background: 'linear-gradient(to bottom, transparent 0%, #E1E4EA 15%, #E1E4EA 85%, transparent 100%)',
         }}
@@ -20,7 +20,7 @@ export function TimelineLine({ variant = 'default' }: { variant?: 'default' | 'c
     );
   }
 
-  return <div className="absolute left-3 top-6 h-[calc(100%+2rem)] w-[1px] -translate-x-1/2 bg-neutral-100" />;
+  return <div className="absolute left-3 top-6 h-[calc(100%+2rem)] w-px -translate-x-1/2 bg-neutral-100" />;
 }
 
 const stepAnimation = (index: number) => ({
@@ -70,12 +70,12 @@ export function TimelineStep({
   }
 
   return (
-    <motion.div {...stepAnimation(index)} className="relative flex gap-6">
-      <div className="relative">
+    <motion.div {...stepAnimation(index)} className="relative flex min-w-0 gap-6">
+      <div className="relative shrink-0">
         <TimelineStepNumber index={index} />
         <TimelineLine />
       </div>
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         <div className="text-label-sm text-neutral-950">{title}</div>
         {description && <div className="text-label-xs text-text-soft mt-2">{description}</div>}
         {children}

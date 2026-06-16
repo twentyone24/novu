@@ -95,15 +95,7 @@ export class CreateNovuIntegrations {
   }
 
   private async createSlackIntegration(command: CreateNovuIntegrationsCommand) {
-    const isSlackTeamsEnabled = await this.featureFlagService.getFlag({
-      user: { _id: command.userId } as UserEntity,
-      environment: { _id: command.environmentId } as EnvironmentEntity,
-      organization: { _id: command.organizationId } as OrganizationEntity,
-      key: FeatureFlagsKeysEnum.IS_SLACK_TEAMS_ENABLED,
-      defaultValue: false,
-    });
-
-    if (!areNovuSlackCredentialsSet() || command.name !== EnvironmentEnum.DEVELOPMENT || !isSlackTeamsEnabled) {
+    if (!areNovuSlackCredentialsSet() || command.name !== EnvironmentEnum.DEVELOPMENT) {
       return;
     }
 
@@ -131,16 +123,20 @@ export class CreateNovuIntegrations {
   }
 
   async execute(command: CreateNovuIntegrationsCommand): Promise<void> {
+    const integrationPromises: Array<Promise<void>> = [];
+
     if (!command.channels || command.channels.includes(ChannelTypeEnum.EMAIL)) {
-      await this.createEmailIntegration(command);
+      integrationPromises.push(this.createEmailIntegration(command));
     }
 
     if (!command.channels || command.channels.includes(ChannelTypeEnum.IN_APP)) {
-      await this.createInAppIntegration(command);
+      integrationPromises.push(this.createInAppIntegration(command));
     }
 
     if (!command.channels || command.channels.includes(ChannelTypeEnum.CHAT)) {
-      await this.createSlackIntegration(command);
+      integrationPromises.push(this.createSlackIntegration(command));
     }
+
+    await Promise.all(integrationPromises);
   }
 }

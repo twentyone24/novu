@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsOptional, IsString } from 'class-validator';
 
 export class TopicDto {
   @ApiProperty({
@@ -85,17 +86,33 @@ export class SubscriptionDto {
   _id: string;
 
   @ApiProperty({
+    description: 'The identifier of the subscription',
+    example: 'tk=product-updates:si=subscriber-123',
+  })
+  @IsOptional()
+  @IsString()
+  identifier?: string;
+
+  @ApiProperty({
     description: 'The topic information',
-    type: TopicDto,
+    type: () => TopicDto,
   })
   topic: TopicDto;
 
   @ApiProperty({
     description: 'The subscriber information',
-    type: SubscriberDto,
+    type: () => SubscriberDto,
     nullable: true,
   })
   subscriber: SubscriberDto | null;
+
+  @ApiProperty({
+    description: 'Context keys that scope this subscription (e.g., tenant:org-a, project:proj-123)',
+    example: ['tenant:org-a', 'project:proj-123'],
+    type: [String],
+    required: false,
+  })
+  contextKeys?: string[];
 
   @ApiProperty({
     description: 'The creation date of the subscription',
@@ -153,7 +170,7 @@ export class MetaDto {
 export class DeleteTopicSubscriptionsResponseDto {
   @ApiProperty({
     description: 'The list of successfully deleted subscriptions',
-    type: [SubscriptionDto],
+    type: () => [SubscriptionDto],
   })
   data: SubscriptionDto[];
 

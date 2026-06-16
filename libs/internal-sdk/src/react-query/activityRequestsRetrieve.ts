@@ -5,28 +5,49 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { NovuCore } from "../core.js";
-import { activityRequestsRetrieve } from "../funcs/activityRequestsRetrieve.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
-import { unwrapAsync } from "../types/fp.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { useNovuContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  ActivityRequestsRetrieveQueryData,
+  buildActivityRequestsRetrieveQuery,
+  prefetchActivityRequestsRetrieve,
+  queryKeyActivityRequestsRetrieve,
+} from "./activityRequestsRetrieve.core.js";
+export {
+  type ActivityRequestsRetrieveQueryData,
+  buildActivityRequestsRetrieveQuery,
+  prefetchActivityRequestsRetrieve,
+  queryKeyActivityRequestsRetrieve,
+};
 
-export type ActivityRequestsRetrieveQueryData =
-  components.GetRequestResponseDto;
+export type ActivityRequestsRetrieveQueryError =
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * Retrieve activity request
@@ -37,8 +58,14 @@ export type ActivityRequestsRetrieveQueryData =
 export function useActivityRequestsRetrieve(
   requestId: string,
   idempotencyKey?: string | undefined,
-  options?: QueryHookOptions<ActivityRequestsRetrieveQueryData>,
-): UseQueryResult<ActivityRequestsRetrieveQueryData, Error> {
+  options?: QueryHookOptions<
+    ActivityRequestsRetrieveQueryData,
+    ActivityRequestsRetrieveQueryError
+  >,
+): UseQueryResult<
+  ActivityRequestsRetrieveQueryData,
+  ActivityRequestsRetrieveQueryError
+> {
   const client = useNovuContext();
   return useQuery({
     ...buildActivityRequestsRetrieveQuery(
@@ -60,8 +87,14 @@ export function useActivityRequestsRetrieve(
 export function useActivityRequestsRetrieveSuspense(
   requestId: string,
   idempotencyKey?: string | undefined,
-  options?: SuspenseQueryHookOptions<ActivityRequestsRetrieveQueryData>,
-): UseSuspenseQueryResult<ActivityRequestsRetrieveQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ActivityRequestsRetrieveQueryData,
+    ActivityRequestsRetrieveQueryError
+  >,
+): UseSuspenseQueryResult<
+  ActivityRequestsRetrieveQueryData,
+  ActivityRequestsRetrieveQueryError
+> {
   const client = useNovuContext();
   return useSuspenseQuery({
     ...buildActivityRequestsRetrieveQuery(
@@ -71,21 +104,6 @@ export function useActivityRequestsRetrieveSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchActivityRequestsRetrieve(
-  queryClient: QueryClient,
-  client$: NovuCore,
-  requestId: string,
-  idempotencyKey?: string | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildActivityRequestsRetrieveQuery(
-      client$,
-      requestId,
-      idempotencyKey,
-    ),
   });
 }
 
@@ -123,43 +141,4 @@ export function invalidateAllActivityRequestsRetrieve(
     ...filters,
     queryKey: ["@novu/api", "Requests", "retrieve"],
   });
-}
-
-export function buildActivityRequestsRetrieveQuery(
-  client$: NovuCore,
-  requestId: string,
-  idempotencyKey?: string | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<ActivityRequestsRetrieveQueryData>;
-} {
-  return {
-    queryKey: queryKeyActivityRequestsRetrieve(requestId, { idempotencyKey }),
-    queryFn: async function activityRequestsRetrieveQueryFn(
-      ctx,
-    ): Promise<ActivityRequestsRetrieveQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(activityRequestsRetrieve(
-        client$,
-        requestId,
-        idempotencyKey,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyActivityRequestsRetrieve(
-  requestId: string,
-  parameters: { idempotencyKey?: string | undefined },
-): QueryKey {
-  return ["@novu/api", "Requests", "retrieve", requestId, parameters];
 }

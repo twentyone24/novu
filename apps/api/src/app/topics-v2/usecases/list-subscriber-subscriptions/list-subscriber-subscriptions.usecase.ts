@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InstrumentUsecase } from '@novu/application-generic';
 import { SubscriberRepository, TopicSubscribersEntity, TopicSubscribersRepository } from '@novu/dal';
 import { DirectionEnum, EnvironmentId } from '@novu/shared';
@@ -24,7 +24,7 @@ export class ListSubscriberSubscriptionsUseCase {
     }
 
     if (command.before && command.after) {
-      throw new Error('Cannot specify both "before" and "after" cursors at the same time.');
+      throw new BadRequestException('Cannot specify both "before" and "after" cursors at the same time.');
     }
 
     // Use the repository method for pagination
@@ -33,6 +33,7 @@ export class ListSubscriberSubscriptionsUseCase {
       organizationId: command.organizationId,
       topicKey: command.topicKey,
       subscriberId: command.subscriberId,
+      contextKeys: command.contextKeys,
       limit: command.limit || 10,
       before: command.before,
       after: command.after,
@@ -50,6 +51,8 @@ export class ListSubscriberSubscriptionsUseCase {
       data: subscriptionsWithDetails,
       next: subscriptionsPagination.next,
       previous: subscriptionsPagination.previous,
+      totalCount: subscriptionsPagination.totalCount,
+      totalCountCapped: subscriptionsPagination.totalCountCapped,
     };
   }
 

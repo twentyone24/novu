@@ -49,6 +49,11 @@ export enum CredentialsKeyEnum {
   ApiVersion = 'apiVersion',
   AppSid = 'appSid',
   SenderId = 'senderId',
+  AppIOBaseUrl = 'AppIOBaseUrl',
+  ServicePlanId = 'servicePlanId',
+  TenantId = 'tenantId',
+  SigningSecret = 'signingSecret',
+  OutboundIntegrationId = 'outboundIntegrationId',
 }
 
 export type ConfigurationKey = keyof IConfigurations;
@@ -75,6 +80,7 @@ export enum EmailProviderIdEnum {
   SparkPost = 'sparkpost',
   EmailWebhook = 'email-webhook',
   Braze = 'braze',
+  NovuAgent = 'novu-email-agent',
 }
 
 export enum SmsProviderIdEnum {
@@ -115,6 +121,9 @@ export enum SmsProviderIdEnum {
   // cspell:disable-next-line
   Smsmode = 'smsmode',
   IMedia = 'imedia',
+  Sinch = 'sinch',
+  ISendProSms = 'isendpro-sms',
+  CmTelecom = 'cm-telecom',
 }
 
 export enum ChatProviderIdEnum {
@@ -140,6 +149,7 @@ export enum PushProviderIdEnum {
   Pushpad = 'pushpad',
   PushWebhook = 'push-webhook',
   PusherBeams = 'pusher-beams',
+  AppIO = 'appio',
 }
 
 export enum InAppProviderIdEnum {

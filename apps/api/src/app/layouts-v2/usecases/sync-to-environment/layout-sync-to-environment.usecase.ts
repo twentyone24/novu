@@ -1,12 +1,18 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { Instrument, InstrumentUsecase } from '@novu/application-generic';
+import { ModuleRef } from '@nestjs/core';
+import {
+  GetLayoutCommand,
+  GetLayoutUseCase,
+  Instrument,
+  InstrumentUsecase,
+  LayoutResponseDto,
+} from '@novu/application-generic';
+import { LocalizationResourceEnum } from '@novu/dal';
 import { ResourceOriginEnum } from '@novu/shared';
-import { LayoutResponseDto } from '../../dtos';
-import { GetLayoutCommand, GetLayoutUseCase } from '../get-layout';
 import { UpsertLayout, UpsertLayoutCommand, UpsertLayoutDataCommand } from '../upsert-layout';
 import { LayoutSyncToEnvironmentCommand } from './layout-sync-to-environment.command';
 
-export const SYNCABLE_LAYOUT_ORIGINS = [ResourceOriginEnum.NOVU_CLOUD];
+const SYNCABLE_LAYOUT_ORIGINS = [ResourceOriginEnum.NOVU_CLOUD];
 
 class LayoutNotSyncableException extends BadRequestException {
   constructor(layout: Pick<LayoutResponseDto, 'layoutId' | 'origin'>) {
@@ -25,7 +31,8 @@ class LayoutNotSyncableException extends BadRequestException {
 export class LayoutSyncToEnvironmentUseCase {
   constructor(
     private getLayoutUseCase: GetLayoutUseCase,
-    private upsertLayoutUseCase: UpsertLayout
+    private upsertLayoutUseCase: UpsertLayout,
+    private moduleRef: ModuleRef
   ) {}
 
   @InstrumentUsecase()
@@ -61,6 +68,8 @@ export class LayoutSyncToEnvironmentUseCase {
       })
     );
 
+    await this.publishTranslationGroup(sourceLayout.layoutId, LocalizationResourceEnum.LAYOUT, command);
+
     return upsertedLayout;
   }
 
@@ -72,8 +81,36 @@ export class LayoutSyncToEnvironmentUseCase {
     return {
       layoutId: sourceLayout.layoutId,
       name: sourceLayout.name,
-      controlValues: sourceLayout.controls.values,
+      isTranslationEnabled: sourceLayout.isTranslationEnabled,
+      controlValues: sourceLayout.controls?.values,
     };
+  }
+
+  private async publishTranslationGroup(
+    resourceId: string,
+    resourceType: LocalizationResourceEnum,
+    command: LayoutSyncToEnvironmentCommand
+  ): Promise<void> {
+    const isEnterprise = process.env.NOVU_ENTERPRISE === 'true' || process.env.CI_EE_TEST === 'true';
+    const isSelfHosted = process.env.IS_SELF_HOSTED === 'true';
+
+    if (!isEnterprise || isSelfHosted) {
+      return;
+    }
+
+    const publishTranslationGroup = this.moduleRef.get(require('@novu/ee-translation')?.PublishTranslationGroup, {
+      strict: false,
+    });
+
+    const { user, targetEnvironmentId } = command;
+
+    await publishTranslationGroup.execute({
+      user,
+      resourceId,
+      resourceType,
+      sourceEnvironmentId: user.environmentId,
+      targetEnvironmentId,
+    });
   }
 
   @Instrument()

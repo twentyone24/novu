@@ -4,6 +4,7 @@
 
 import { NovuCore } from "../core.js";
 import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { matchStatusCode } from "../lib/http.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
@@ -31,11 +32,15 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Delete multiple messages from the Novu platform using **transactionId** of triggered event.
  *     This API supports filtering by **channel** and delete all messages associated with the **transactionId**.
+ *
+ * This operation requires either {@link Security.bearerAuth} or {@link Security.secretKey} to be set on the `security` parameter when initializing the SDK.
  */
 export function messagesDeleteByTransactionId(
   client: NovuCore,
   transactionId: string,
-  channel?: operations.Channel | undefined,
+  channel?:
+    | operations.MessagesControllerDeleteMessagesByTransactionIdQueryParamChannel
+    | undefined,
   idempotencyKey?: string | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -66,7 +71,9 @@ export function messagesDeleteByTransactionId(
 async function $do(
   client: NovuCore,
   transactionId: string,
-  channel?: operations.Channel | undefined,
+  channel?:
+    | operations.MessagesControllerDeleteMessagesByTransactionIdQueryParamChannel
+    | undefined,
   idempotencyKey?: string | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -115,7 +122,6 @@ async function $do(
       charEncoding: "percent",
     }),
   };
-
   const path = pathToFunc("/v1/messages/transaction/{transactionId}")(
     pathParams,
   );
@@ -134,13 +140,13 @@ async function $do(
   }));
 
   const securityInput = await extractSecurity(client._options.security);
-  const requestSecurity = resolveGlobalSecurity(securityInput);
+  const requestSecurity = resolveGlobalSecurity(securityInput, [1, 0]);
 
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
     operationID: "MessagesController_deleteMessagesByTransactionId",
-    oAuth2Scopes: [],
+    oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
 
@@ -179,23 +185,8 @@ async function $do(
 
   const doResult = await client._do(req, {
     context,
-    errorCodes: [
-      "400",
-      "401",
-      "403",
-      "404",
-      "405",
-      "409",
-      "413",
-      "414",
-      "415",
-      "422",
-      "429",
-      "4XX",
-      "500",
-      "503",
-      "5XX",
-    ],
+    isErrorStatusCode: (statusCode: number) =>
+      matchStatusCode({ status: statusCode } as Response, ["4XX", "5XX"]),
     retryConfig: context.retryConfig,
     retryCodes: context.retryCodes,
   });

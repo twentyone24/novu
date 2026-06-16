@@ -1,19 +1,12 @@
 import { EnvironmentTypeEnum, PermissionsEnum, ResourceOriginEnum } from '@novu/shared';
 import { Edge, EdgeLabelRenderer, EdgeProps, getBezierPath } from '@xyflow/react';
-import { AnimatePresence, motion } from 'motion/react';
 import { RiInsertRowTop } from 'react-icons/ri';
-import { useNavigate } from 'react-router-dom';
-import { createStep } from '@/components/workflow-editor/step-utils';
 import { useWorkflow } from '@/components/workflow-editor/workflow-provider';
 import { useEnvironment } from '@/context/environment/hooks';
-import { useFetchLayouts } from '@/hooks/use-fetch-layouts';
 import { useHasPermission } from '@/hooks/use-has-permission';
-import { fadeIn } from '@/utils/animation';
-import { INLINE_CONFIGURABLE_STEP_TYPES, TEMPLATE_CONFIGURABLE_STEP_TYPES } from '@/utils/constants';
-import { buildRoute, ROUTES } from '@/utils/routes';
 import { AddStepMenu } from './add-step-menu';
 import { NODE_WIDTH } from './base-node';
-import { useDragContext } from './drag-context';
+import { useCanvasContext } from './drag-context';
 
 export type AddNodeEdgeType = Edge<{ isLast: boolean; addStepIndex: number }>;
 
@@ -29,18 +22,10 @@ export function AddNodeEdge({
   markerEnd,
   id,
 }: EdgeProps<AddNodeEdgeType>) {
-  const { workflow, optimisticAddStep } = useWorkflow();
-  const navigate = useNavigate();
+  const { workflow } = useWorkflow();
   const has = useHasPermission();
   const { currentEnvironment } = useEnvironment();
-  const { intersectingEdgeId, draggedNodeId } = useDragContext();
-  const { data: layoutsResponse, isFetching: isFetchingLayouts } = useFetchLayouts({
-    limit: 100,
-    refetchOnWindowFocus: false,
-  });
-  const defaultLayout = layoutsResponse?.layouts.find((layout) => layout.isDefault);
-  const addDefaultLayout = !!defaultLayout;
-  const defaultLayoutId = defaultLayout?.layoutId;
+  const { intersectingEdgeId, draggedNodeId, addNode } = useCanvasContext();
   const isAnyNodeDragging = draggedNodeId !== null;
 
   const isReadOnly =
@@ -61,26 +46,20 @@ export function AddNodeEdge({
 
   return (
     <>
-      <AnimatePresence>
-        <motion.path
-          {...fadeIn}
-          markerEnd={markerEnd}
-          style={style}
-          d={edgePath}
-          fill="none"
-          className="react-flow__edge-path"
-          key={`${id}-path`}
-        />
-        <motion.path
-          {...fadeIn}
-          d={edgePath}
-          fill="none"
-          strokeOpacity={0}
-          strokeWidth={20}
-          className="react-flow__edge-interaction"
-          key={`${id}-interaction`}
-        />
-      </AnimatePresence>
+      <path
+        markerEnd={markerEnd}
+        style={style}
+        d={edgePath}
+        fill="none"
+        className="react-flow__edge-path color-neutral-alpha-200"
+      />
+      <path
+        d={edgePath}
+        fill="none"
+        strokeOpacity={0}
+        strokeWidth={20}
+        className="react-flow__edge-interaction color-neutral-alpha-200"
+      />
       {!data.isLast && (
         <EdgeLabelRenderer>
           <div
@@ -114,38 +93,7 @@ export function AddNodeEdge({
             className="nodrag nopan"
           >
             {!isReadOnly && !isAnyNodeDragging && (
-              <AddStepMenu
-                onMenuItemClick={async (stepType) => {
-                  if (workflow && !isFetchingLayouts) {
-                    const indexToAdd = data.addStepIndex;
-
-                    optimisticAddStep(
-                      stepType,
-                      indexToAdd,
-                      () => createStep(stepType, addDefaultLayout ? defaultLayoutId : undefined, workflow.severity),
-                      {
-                        onSuccess: (data) => {
-                          if (TEMPLATE_CONFIGURABLE_STEP_TYPES.includes(stepType)) {
-                            if (currentEnvironment?.slug) {
-                              navigate(
-                                buildRoute(ROUTES.EDIT_STEP_TEMPLATE, {
-                                  stepSlug: data.steps[indexToAdd].slug,
-                                })
-                              );
-                            }
-                          } else if (INLINE_CONFIGURABLE_STEP_TYPES.includes(stepType)) {
-                            navigate(
-                              buildRoute(ROUTES.EDIT_STEP, {
-                                stepSlug: data.steps[indexToAdd].slug,
-                              })
-                            );
-                          }
-                        },
-                      }
-                    );
-                  }
-                }}
-              />
+              <AddStepMenu onMenuItemClick={(selection) => addNode(data.addStepIndex, selection)} />
             )}
           </div>
         </EdgeLabelRenderer>
@@ -154,27 +102,19 @@ export function AddNodeEdge({
   );
 }
 
-export const DefaultEdge = ({ id, sourceX, sourceY, targetX, targetY, style }: EdgeProps) => {
+export const DefaultEdge = ({ sourceX, sourceY, targetX, targetY, style }: EdgeProps) => {
   const edgePath = `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`;
+
   return (
-    <AnimatePresence>
-      <motion.path
-        {...fadeIn}
-        style={style}
-        d={edgePath}
-        fill="none"
-        className="react-flow__edge-path"
-        key={`${id}-path`}
-      />
-      <motion.path
-        {...fadeIn}
+    <>
+      <path style={style} d={edgePath} fill="none" className="react-flow__edge-path color-neutral-alpha-200" />
+      <path
         d={edgePath}
         fill="none"
         strokeOpacity={0}
         strokeWidth={20}
-        className="react-flow__edge-interaction"
-        key={`${id}-interaction`}
+        className="react-flow__edge-interaction color-neutral-alpha-200"
       />
-    </AnimatePresence>
+    </>
   );
 };

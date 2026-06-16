@@ -14,8 +14,16 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiExcludeController } from '@nestjs/swagger/dist/decorators/api-exclude-controller.decorator';
 import {
+  CreateWorkflowCommandV0,
+  CreateWorkflowV0,
+  RequirePermissions,
+  UpdateWorkflowCommandV0,
+  UpdateWorkflowV0,
+} from '@novu/application-generic';
+import {
   buildWorkflowPreferencesFromPreferenceChannels,
   DEFAULT_WORKFLOW_PREFERENCES,
+  PermissionsEnum,
   ResourceOriginEnum,
   ResourceTypeEnum,
   UserSessionData,
@@ -39,8 +47,6 @@ import { WorkflowsRequestDto } from './dtos/workflows-request.dto';
 import { CreateWorkflowQuery } from './queries';
 import { ChangeTemplateActiveStatusCommand } from './usecases/change-template-active-status/change-template-active-status.command';
 import { ChangeTemplateActiveStatus } from './usecases/change-template-active-status/change-template-active-status.usecase';
-import { CreateWorkflowCommand } from './usecases/create-workflow/create-workflow.command';
-import { CreateWorkflow } from './usecases/create-workflow/create-workflow.usecase';
 import { DeleteNotificationTemplateCommand } from './usecases/delete-notification-template/delete-notification-template.command';
 import { DeleteNotificationTemplate } from './usecases/delete-notification-template/delete-notification-template.usecase';
 import { GetNotificationTemplateCommand } from './usecases/get-notification-template/get-notification-template.command';
@@ -49,8 +55,6 @@ import { GetNotificationTemplatesCommand } from './usecases/get-notification-tem
 import { GetNotificationTemplates } from './usecases/get-notification-templates/get-notification-templates.usecase';
 import { GetWorkflowVariablesCommand } from './usecases/get-workflow-variables/get-workflow-variables.command';
 import { GetWorkflowVariables } from './usecases/get-workflow-variables/get-workflow-variables.usecase';
-import { UpdateWorkflowCommand } from './usecases/update-workflow/update-workflow.command';
-import { UpdateWorkflow } from './usecases/update-workflow/update-workflow.usecase';
 
 /**
  * @deprecated use controllers in /workflows directory
@@ -62,8 +66,8 @@ import { UpdateWorkflow } from './usecases/update-workflow/update-workflow.useca
 @ApiTags('Workflows')
 export class WorkflowControllerV1 {
   constructor(
-    private createWorkflowUsecase: CreateWorkflow,
-    private updateWorkflowByIdUsecase: UpdateWorkflow,
+    private createWorkflowUsecaseV0: CreateWorkflowV0,
+    private updateWorkflowByIdUsecaseV0: UpdateWorkflowV0,
     private getWorkflowsUsecase: GetNotificationTemplates,
     private getWorkflowUsecase: GetNotificationTemplate,
     private getWorkflowVariablesUsecase: GetWorkflowVariables,
@@ -78,6 +82,7 @@ export class WorkflowControllerV1 {
     description: `Workflows were previously named notification templates`,
   })
   @ExternalApiAccessible()
+  @RequirePermissions(PermissionsEnum.WORKFLOW_READ)
   listWorkflows(
     @UserSession() user: UserSessionData,
     @Query() queryParams: WorkflowsRequestDto
@@ -101,13 +106,14 @@ export class WorkflowControllerV1 {
     description: `Workflow was previously named notification template`,
   })
   @ExternalApiAccessible()
+  @RequirePermissions(PermissionsEnum.WORKFLOW_WRITE)
   async updateWorkflowById(
     @UserSession() user: UserSessionData,
     @Param('workflowId') workflowId: string,
     @Body() body: UpdateWorkflowRequestDto
   ): Promise<WorkflowResponse> {
-    return await this.updateWorkflowByIdUsecase.execute(
-      UpdateWorkflowCommand.create({
+    return await this.updateWorkflowByIdUsecaseV0.execute(
+      UpdateWorkflowCommandV0.create({
         environmentId: user.environmentId,
         organizationId: user.organizationId,
         userId: user._id,
@@ -139,6 +145,7 @@ export class WorkflowControllerV1 {
     description: `Workflow was previously named notification template`,
   })
   @ExternalApiAccessible()
+  @RequirePermissions(PermissionsEnum.WORKFLOW_WRITE)
   deleteWorkflowById(@UserSession() user: UserSessionData, @Param('workflowId') workflowId: string): Promise<boolean> {
     return this.deleteWorkflowByIdUsecase.execute(
       DeleteNotificationTemplateCommand.create({
@@ -158,6 +165,7 @@ export class WorkflowControllerV1 {
     description: 'Get the variables that can be used in the workflow',
   })
   @ExternalApiAccessible()
+  @RequirePermissions(PermissionsEnum.WORKFLOW_READ)
   @SdkGroupName('Workflows.Variables')
   getWorkflowVariables(@UserSession() user: UserSessionData): Promise<VariablesResponseDto> {
     return this.getWorkflowVariablesUsecase.execute(
@@ -176,6 +184,7 @@ export class WorkflowControllerV1 {
     description: `Workflow was previously named notification template`,
   })
   @ExternalApiAccessible()
+  @RequirePermissions(PermissionsEnum.WORKFLOW_READ)
   getWorkflowById(
     @UserSession() user: UserSessionData,
     @Param('workflowId') workflowId: string
@@ -191,20 +200,21 @@ export class WorkflowControllerV1 {
   }
 
   @Post('')
-  @ExternalApiAccessible()
-  @UseGuards(RootEnvironmentGuard)
   @ApiResponse(WorkflowResponse, 201)
   @ApiOperation({
     summary: 'Create workflow',
     description: `Workflow was previously named notification template`,
   })
+  @ExternalApiAccessible()
+  @UseGuards(RootEnvironmentGuard)
+  @RequirePermissions(PermissionsEnum.WORKFLOW_WRITE)
   create(
     @UserSession() user: UserSessionData,
     @Query() query: CreateWorkflowQuery,
     @Body() body: CreateWorkflowRequestDto
   ): Promise<WorkflowResponse> {
-    return this.createWorkflowUsecase.execute(
-      CreateWorkflowCommand.create({
+    return this.createWorkflowUsecaseV0.execute(
+      CreateWorkflowCommandV0.create({
         organizationId: user.organizationId,
         userId: user._id,
         environmentId: user.environmentId,
@@ -238,6 +248,7 @@ export class WorkflowControllerV1 {
     description: `Workflow was previously named notification template`,
   })
   @ExternalApiAccessible()
+  @RequirePermissions(PermissionsEnum.WORKFLOW_WRITE)
   @SdkGroupName('Workflows.Status')
   updateActiveStatus(
     @UserSession() user: UserSessionData,

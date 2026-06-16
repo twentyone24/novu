@@ -9,6 +9,7 @@ import {
   BurstSmsHandler,
   ClickatellHandler,
   ClicksendSmsHandler,
+  CmTelecomHandler,
   EazySmsHandler,
   FiretextSmsHandler,
   FortySixElksHandler,
@@ -16,6 +17,7 @@ import {
   GupshupSmsHandler,
   IMediaHandler,
   InfobipSmsHandler,
+  ISendProSmsHandler,
   ISendSmsHandler,
   KannelSmsHandler,
   MaqsamHandler,
@@ -27,6 +29,7 @@ import {
   RingCentralHandler,
   SendchampSmsHandler,
   SimpletextingSmsHandler,
+  SinchHandler,
   Sms77Handler,
   SmsCentralHandler,
   SnsHandler,
@@ -60,6 +63,7 @@ export class SmsFactory implements ISmsFactory {
     new SendchampSmsHandler(),
     new ClicksendSmsHandler(),
     new SimpletextingSmsHandler(),
+    new SinchHandler(),
     new BandwidthHandler(),
     new GenericSmsHandler(),
     new MessageBirdHandler(),
@@ -75,6 +79,8 @@ export class SmsFactory implements ISmsFactory {
     new UnifonicHandler(),
     new SmsmodeHandler(),
     new BulkSmsHandler(),
+    new ISendProSmsHandler(),
+    new CmTelecomHandler(),
   ];
 
   getHandler(integration: Pick<IntegrationEntity, 'credentials' | 'channel' | 'providerId' | 'configurations'>) {

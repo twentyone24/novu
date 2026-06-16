@@ -7,11 +7,13 @@ import { createVariableExtension } from '@/components/primitives/variable-plugin
 import { DEFAULT_VARIABLE_PILL_HEIGHT } from '@/components/primitives/variable-plugin/variable-pill-widget';
 import { variablePillTheme } from '@/components/primitives/variable-plugin/variable-theme';
 import { EditVariablePopover } from '@/components/variable/edit-variable-popover';
+import { isPayloadVariable } from '@/components/variable/hooks/use-variable-validation';
 import {
   DIGEST_VARIABLES_ENUM,
   DIGEST_VARIABLES_FILTER_MAP,
   getDynamicDigestVariable,
 } from '@/components/variable/utils/digest-variables';
+import { getVariableErrorMessage } from '@/components/variable/utils/get-variable-error-message';
 import { useTelemetry } from '@/hooks/use-telemetry';
 import { CompletionOption, createAutocompleteSource } from '@/utils/liquid-autocomplete';
 import { IsAllowedVariable, LiquidVariable } from '@/utils/parseStepVariables';
@@ -19,6 +21,15 @@ import { TelemetryEvent } from '@/utils/telemetry';
 import { cn } from '@/utils/ui';
 import { useVariables } from '../../hooks/use-variables';
 import { DEFAULT_SIDE_OFFSET } from './popover';
+
+function safeFocusEditorView(view: EditorView | null) {
+  if (!view) return;
+  try {
+    view.focus();
+  } catch {
+    // CodeMirror can throw if its internal DOM state is inconsistent during focus
+  }
+}
 
 export type CompletionRange = {
   from: number;
@@ -44,6 +55,7 @@ type VariableEditorProps = {
   skipContainerClick?: boolean;
   children?: React.ReactNode;
   disabled?: boolean;
+  readOnly?: boolean;
 } & Pick<
   EditorProps,
   | 'className'
@@ -95,6 +107,7 @@ export function VariableEditor({
   onManageSchemaClick = () => {},
   children,
   disabled = false,
+  readOnly = false,
 }: VariableEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const track = useTelemetry();
@@ -149,7 +162,7 @@ export function VariableEditor({
   );
 
   // Create extensions only once and never recreate them unless external extensions change
-  const extensionsRef = useRef<Extension[]>();
+  const extensionsRef = useRef<Extension[] | null>(null);
   const callbacksRef = useRef({
     onVariableSelect,
     onCreateNewVariable,
@@ -230,36 +243,60 @@ export function VariableEditor({
       return null;
     };
 
-    return autocompletion({
-      override: [dynamicCompletionSource],
-      closeOnBlur: true,
-      defaultKeymap: true,
-      activateOnTyping: true,
-      optionClass: (completion) => {
-        if (completion.type === 'new-variable') return 'cm-new-variable-option';
-        if (completion.type === 'new-translation-key') return 'cm-new-translation-option';
-        return '';
-      },
-    });
+    return [
+      autocompletion({
+        override: [dynamicCompletionSource],
+        closeOnBlur: true,
+        defaultKeymap: true,
+        activateOnTyping: true,
+        optionClass: (completion) => {
+          const classes = [];
+          if (completion.type === 'new-variable') classes.push('cm-new-variable-option');
+          if (completion.type === 'new-translation-key') classes.push('cm-new-translation-option');
+          return classes.join(' ');
+        },
+      }),
+      // Add native browser tooltips for long labels
+      EditorView.updateListener.of(() => {
+        document.querySelectorAll('li[role="option"]:not([title])').forEach((item) => {
+          const label = item.querySelector('.cm-completionLabel');
+          if (label?.textContent) item.setAttribute('title', label.textContent);
+        });
+      }),
+    ];
   }, []);
 
   const variablePluginExtension = useMemo(() => {
+    const getVariableError = (variableName: string, isAllowed: boolean): string | undefined => {
+      if (isAllowed) return undefined;
+
+      const isPayload = isPayloadVariable(variableName);
+      return getVariableErrorMessage({
+        variableName,
+        isPayloadVariable: isPayload,
+        isAllowed: false,
+        isInSchema: false,
+        isPayloadSchemaEnabled: isPayload ? callbacksRef.current.isPayloadSchemaEnabled : undefined,
+      });
+    };
+
     return createVariableExtension({
       viewRef,
       lastCompletionRef,
       onSelect: (value: string, from: number, to: number) => callbacksRef.current.handleVariableSelect(value, from, to),
       isAllowedVariable: (variable: LiquidVariable) => callbacksRef.current.isAllowedVariable(variable),
       isDigestEventsVariable: (variableName: string) => callbacksRef.current.isDigestEventsVariable(variableName),
+      getVariableErrorMessage: getVariableError,
     });
   }, []);
 
   const editorExtensions = useMemo(() => {
     // Clear cache when extensions change
-    extensionsRef.current = undefined;
+    extensionsRef.current = null;
 
     // For props that rarely change, we can check them dynamically
     const baseExtensions = [...(callbacksRef.current.multiline ? [EditorView.lineWrapping] : []), variablePillTheme];
-    const allExtensions = [...baseExtensions, autocompletionExtension];
+    const allExtensions = [...baseExtensions, ...autocompletionExtension];
 
     // Add external extensions (including translation plugin) BEFORE variable plugin
     // This ensures translation patterns are processed first
@@ -278,7 +315,7 @@ export function VariableEditor({
     (open: boolean) => {
       if (!open) {
         setTimeout(() => setSelectedVariable(null), 0);
-        viewRef.current?.focus();
+        safeFocusEditorView(viewRef.current);
       }
     },
     [setSelectedVariable, viewRef]
@@ -307,9 +344,7 @@ export function VariableEditor({
       }
 
       // Only programmatically focus if clicking directly on the container
-      if (viewRef.current) {
-        viewRef.current.focus();
-      }
+      safeFocusEditorView(viewRef.current);
     },
     [isVariablePopoverOpen, skipContainerClick, viewRef]
   );
@@ -351,7 +386,7 @@ export function VariableEditor({
         onChange={onChange}
         onBlur={onBlur}
         tagStyles={tagStyles}
-        editable={!disabled}
+        editable={!disabled && !readOnly}
       />
       {isVariablePopoverOpen && (
         <EditVariablePopover
@@ -363,14 +398,12 @@ export function VariableEditor({
           isAllowedVariable={isAllowedVariable}
           onUpdate={(newValue) => {
             handleVariableUpdate(newValue);
-            // Focus back to the editor after updating the variable
-            setTimeout(() => viewRef.current?.focus(), 0);
+            setTimeout(() => safeFocusEditorView(viewRef.current), 0);
           }}
           onDeleteClick={() => {
             handleVariableUpdate('');
             setSelectedVariable(null);
-            // Focus back to the editor after updating the variable
-            setTimeout(() => viewRef.current?.focus(), 0);
+            setTimeout(() => safeFocusEditorView(viewRef.current), 0);
           }}
           getSchemaPropertyByKey={getSchemaPropertyByKey}
           onManageSchemaClick={onManageSchemaClick}

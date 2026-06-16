@@ -1,4 +1,4 @@
-import type { IEnvironment } from '@novu/shared';
+import { FeatureFlagsKeysEnum, type IEnvironment } from '@novu/shared';
 import { useEffect, useState } from 'react';
 import {
   RiAddBoxLine,
@@ -9,17 +9,20 @@ import {
   RiExpandUpDownLine,
   RiGitCommitFill,
   RiLinkUnlinkM,
+  RiRobot2Line,
   RiRouteFill,
 } from 'react-icons/ri';
 import type { IResourceDependency, IResourceDiffResult, ResourceToPublish } from '@/api/environments';
 import { useDiffEnvironments } from '@/hooks/use-environments';
+import { useFeatureFlag } from '@/hooks/use-feature-flag';
 import { useResourceDependencies } from '@/hooks/use-resource-dependencies';
 import { formatDateSimple } from '@/utils/format-date';
 import { Badge, BadgeIcon } from '../primitives/badge';
 import { Button } from '../primitives/button';
 import { Checkbox } from '../primitives/checkbox';
 import { Collapsible, CollapsibleContent } from '../primitives/collapsible';
-import { Dialog, DialogContent } from '../primitives/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../primitives/dialog';
+import { InlineToast } from '../primitives/inline-toast';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../primitives/tooltip';
 import { LayoutUsageIndicator } from './layout-usage-indicator';
 import { WorkflowHoverCard } from './workflow-hover-card';
@@ -52,6 +55,7 @@ export function PublishModal({
   const [resourceSelection, setResourceSelection] = useState<ResourceSelection>({});
   const [workflowsExpanded, setWorkflowsExpanded] = useState(true);
   const [layoutsExpanded, setLayoutsExpanded] = useState(true);
+  const [agentsExpanded, setAgentsExpanded] = useState(true);
 
   const { data: diffData } = useDiffEnvironments({
     sourceEnvironmentId: currentEnvironmentId,
@@ -59,7 +63,9 @@ export function PublishModal({
     enabled: isOpen,
   });
 
-  const { workflows, layouts, dependencyMap, calculateDependencyState } = useResourceDependencies(diffData);
+  const isAgentsEnabled = useFeatureFlag(FeatureFlagsKeysEnum.IS_CONVERSATIONAL_AGENTS_ENABLED, false);
+
+  const { workflows, layouts, agents, dependencyMap, calculateDependencyState } = useResourceDependencies(diffData);
 
   // Initialize selection state
   useEffect(() => {
@@ -97,8 +103,8 @@ export function PublishModal({
     });
   };
 
-  const handleGroupToggle = (resourceType: 'workflow' | 'layout') => {
-    const resources = resourceType === 'workflow' ? workflows : layouts;
+  const handleGroupToggle = (resourceType: 'workflow' | 'layout' | 'agent') => {
+    const resources = resourceType === 'workflow' ? workflows : resourceType === 'layout' ? layouts : agents;
     const allSelected = resources.every((r) => {
       const id = r.sourceResource?.id || r.targetResource?.id;
       return id && resourceSelection[id]?.selected;
@@ -119,8 +125,8 @@ export function PublishModal({
     });
   };
 
-  const getSelectedCount = (resourceType: 'workflow' | 'layout') => {
-    const resources = resourceType === 'workflow' ? workflows : layouts;
+  const getSelectedCount = (resourceType: 'workflow' | 'layout' | 'agent') => {
+    const resources = resourceType === 'workflow' ? workflows : resourceType === 'layout' ? layouts : agents;
     return resources.filter((r) => {
       const id = r.sourceResource?.id || r.targetResource?.id;
       return id && resourceSelection[id]?.selected;
@@ -130,6 +136,11 @@ export function PublishModal({
   const getTotalSelectedCount = () => {
     return Object.values(resourceSelection).filter((state) => state.selected).length;
   };
+
+  const newSelectedAgentCount = agents.filter((a) => {
+    const id = a.sourceResource?.id || a.targetResource?.id;
+    return id && resourceSelection[id]?.selected && a.summary.added > 0;
+  }).length;
 
   const handleConfirm = () => {
     const selectedResources: ResourceToPublish[] = Object.entries(resourceSelection)
@@ -147,7 +158,7 @@ export function PublishModal({
         <PublishModalHeader />
         <PublishModalContent environment={environment} />
 
-        <div className="space-y-1.5">
+        <div className="w-full max-w-[486px] space-y-1.5">
           {workflows.length > 0 && (
             <ResourceGroupCompact
               title="Workflows"
@@ -207,7 +218,36 @@ export function PublishModal({
               })}
             </ResourceGroupCompact>
           )}
+
+          {isAgentsEnabled && agents.length > 0 && (
+            <ResourceGroupCompact
+              title="Agents"
+              count={agents.length}
+              selectedCount={getSelectedCount('agent')}
+              isExpanded={agentsExpanded}
+              onToggle={() => setAgentsExpanded(!agentsExpanded)}
+              onGroupToggle={() => handleGroupToggle('agent')}
+              icon={RiRobot2Line}
+            >
+              {agents.map((agent) => {
+                const id = agent.sourceResource?.id || agent.targetResource?.id;
+                if (!id) return null;
+
+                return (
+                  <CompactResourceRow
+                    key={id}
+                    resource={agent}
+                    selected={resourceSelection[id]?.selected || false}
+                    disabled={resourceSelection[id]?.disabled || false}
+                    onToggle={() => handleResourceToggle(id)}
+                  />
+                );
+              })}
+            </ResourceGroupCompact>
+          )}
         </div>
+
+        {isAgentsEnabled && newSelectedAgentCount > 0 && <AgentInactiveWarning count={newSelectedAgentCount} />}
 
         <PublishModalActions
           environment={environment}
@@ -329,14 +369,12 @@ function CompactResourceRow({
       <div className="min-w-0 flex-1">
         {resource.resourceType === 'layout' ? (
           // Layout: name and ID side by side
-          <div className="leading-0 flex w-full items-center gap-1 text-left min-w-0">
-            <span className="overflow-hidden truncate overflow-ellipsis text-xs font-medium leading-4 text-gray-900 flex-shrink min-w-0">
-              {displayName}
-            </span>
+          <div className="leading-0 flex w-full min-w-0 items-center gap-1 text-left">
+            <span className="min-w-0 shrink truncate text-xs font-medium leading-4 text-gray-900">{displayName}</span>
             {hasDependencies && (
               <Tooltip>
                 <TooltipTrigger>
-                  <RiLinkUnlinkM className="h-3 w-3 text-orange-500" />
+                  <RiLinkUnlinkM className="h-3 w-3 shrink-0 text-orange-500" />
                 </TooltipTrigger>
                 <TooltipContent>
                   {dependencies && dependencies.length > 0 && (
@@ -355,12 +393,12 @@ function CompactResourceRow({
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-1">
-              <span className="truncate text-xs font-medium text-gray-900">{displayName}</span>
+            <div className="flex min-w-0 items-center gap-1">
+              <span className="min-w-0 truncate text-xs font-medium text-gray-900">{displayName}</span>
               {hasDependencies && (
                 <Tooltip>
                   <TooltipTrigger>
-                    <RiLinkUnlinkM className="h-3 w-3 text-orange-500" />
+                    <RiLinkUnlinkM className="h-3 w-3 shrink-0 text-orange-500" />
                   </TooltipTrigger>
                   <TooltipContent>
                     {dependencies && dependencies.length > 0 && (
@@ -376,8 +414,18 @@ function CompactResourceRow({
                   </TooltipContent>
                 </Tooltip>
               )}
+              {resource.resourceType === 'agent' && resource.summary.added > 0 && (
+                <Tooltip>
+                  <TooltipTrigger>
+                    <RiAlertFill className="h-3 w-3 shrink-0 text-orange-500" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="rounded bg-gray-900 px-2 py-1 text-xs text-white">
+                    This agent will publish as inactive until configured in production.
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
-            <div className="font-mono text-xs tracking-tight text-gray-400">{slug}</div>
+            <div className="truncate font-mono text-xs tracking-tight text-gray-400">{slug}</div>
           </>
         )}
 
@@ -448,14 +496,40 @@ function PublishModalHeader() {
 }
 
 function PublishModalContent({ environment }: { environment: IEnvironment }) {
+  const title = `Publishing changes to ${environment?.name}`;
+  const description = `You're about to publish changes to ${environment?.name}. This may cause breaking behavior. Please review all changes before proceeding.`;
+
   return (
-    <div className="space-y-1">
-      <h2 className="text-sm font-medium text-gray-900">Publishing changes to {environment?.name}</h2>
-      <p className="text-xs text-gray-500">
-        You're about to publish changes to {environment?.name}. This may cause breaking behavior. Please review all
-        changes before proceeding.
-      </p>
-    </div>
+    <>
+      <DialogDescription className="sr-only">{description}</DialogDescription>
+      <DialogTitle className="sr-only">{title}</DialogTitle>
+      <div className="space-y-1">
+        <h2 className="text-sm font-medium text-gray-900">{title}</h2>
+        <p className="text-xs text-gray-500">{description}</p>
+      </div>
+    </>
+  );
+}
+
+function AgentInactiveWarning({ count }: { count: number }) {
+  return (
+    <InlineToast
+      variant="soft-warning"
+      description={
+        <div className="space-y-1.5">
+          <p className="text-label-xs font-medium text-text-strong">
+            {count} agent{count !== 1 ? 's' : ''} will publish as{' '}
+            <Badge variant="lighter" color="orange" size="sm" className="rounded">
+              Inactive.
+            </Badge>
+          </p>
+          <p className="text-xs text-text-sub">
+            Affected agents will publish in{' '}
+            <span className="font-medium text-text-strong">Inactive</span> state until configured in production.
+          </p>
+        </div>
+      }
+    />
   );
 }
 

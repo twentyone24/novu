@@ -65,12 +65,9 @@ export class Notifications extends BaseModule {
     });
     this.cache = new NotificationsCache({
       emitter: eventEmitterInstance,
+      inboxService: inboxServiceInstance,
     });
     this.#useCache = useCache;
-  }
-
-  get inboxService(): InboxService {
-    return this._inboxService;
   }
 
   async list({ limit = 10, ...restOptions }: ListNotificationsArgs = {}): Result<ListNotificationsResponse> {
@@ -347,7 +344,13 @@ export class Notifications extends BaseModule {
     );
   }
 
-  async archiveAllRead({ tags, data }: { tags?: string[]; data?: Record<string, unknown> } = {}): Result<void> {
+  async archiveAllRead({
+    tags,
+    data,
+  }: {
+    tags?: NotificationFilter['tags'];
+    data?: Record<string, unknown>;
+  } = {}): Result<void> {
     return this.callWithSession(async () =>
       archiveAllRead({
         emitter: this._emitter,

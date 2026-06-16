@@ -5,28 +5,50 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { NovuCore } from "../core.js";
-import { activityChartsRetrieve } from "../funcs/activityChartsRetrieve.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useNovuContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  ActivityChartsRetrieveQueryData,
+  buildActivityChartsRetrieveQuery,
+  prefetchActivityChartsRetrieve,
+  queryKeyActivityChartsRetrieve,
+} from "./activityChartsRetrieve.core.js";
+export {
+  type ActivityChartsRetrieveQueryData,
+  buildActivityChartsRetrieveQuery,
+  prefetchActivityChartsRetrieve,
+  queryKeyActivityChartsRetrieve,
+};
 
-export type ActivityChartsRetrieveQueryData = components.GetChartsResponseDto;
+export type ActivityChartsRetrieveQueryError =
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * Retrieve activity charts
@@ -36,8 +58,14 @@ export type ActivityChartsRetrieveQueryData = components.GetChartsResponseDto;
  */
 export function useActivityChartsRetrieve(
   request: operations.ActivityControllerGetChartsRequest,
-  options?: QueryHookOptions<ActivityChartsRetrieveQueryData>,
-): UseQueryResult<ActivityChartsRetrieveQueryData, Error> {
+  options?: QueryHookOptions<
+    ActivityChartsRetrieveQueryData,
+    ActivityChartsRetrieveQueryError
+  >,
+): UseQueryResult<
+  ActivityChartsRetrieveQueryData,
+  ActivityChartsRetrieveQueryError
+> {
   const client = useNovuContext();
   return useQuery({
     ...buildActivityChartsRetrieveQuery(
@@ -57,8 +85,14 @@ export function useActivityChartsRetrieve(
  */
 export function useActivityChartsRetrieveSuspense(
   request: operations.ActivityControllerGetChartsRequest,
-  options?: SuspenseQueryHookOptions<ActivityChartsRetrieveQueryData>,
-): UseSuspenseQueryResult<ActivityChartsRetrieveQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    ActivityChartsRetrieveQueryData,
+    ActivityChartsRetrieveQueryError
+  >,
+): UseSuspenseQueryResult<
+  ActivityChartsRetrieveQueryData,
+  ActivityChartsRetrieveQueryError
+> {
   const client = useNovuContext();
   return useSuspenseQuery({
     ...buildActivityChartsRetrieveQuery(
@@ -67,19 +101,6 @@ export function useActivityChartsRetrieveSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchActivityChartsRetrieve(
-  queryClient: QueryClient,
-  client$: NovuCore,
-  request: operations.ActivityControllerGetChartsRequest,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildActivityChartsRetrieveQuery(
-      client$,
-      request,
-    ),
   });
 }
 
@@ -138,62 +159,4 @@ export function invalidateAllActivityChartsRetrieve(
     ...filters,
     queryKey: ["@novu/api", "Charts", "retrieve"],
   });
-}
-
-export function buildActivityChartsRetrieveQuery(
-  client$: NovuCore,
-  request: operations.ActivityControllerGetChartsRequest,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<ActivityChartsRetrieveQueryData>;
-} {
-  return {
-    queryKey: queryKeyActivityChartsRetrieve({
-      createdAtGte: request.createdAtGte,
-      createdAtLte: request.createdAtLte,
-      reportType: request.reportType,
-      workflowIds: request.workflowIds,
-      subscriberIds: request.subscriberIds,
-      transactionIds: request.transactionIds,
-      statuses: request.statuses,
-      channels: request.channels,
-      topicKey: request.topicKey,
-      idempotencyKey: request.idempotencyKey,
-    }),
-    queryFn: async function activityChartsRetrieveQueryFn(
-      ctx,
-    ): Promise<ActivityChartsRetrieveQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(activityChartsRetrieve(
-        client$,
-        request,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyActivityChartsRetrieve(
-  parameters: {
-    createdAtGte?: string | undefined;
-    createdAtLte?: string | undefined;
-    reportType: Array<operations.ReportType>;
-    workflowIds?: Array<string> | undefined;
-    subscriberIds?: Array<string> | undefined;
-    transactionIds?: Array<string> | undefined;
-    statuses?: Array<operations.Statuses> | undefined;
-    channels?: Array<string> | undefined;
-    topicKey?: string | undefined;
-    idempotencyKey?: string | undefined;
-  },
-): QueryKey {
-  return ["@novu/api", "Charts", "retrieve", parameters];
 }

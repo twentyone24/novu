@@ -88,7 +88,7 @@ export const VariableList = React.forwardRef<VariableListRef, VariablesListProps
     }, [hoveredOptionIndex, maxIndex, scrollToOption]);
 
     const select = useCallback(() => {
-      if (hoveredOptionIndex !== -1) {
+      if (hoveredOptionIndex !== -1 && hoveredOptionIndex < options.length) {
         onSelect(options[hoveredOptionIndex].value ?? '');
         setHoveredOptionIndex(-1);
       }
@@ -189,6 +189,9 @@ const VariableListItem = ({
             isHovered ? 'bg-neutral-100' : ''
           )}
           value={option.value}
+          onMouseDown={(e) => {
+            e.preventDefault();
+          }}
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -201,7 +204,9 @@ const VariableListItem = ({
           <div className="flex size-3 items-center justify-center">
             <VariableIcon variableName={option.value} context={context} />
           </div>
-          <TruncatedText>{option.label}</TruncatedText>
+          <div className="min-w-0 flex-1">
+            <TruncatedText>{option.label}</TruncatedText>
+          </div>
           <CheckIcon className={cn('ml-auto size-4', selectedValue === option.value ? 'opacity-50' : 'opacity-0')} />
         </li>
       </TooltipTrigger>

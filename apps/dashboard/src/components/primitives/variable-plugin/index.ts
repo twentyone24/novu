@@ -8,6 +8,7 @@ export function createVariableExtension({
   onSelect,
   isAllowedVariable,
   isDigestEventsVariable,
+  getVariableErrorMessage,
 }: PluginState) {
   return ViewPlugin.fromClass(
     class {
@@ -20,7 +21,8 @@ export function createVariableExtension({
           lastCompletionRef,
           isAllowedVariable,
           onSelect,
-          isDigestEventsVariable
+          isDigestEventsVariable,
+          getVariableErrorMessage
         );
       }
 
@@ -43,6 +45,5 @@ export function createVariableExtension({
 }
 
 export const VARIABLE_PILL_CLASS = 'cm-variable-pill';
-export const FILTERS_CLASS = 'has-filters';
 
 export * from './types';

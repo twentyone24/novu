@@ -17,7 +17,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { ApiExcludeController, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { AnalyticsService } from '@novu/application-generic';
-import { MessageEntity, SubscriberEntity } from '@novu/dal';
+import { BaseRepository, MessageEntity } from '@novu/dal';
 import {
   ButtonTypeEnum,
   IPreferenceChannels,
@@ -29,6 +29,7 @@ import {
 } from '@novu/shared';
 import { UpdatePreferencesCommand } from '../inbox/usecases/update-preferences/update-preferences.command';
 import { UpdatePreferences } from '../inbox/usecases/update-preferences/update-preferences.usecase';
+import { ExcludeFromIdempotency } from '../shared/framework/exclude-from-idempotency';
 import { ApiCommonResponses, ApiNoContentResponse } from '../shared/framework/response.decorator';
 import { SubscriberSession } from '../shared/framework/user.decorator';
 import { UpdateSubscriberGlobalPreferencesRequestDto } from '../subscribers/dtos/update-subscriber-global-preferences-request.dto';
@@ -98,6 +99,7 @@ export class WidgetsController {
     private analyticsService: AnalyticsService
   ) {}
 
+  @ExcludeFromIdempotency()
   @Post('/session/initialize')
   async sessionInitialize(@Body() body: SessionInitializeRequestDto): Promise<SessionInitializeResponseDto> {
     return await this.initializeSessionUsecase.execute(
@@ -121,7 +123,7 @@ export class WidgetsController {
     required: false,
   })
   async getNotificationsFeed(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Query() query: GetNotificationsFeedDto
   ) {
     let feedsQuery: string[] | undefined;
@@ -146,16 +148,13 @@ export class WidgetsController {
   @UseGuards(AuthGuard('subscriberJwt'))
   @Get('/notifications/unseen')
   async getUnseenCount(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Query('feedIdentifier') feedId: string[] | string,
-    @Query('seen') seen: boolean,
+    @Query('seen') seen: boolean | string,
     @Query('limit', new DefaultValuePipe(100), new LimitPipe(1, 100, true)) limit: number
   ): Promise<UnseenCountResponse> {
     const feedsQuery = this.toArray(feedId);
-
-    if (seen === undefined) {
-      seen = false;
-    }
+    const parsedSeen = seen === undefined ? false : seen === 'true' || seen === true;
 
     return await this.getFeedCountUsecase.execute(
       GetFeedCountCommand.create({
@@ -163,7 +162,7 @@ export class WidgetsController {
         subscriberId: subscriberSession.subscriberId,
         environmentId: subscriberSession._environmentId,
         feedId: feedsQuery,
-        seen,
+        seen: parsedSeen,
         limit,
       })
     );
@@ -172,16 +171,13 @@ export class WidgetsController {
   @UseGuards(AuthGuard('subscriberJwt'))
   @Get('/notifications/unread')
   async getUnreadCount(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Query('feedIdentifier') feedId: string[] | string,
-    @Query('read') read: boolean,
+    @Query('read') read: boolean | string,
     @Query('limit', new DefaultValuePipe(100), new LimitPipe(1, 100, true)) limit: number
   ): Promise<UnseenCountResponse> {
     const feedsQuery = this.toArray(feedId);
-
-    if (read === undefined) {
-      read = false;
-    }
+    const parsedRead = read === undefined ? false : read === 'true' || read === true;
 
     return await this.getFeedCountUsecase.execute(
       GetFeedCountCommand.create({
@@ -189,7 +185,7 @@ export class WidgetsController {
         subscriberId: subscriberSession.subscriberId,
         environmentId: subscriberSession._environmentId,
         feedId: feedsQuery,
-        read,
+        read: parsedRead,
         limit,
       })
     );
@@ -198,7 +194,7 @@ export class WidgetsController {
   @UseGuards(AuthGuard('subscriberJwt'))
   @Get('/notifications/count')
   async getCount(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Query() query: GetCountQuery,
     @Query('limit', new DefaultValuePipe(100), new LimitPipe(1, 100, true)) limit: number
   ): Promise<UnseenCountResponse> {
@@ -230,11 +226,16 @@ export class WidgetsController {
   @UseGuards(AuthGuard('subscriberJwt'))
   @Post('/messages/markAs')
   async markMessageAs(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Body() body: { messageId: string | string[]; mark: { seen?: boolean; read?: boolean } }
   ): Promise<MessageEntity[]> {
     const messageIds = this.toArray(body.messageId);
     if (!messageIds) throw new BadRequestException('messageId is required');
+
+    const invalidIds = messageIds.filter((id) => !BaseRepository.isInternalId(id));
+    if (invalidIds.length > 0) {
+      throw new BadRequestException(`Invalid messageId format: ${invalidIds.join(', ')}`);
+    }
 
     return await this.markMessageAsUsecase.execute(
       MarkMessageAsCommand.create({
@@ -253,7 +254,7 @@ export class WidgetsController {
   @UseGuards(AuthGuard('subscriberJwt'))
   @Post('/messages/mark-as')
   async markMessagesAs(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Body() body: MessageMarkAsRequestDto
   ): Promise<MessageResponseDto[]> {
     const messageIds = this.toArray(body.messageId);
@@ -277,10 +278,12 @@ export class WidgetsController {
   @UseGuards(AuthGuard('subscriberJwt'))
   @Delete('/messages/:messageId')
   async removeMessage(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Param('messageId') messageId: string
   ): Promise<void> {
-    if (!messageId) throw new BadRequestException('messageId is required');
+    if (!messageId || !BaseRepository.isInternalId(messageId)) {
+      throw new BadRequestException('messageId must be a valid MongoDB ObjectId');
+    }
 
     const command = RemoveMessageCommand.create({
       organizationId: subscriberSession._organizationId,
@@ -300,7 +303,7 @@ export class WidgetsController {
   @ApiNoContentResponse({ description: 'Messages removed' })
   @HttpCode(HttpStatus.NO_CONTENT)
   async removeAllMessages(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Query() query: RemoveAllMessagesDto
   ): Promise<void> {
     const command = RemoveAllMessagesCommand.create({
@@ -320,7 +323,7 @@ export class WidgetsController {
   @Post('/messages/bulk/delete')
   @HttpCode(HttpStatus.OK)
   async removeMessagesBulk(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Body() body: RemoveMessagesBulkRequestDto
   ) {
     return await this.removeMessagesBulkUsecase.execute(
@@ -339,10 +342,10 @@ export class WidgetsController {
   @UseGuards(AuthGuard('subscriberJwt'))
   @Post('/messages/read')
   async markAllUnreadAsRead(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Body() body: { feedId?: string | string[] }
   ) {
-    const feedIds = this.toArray(body.feedId);
+    const feedIds = this.toArray(body?.feedId);
 
     return await this.markAllMessagesAsUsecase.execute(
       MarkAllMessagesAsCommand.create({
@@ -361,10 +364,10 @@ export class WidgetsController {
   @UseGuards(AuthGuard('subscriberJwt'))
   @Post('/messages/seen')
   async markAllUnseenAsSeen(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Body() body: { feedId?: string | string[] }
   ): Promise<number> {
-    const feedIds = this.toArray(body.feedId);
+    const feedIds = this.toArray(body?.feedId);
 
     return await this.markAllMessagesAsUsecase.execute(
       MarkAllMessagesAsCommand.create({
@@ -380,7 +383,7 @@ export class WidgetsController {
   @UseGuards(AuthGuard('subscriberJwt'))
   @Post('/messages/:messageId/actions/:type')
   async markActionAsSeen(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Param('messageId') messageId: string,
     @Param('type') type: ButtonTypeEnum,
     @Body() body: { payload: any; status: MessageActionStatusEnum }
@@ -401,7 +404,7 @@ export class WidgetsController {
   @UseGuards(AuthGuard('subscriberJwt'))
   @Get('/organization')
   async getOrganizationData(
-    @SubscriberSession() subscriberSession: SubscriberEntity
+    @SubscriberSession() subscriberSession: SubscriberSession
   ): Promise<OrganizationResponseDto> {
     const command = GetOrganizationDataCommand.create({
       organizationId: subscriberSession._organizationId,
@@ -414,7 +417,7 @@ export class WidgetsController {
 
   @UseGuards(AuthGuard('subscriberJwt'))
   @Get('/preferences')
-  async getSubscriberPreference(@SubscriberSession() subscriberSession: SubscriberEntity) {
+  async getSubscriberPreference(@SubscriberSession() subscriberSession: SubscriberSession) {
     const command = GetSubscriberPreferenceCommand.create({
       organizationId: subscriberSession._organizationId,
       subscriberId: subscriberSession.subscriberId,
@@ -429,7 +432,7 @@ export class WidgetsController {
   @UseGuards(AuthGuard('subscriberJwt'))
   @Get('/preferences/:level')
   async getSubscriberPreferenceByLevel(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Param('level') level: PreferenceLevelEnum
   ) {
     const command = GetPreferencesByLevelCommand.create({
@@ -446,7 +449,7 @@ export class WidgetsController {
   @UseGuards(AuthGuard('subscriberJwt'))
   @Patch('/preferences/:templateId')
   async updateSubscriberPreference(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Param('templateId') templateId: string,
     @Body() body: UpdateSubscriberPreferenceRequestDto
   ): Promise<UpdateSubscriberPreferenceResponseDto> {
@@ -489,7 +492,7 @@ export class WidgetsController {
   @UseGuards(AuthGuard('subscriberJwt'))
   @Patch('/preferences')
   async updateSubscriberGlobalPreference(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Body() body: UpdateSubscriberGlobalPreferencesRequestDto
   ) {
     const channels = body.preferences?.reduce((acc, curr) => {
@@ -520,7 +523,7 @@ export class WidgetsController {
   @UseGuards(AuthGuard('subscriberJwt'))
   @Post('/usage/log')
   async logUsage(
-    @SubscriberSession() subscriberSession: SubscriberEntity,
+    @SubscriberSession() subscriberSession: SubscriberSession,
     @Body() body: LogUsageRequestDto
   ): Promise<LogUsageResponseDto> {
     this.analyticsService.track(body.name, subscriberSession._organizationId, {

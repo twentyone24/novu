@@ -1,8 +1,6 @@
-// TODO: We shouldn't be importing from DAL here. Needs big refactor throughout monorepo.
-import { NotificationTemplateEntity, SubscriberEntity, TopicEntity } from '@novu/dal';
+import { NotificationTemplateEntity, SubscriberEntity } from '@novu/dal';
 import {
   ChannelTypeEnum,
-  ContextKey,
   ISubscribersDefine,
   ITenantDefine,
   ProvidersIdEnum,
@@ -14,6 +12,7 @@ import {
 import { IsArray, IsDefined, IsOptional, IsString } from 'class-validator';
 
 import { EnvironmentWithUserCommand } from '../../commands';
+import { SubscriberTopicPreference } from '../../dtos';
 
 export class CreateNotificationJobsCommand extends EnvironmentWithUserCommand {
   @IsDefined()
@@ -39,7 +38,7 @@ export class CreateNotificationJobsCommand extends EnvironmentWithUserCommand {
   to: ISubscribersDefine;
 
   @IsOptional()
-  topics?: Pick<TopicEntity, '_id' | 'key'>[];
+  topics?: SubscriberTopicPreference[];
 
   @IsString()
   @IsDefined()
@@ -51,10 +50,9 @@ export class CreateNotificationJobsCommand extends EnvironmentWithUserCommand {
   @IsOptional()
   tenant?: ITenantDefine;
 
-  @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  contextKeys?: ContextKey[];
+  contextKeys: string[];
 
   bridgeUrl?: string;
 

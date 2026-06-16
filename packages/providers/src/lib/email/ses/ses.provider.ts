@@ -1,4 +1,4 @@
-import { SESClient, SendRawEmailCommand } from '@aws-sdk/client-ses';
+import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { EmailProviderIdEnum } from '@novu/shared';
 import {
   ChannelTypeEnum,
@@ -11,7 +11,7 @@ import {
   ISendMessageSuccessResponse,
 } from '@novu/stateless';
 import { createVerify } from 'crypto';
-import nodemailer from 'nodemailer';
+import nodemailer, { SendMailOptions } from 'nodemailer';
 import { BaseProvider, CasingEnum } from '../../../base.provider';
 import { WithPassthrough } from '../../../utils/types';
 import { SESConfig } from './ses.config';
@@ -20,11 +20,11 @@ export class SESEmailProvider extends BaseProvider implements IEmailProvider {
   id = EmailProviderIdEnum.SES;
   protected casing: CasingEnum = CasingEnum.CAMEL_CASE;
   channelType = ChannelTypeEnum.EMAIL as ChannelTypeEnum.EMAIL;
-  private readonly ses: SESClient;
+  private readonly sesClient: SESv2Client;
 
   constructor(private readonly config: SESConfig) {
     super();
-    this.ses = new SESClient({
+    this.sesClient = new SESv2Client({
       region: this.config.region,
       credentials: {
         accessKeyId: this.config.accessKeyId,
@@ -34,36 +34,38 @@ export class SESEmailProvider extends BaseProvider implements IEmailProvider {
   }
 
   private async sendMail(
-    { html, text, to, from, senderName, subject, attachments, cc, bcc, replyTo },
+    { html, text, alternatives = [], to, from, senderName, subject, attachments, cc, bcc, replyTo, headers = {} },
     bridgeProviderData: WithPassthrough<Record<string, unknown>> = {}
   ) {
     const transporter = nodemailer.createTransport({
-      SES: { ses: this.ses, aws: { SendRawEmailCommand } },
+      SES: { sesClient: this.sesClient, SendEmailCommand },
     });
 
-    return await transporter.sendMail(
-      this.transform(bridgeProviderData, {
-        to,
-        html,
-        text,
-        subject,
-        attachments,
-        from: {
-          address: from,
-          name: senderName,
-        },
-        cc,
-        bcc,
-        replyTo,
-        ...(this.config.configurationSetName && {
-          ses: { ConfigurationSetName: this.config.configurationSetName },
-        }),
-      }).body
-    );
+    const mailOptions = this.transform(bridgeProviderData, {
+      to,
+      html,
+      text,
+      ...(alternatives.length ? { alternatives } : {}),
+      subject,
+      attachments,
+      from: {
+        address: from,
+        name: senderName,
+      },
+      cc,
+      bcc,
+      replyTo,
+      ...(headers && Object.keys(headers).length > 0 && { headers }),
+      ...(this.config.configurationSetName && {
+        ses: { ConfigurationSetName: this.config.configurationSetName },
+      }),
+    }).body as SendMailOptions;
+
+    return await transporter.sendMail(mailOptions);
   }
 
   async sendMessage(
-    { html, text, to, from, subject, attachments, cc, bcc, replyTo, senderName }: IEmailOptions,
+    { html, text, alternatives, to, from, subject, attachments, cc, bcc, replyTo, senderName, headers }: IEmailOptions,
     bridgeProviderData: WithPassthrough<Record<string, unknown>> = {}
   ): Promise<ISendMessageSuccessResponse> {
     const info = await this.sendMail(
@@ -74,6 +76,7 @@ export class SESEmailProvider extends BaseProvider implements IEmailProvider {
         subject,
         html,
         text,
+        alternatives,
         attachments: attachments?.map((attachment) => ({
           filename: attachment?.name,
           content: attachment.file,
@@ -84,6 +87,7 @@ export class SESEmailProvider extends BaseProvider implements IEmailProvider {
         cc,
         bcc,
         replyTo,
+        headers,
       },
       bridgeProviderData
     );
@@ -98,10 +102,10 @@ export class SESEmailProvider extends BaseProvider implements IEmailProvider {
     const parsedBody = this.jsonParseBody(body);
 
     if (Array.isArray(parsedBody)) {
-      return parsedBody.map((item) => buildMessageId(item));
+      return parsedBody.map((item) => this.buildMessageId(item)).filter((item) => item !== undefined);
     }
 
-    return [buildMessageId(parsedBody)];
+    return [this.buildMessageId(parsedBody)].filter((item) => item !== undefined);
   }
 
   private jsonParseBody(body: unknown) {
@@ -447,24 +451,22 @@ export class SESEmailProvider extends BaseProvider implements IEmailProvider {
     const { Message, MessageId, SubscribeURL, Timestamp, Token, TopicArn, Type } = msg;
     return `Message\n${Message}\nMessageId\n${MessageId}\nSubscribeURL\n${SubscribeURL}\nTimestamp\n${Timestamp}\nToken\n${Token}\nTopicArn\n${TopicArn}\nType\n${Type}\n`;
   }
-}
 
-function buildMessageId(body: Record<string, unknown>) {
-  // biome-ignore lint/suspicious/noExplicitAny: <explanation> x
-  if (!(body?.Message as any)?.mail?.messageId) {
-    return undefined;
+  private buildMessageId(body: Record<string, unknown>): string | undefined {
+    // biome-ignore lint/suspicious/noExplicitAny: <explanation> x
+    if (!(body?.Message as any)?.mail?.messageId) {
+      return undefined;
+    }
+
+    const message = body.Message as Record<string, unknown>;
+    const mailData = message.mail as Record<string, unknown>;
+
+    if (mailData.messageId) {
+      const messageId = mailData.messageId as string;
+      // this is the format of the messageId generated by AWS SES SendEmail API
+      return `<${messageId}@${this.config.region}.amazonses.com>`;
+    }
+
+    throw new Error('Unable to extract message ID from webhook body');
   }
-
-  const message = body.Message as Record<string, unknown>;
-  const mailData = message.mail as Record<string, unknown>;
-
-  if (mailData.messageId && mailData.sourceArn) {
-    const messageId = mailData.messageId as string;
-    // example arn:aws:ses:us-east-1:123456789012:identity/sender@example.com
-    const region = (mailData.sourceArn as string).split(':')[3];
-    // this is the format of the messageId generated by AWS SES SendEmail API
-    return `<${messageId}@${region}.amazonses.com>`;
-  }
-
-  throw new Error('Unable to extract message ID from webhook body');
 }

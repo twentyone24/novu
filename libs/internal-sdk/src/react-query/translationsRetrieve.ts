@@ -5,28 +5,50 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { NovuCore } from "../core.js";
-import { translationsRetrieve } from "../funcs/translationsRetrieve.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
-import * as components from "../models/components/index.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useNovuContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildTranslationsRetrieveQuery,
+  prefetchTranslationsRetrieve,
+  queryKeyTranslationsRetrieve,
+  TranslationsRetrieveQueryData,
+} from "./translationsRetrieve.core.js";
+export {
+  buildTranslationsRetrieveQuery,
+  prefetchTranslationsRetrieve,
+  queryKeyTranslationsRetrieve,
+  type TranslationsRetrieveQueryData,
+};
 
-export type TranslationsRetrieveQueryData = components.TranslationResponseDto;
+export type TranslationsRetrieveQueryError =
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * Retrieve a translation
@@ -36,8 +58,14 @@ export type TranslationsRetrieveQueryData = components.TranslationResponseDto;
  */
 export function useTranslationsRetrieve(
   request: operations.TranslationControllerGetSingleTranslationRequest,
-  options?: QueryHookOptions<TranslationsRetrieveQueryData>,
-): UseQueryResult<TranslationsRetrieveQueryData, Error> {
+  options?: QueryHookOptions<
+    TranslationsRetrieveQueryData,
+    TranslationsRetrieveQueryError
+  >,
+): UseQueryResult<
+  TranslationsRetrieveQueryData,
+  TranslationsRetrieveQueryError
+> {
   const client = useNovuContext();
   return useQuery({
     ...buildTranslationsRetrieveQuery(
@@ -57,8 +85,14 @@ export function useTranslationsRetrieve(
  */
 export function useTranslationsRetrieveSuspense(
   request: operations.TranslationControllerGetSingleTranslationRequest,
-  options?: SuspenseQueryHookOptions<TranslationsRetrieveQueryData>,
-): UseSuspenseQueryResult<TranslationsRetrieveQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    TranslationsRetrieveQueryData,
+    TranslationsRetrieveQueryError
+  >,
+): UseSuspenseQueryResult<
+  TranslationsRetrieveQueryData,
+  TranslationsRetrieveQueryError
+> {
   const client = useNovuContext();
   return useSuspenseQuery({
     ...buildTranslationsRetrieveQuery(
@@ -67,19 +101,6 @@ export function useTranslationsRetrieveSuspense(
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchTranslationsRetrieve(
-  queryClient: QueryClient,
-  client$: NovuCore,
-  request: operations.TranslationControllerGetSingleTranslationRequest,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildTranslationsRetrieveQuery(
-      client$,
-      request,
-    ),
   });
 }
 
@@ -124,56 +145,4 @@ export function invalidateAllTranslationsRetrieve(
     ...filters,
     queryKey: ["@novu/api", "Translations", "retrieve"],
   });
-}
-
-export function buildTranslationsRetrieveQuery(
-  client$: NovuCore,
-  request: operations.TranslationControllerGetSingleTranslationRequest,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<TranslationsRetrieveQueryData>;
-} {
-  return {
-    queryKey: queryKeyTranslationsRetrieve(
-      request.resourceType,
-      request.resourceId,
-      request.locale,
-      { idempotencyKey: request.idempotencyKey },
-    ),
-    queryFn: async function translationsRetrieveQueryFn(
-      ctx,
-    ): Promise<TranslationsRetrieveQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(translationsRetrieve(
-        client$,
-        request,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeyTranslationsRetrieve(
-  resourceType: operations.PathParamResourceType,
-  resourceId: string,
-  locale: string,
-  parameters: { idempotencyKey?: string | undefined },
-): QueryKey {
-  return [
-    "@novu/api",
-    "Translations",
-    "retrieve",
-    resourceType,
-    resourceId,
-    locale,
-    parameters,
-  ];
 }

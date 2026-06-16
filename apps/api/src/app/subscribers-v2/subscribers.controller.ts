@@ -1,16 +1,15 @@
 import {
-  BadRequestException,
   Body,
   ClassSerializerInterceptor,
   Controller,
   Delete,
   Get,
-  NotFoundException,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
   Query,
-  Res,
   UseInterceptors,
 } from '@nestjs/common';
 import { ApiExcludeEndpoint, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
@@ -18,27 +17,46 @@ import {
   CreateOrUpdateSubscriberCommand,
   CreateOrUpdateSubscriberUseCase,
   ExternalApiAccessible,
-  FeatureFlagsService,
   RequirePermissions,
+  SubscriberResponseDto,
   UserSession,
 } from '@novu/application-generic';
 import {
   ApiRateLimitCategoryEnum,
+  ButtonTypeEnum,
   DirectionEnum,
-  FeatureFlagsKeysEnum,
+  MessageActionStatusEnum,
   PermissionsEnum,
   SubscriberCustomData,
   UserSessionData,
 } from '@novu/shared';
-import { Response } from 'express';
 import { RequireAuthentication } from '../auth/framework/auth.decorator';
 import { GetPreferencesResponseDto } from '../inbox/dtos/get-preferences-response.dto';
 import { BulkUpdatePreferencesCommand } from '../inbox/usecases/bulk-update-preferences/bulk-update-preferences.command';
 import { BulkUpdatePreferences } from '../inbox/usecases/bulk-update-preferences/bulk-update-preferences.usecase';
+import { DeleteAllNotificationsCommand } from '../inbox/usecases/delete-all-notifications/delete-all-notifications.command';
+import { DeleteAllNotifications } from '../inbox/usecases/delete-all-notifications/delete-all-notifications.usecase';
+import { DeleteNotificationCommand } from '../inbox/usecases/delete-notification/delete-notification.command';
+import { DeleteNotification } from '../inbox/usecases/delete-notification/delete-notification.usecase';
+import { GetNotificationsCommand } from '../inbox/usecases/get-notifications/get-notifications.command';
+import { GetNotifications } from '../inbox/usecases/get-notifications/get-notifications.usecase';
+import { MarkNotificationAsCommand } from '../inbox/usecases/mark-notification-as/mark-notification-as.command';
+import { MarkNotificationAs } from '../inbox/usecases/mark-notification-as/mark-notification-as.usecase';
+import { MarkNotificationsAsSeenCommand } from '../inbox/usecases/mark-notifications-as-seen/mark-notifications-as-seen.command';
+import { MarkNotificationsAsSeen } from '../inbox/usecases/mark-notifications-as-seen/mark-notifications-as-seen.usecase';
+import { NotificationsCountCommand } from '../inbox/usecases/notifications-count/notifications-count.command';
+import { NotificationsCount } from '../inbox/usecases/notifications-count/notifications-count.usecase';
+import { SnoozeNotificationCommand } from '../inbox/usecases/snooze-notification/snooze-notification.command';
+import { SnoozeNotification } from '../inbox/usecases/snooze-notification/snooze-notification.usecase';
+import { UnsnoozeNotificationCommand } from '../inbox/usecases/unsnooze-notification/unsnooze-notification.command';
+import { UnsnoozeNotification } from '../inbox/usecases/unsnooze-notification/unsnooze-notification.usecase';
+import { UpdateAllNotificationsCommand } from '../inbox/usecases/update-all-notifications/update-all-notifications.command';
+import { UpdateAllNotifications } from '../inbox/usecases/update-all-notifications/update-all-notifications.usecase';
+import { UpdateNotificationActionCommand } from '../inbox/usecases/update-notification-action/update-notification-action.command';
+import { UpdateNotificationAction } from '../inbox/usecases/update-notification-action/update-notification-action.usecase';
 import { ThrottlerCategory } from '../rate-limiting/guards/throttler.decorator';
 import { ApiCommonResponses, ApiResponse } from '../shared/framework/response.decorator';
 import { SdkGroupName, SdkMethodName } from '../shared/framework/swagger/sdk.decorators';
-import { SubscriberResponseDto } from '../subscribers/dtos';
 import {
   GetSubscriberGlobalPreference,
   GetSubscriberGlobalPreferenceCommand,
@@ -48,21 +66,24 @@ import { ListTopicSubscriptionsResponseDto } from '../topics-v2/dtos/list-topic-
 import { ListSubscriberSubscriptionsCommand } from '../topics-v2/usecases/list-subscriber-subscriptions/list-subscriber-subscriptions.command';
 import { ListSubscriberSubscriptionsUseCase } from '../topics-v2/usecases/list-subscriber-subscriptions/list-subscriber-subscriptions.usecase';
 import { BulkUpdateSubscriberPreferencesDto } from './dtos/bulk-update-subscriber-preferences.dto';
+import { ContextKeysQueryDto } from './dtos/context-keys-query.dto';
 import { CreateSubscriberRequestDto } from './dtos/create-subscriber.dto';
-import { GenerateChatOauthUrlRequestDto } from './dtos/generate-chat-oauth-url.dto';
+import { GetSubscriberNotificationsCountQueryDto } from './dtos/get-subscriber-notifications-count-query.dto';
+import { GetSubscriberNotificationsCountResponseDto } from './dtos/get-subscriber-notifications-count-response.dto';
+import { GetSubscriberNotificationsQueryDto } from './dtos/get-subscriber-notifications-query.dto';
+import { GetSubscriberNotificationsResponseDto } from './dtos/get-subscriber-notifications-response.dto';
 import { GetSubscriberPreferencesDto } from './dtos/get-subscriber-preferences.dto';
 import { GetSubscriberPreferencesRequestDto } from './dtos/get-subscriber-preferences-request.dto';
+import { InboxNotificationDto } from './dtos/inbox-notification.dto';
 import { ListSubscribersQueryDto } from './dtos/list-subscribers-query.dto';
 import { ListSubscribersResponseDto } from './dtos/list-subscribers-response.dto';
+import { MarkSubscriberNotificationsAsSeenDto } from './dtos/mark-subscriber-notifications-as-seen.dto';
 import { PatchSubscriberRequestDto } from './dtos/patch-subscriber.dto';
 import { PatchSubscriberPreferencesDto } from './dtos/patch-subscriber-preferences.dto';
 import { RemoveSubscriberResponseDto } from './dtos/remove-subscriber.dto';
+import { SnoozeSubscriberNotificationDto } from './dtos/snooze-subscriber-notification.dto';
 import { SubscriberGlobalPreferenceDto } from './dtos/subscriber-global-preference.dto';
-import { ChatOauthCallbackCommand } from './usecases/chat-oauth-callback/chat-oauth-callback.command';
-import { ResponseTypeEnum } from './usecases/chat-oauth-callback/chat-oauth-callback.response';
-import { ChatOauthCallback } from './usecases/chat-oauth-callback/chat-oauth-callback.usecase';
-import { GenerateChatOauthUrlCommand } from './usecases/generate-chat-oath-url/generate-chat-oauth-url.command';
-import { GenerateChatOauthUrl } from './usecases/generate-chat-oath-url/generate-chat-oauth-url.usecase';
+import { UpdateAllSubscriberNotificationsDto } from './dtos/update-all-subscriber-notifications.dto';
 import { GetSubscriberCommand } from './usecases/get-subscriber/get-subscriber.command';
 import { GetSubscriber } from './usecases/get-subscriber/get-subscriber.usecase';
 import { GetSubscriberPreferencesCommand } from './usecases/get-subscriber-preferences/get-subscriber-preferences.command';
@@ -82,6 +103,7 @@ import { UpdateSubscriberPreferences } from './usecases/update-subscriber-prefer
 @UseInterceptors(ClassSerializerInterceptor)
 @ApiTags('Subscribers')
 @SdkGroupName('Subscribers')
+@RequireAuthentication()
 @ApiCommonResponses()
 export class SubscribersController {
   constructor(
@@ -94,10 +116,17 @@ export class SubscribersController {
     private bulkUpdatePreferencesUsecase: BulkUpdatePreferences,
     private createOrUpdateSubscriberUsecase: CreateOrUpdateSubscriberUseCase,
     private listSubscriberSubscriptionsUsecase: ListSubscriberSubscriptionsUseCase,
-    private chatOauthCallbackUsecase: ChatOauthCallback,
-    private generateChatOauthUrlUsecase: GenerateChatOauthUrl,
-    private featureFlagsService: FeatureFlagsService,
-    private getSubscriberGlobalPreference: GetSubscriberGlobalPreference
+    private getSubscriberGlobalPreference: GetSubscriberGlobalPreference,
+    private getNotificationsUsecase: GetNotifications,
+    private notificationsCountUsecase: NotificationsCount,
+    private markNotificationAsUsecase: MarkNotificationAs,
+    private snoozeNotificationUsecase: SnoozeNotification,
+    private unsnoozeNotificationUsecase: UnsnoozeNotification,
+    private deleteNotificationUsecase: DeleteNotification,
+    private updateNotificationActionUsecase: UpdateNotificationAction,
+    private markNotificationsAsSeenUsecase: MarkNotificationsAsSeen,
+    private updateAllNotificationsUsecase: UpdateAllNotifications,
+    private deleteAllNotificationsUsecase: DeleteAllNotifications
   ) {}
 
   @Get('')
@@ -110,7 +139,6 @@ export class SubscribersController {
   })
   @ApiResponse(ListSubscribersResponseDto)
   @RequirePermissions(PermissionsEnum.SUBSCRIBER_READ)
-  @RequireAuthentication()
   async searchSubscribers(
     @UserSession() user: UserSessionData,
     @Query() query: ListSubscribersQueryDto
@@ -139,10 +167,10 @@ export class SubscribersController {
     description: `Retrieve a subscriber by its unique key identifier **subscriberId**. 
     **subscriberId** field is required.`,
   })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
   @ApiResponse(SubscriberResponseDto)
   @SdkMethodName('retrieve')
   @RequirePermissions(PermissionsEnum.SUBSCRIBER_READ)
-  @RequireAuthentication()
   async getSubscriber(
     @UserSession() user: UserSessionData,
     @Param('subscriberId') subscriberId: string
@@ -175,7 +203,6 @@ export class SubscribersController {
   })
   @SdkMethodName('create')
   @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
-  @RequireAuthentication()
   async createSubscriber(
     @UserSession() user: UserSessionData,
     @Body() body: CreateSubscriberRequestDto,
@@ -186,13 +213,13 @@ export class SubscribersController {
         environmentId: user.environmentId,
         organizationId: user.organizationId,
         subscriberId: body.subscriberId,
-        email: body.email || undefined,
-        firstName: body.firstName || undefined,
-        lastName: body.lastName || undefined,
-        phone: body.phone || undefined,
-        avatar: body.avatar || undefined,
-        locale: body.locale || undefined,
-        timezone: body.timezone || undefined,
+        email: body.email,
+        firstName: body.firstName,
+        lastName: body.lastName,
+        phone: body.phone,
+        avatar: body.avatar,
+        locale: body.locale,
+        timezone: body.timezone,
         // TODO: Change shared type to
         data: (body.data || {}) as SubscriberCustomData,
         /*
@@ -213,10 +240,10 @@ export class SubscribersController {
     description: `Update a subscriber by its unique key identifier **subscriberId**. 
     **subscriberId** is a required field, rest other fields are optional`,
   })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
   @ApiResponse(SubscriberResponseDto)
   @SdkMethodName('patch')
   @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
-  @RequireAuthentication()
   async patchSubscriber(
     @UserSession() user: UserSessionData,
     @Param('subscriberId') subscriberId: string,
@@ -234,16 +261,16 @@ export class SubscribersController {
   }
 
   @Delete('/:subscriberId')
-  @ApiResponse(RemoveSubscriberResponseDto, 200)
   @ExternalApiAccessible()
   @ApiOperation({
     summary: 'Delete a subscriber',
     description: `Deletes a subscriber entity from the Novu platform along with associated messages, preferences, and topic subscriptions. 
       **subscriberId** is a required field.`,
   })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @ApiResponse(RemoveSubscriberResponseDto, 200)
   @SdkMethodName('delete')
   @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
-  @RequireAuthentication()
   async removeSubscriber(
     @UserSession() user: UserSessionData,
     @Param('subscriberId') subscriberId: string
@@ -264,11 +291,11 @@ export class SubscribersController {
     description: `Retrieve subscriber channel preferences by its unique key identifier **subscriberId**. 
     This API returns all five channels preferences for all workflows and global preferences.`,
   })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
   @ApiResponse(GetSubscriberPreferencesDto)
   @SdkGroupName('Subscribers.Preferences')
   @SdkMethodName('list')
   @RequirePermissions(PermissionsEnum.SUBSCRIBER_READ)
-  @RequireAuthentication()
   async getSubscriberPreferences(
     @UserSession() user: UserSessionData,
     @Param('subscriberId') subscriberId: string,
@@ -280,6 +307,7 @@ export class SubscribersController {
         organizationId: user.organizationId,
         subscriberId,
         criticality: query.criticality,
+        contextKeys: query.contextKeys,
       })
     );
   }
@@ -290,10 +318,10 @@ export class SubscribersController {
     summary: 'Retrieve subscriber global preference',
     description: `Retrieve subscriber global preference. This API returns all five global channels preferences and subscriber schedule.`,
   })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
   @ApiResponse(SubscriberGlobalPreferenceDto)
   @SdkGroupName('Subscribers.Preferences')
   @RequirePermissions(PermissionsEnum.SUBSCRIBER_READ)
-  @RequireAuthentication()
   @SdkMethodName('globalPreference')
   @ApiExcludeEndpoint()
   async getGlobalPreference(
@@ -319,11 +347,11 @@ export class SubscribersController {
     description: `Bulk update subscriber preferences by its unique key identifier **subscriberId**. 
     This API allows updating multiple workflow preferences in a single request.`,
   })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
   @ApiResponse(GetPreferencesResponseDto, 200, true)
   @SdkGroupName('Subscribers.Preferences')
   @SdkMethodName('bulkUpdate')
   @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
-  @RequireAuthentication()
   async bulkUpdateSubscriberPreferences(
     @UserSession() user: UserSessionData,
     @Param('subscriberId') subscriberId: string,
@@ -331,11 +359,11 @@ export class SubscribersController {
   ): Promise<GetPreferencesResponseDto[]> {
     const preferences = body.preferences.map((preference) => ({
       workflowId: preference.workflowId,
-      email: preference.channels.email,
-      sms: preference.channels.sms,
-      in_app: preference.channels.in_app,
-      push: preference.channels.push,
-      chat: preference.channels.chat,
+      email: preference.channels?.email,
+      sms: preference.channels?.sms,
+      in_app: preference.channels?.in_app,
+      push: preference.channels?.push,
+      chat: preference.channels?.chat,
     }));
 
     return await this.bulkUpdatePreferencesUsecase.execute(
@@ -344,6 +372,7 @@ export class SubscribersController {
         subscriberId,
         environmentId: user.environmentId,
         preferences,
+        context: body.context,
       })
     );
   }
@@ -356,11 +385,11 @@ export class SubscribersController {
     **workflowId** is optional field, if provided, this API will update that workflow preference, 
     otherwise it will update global preferences`,
   })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
   @ApiResponse(GetSubscriberPreferencesDto)
   @SdkGroupName('Subscribers.Preferences')
   @SdkMethodName('update')
   @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
-  @RequireAuthentication()
   async updateSubscriberPreferences(
     @UserSession() user: UserSessionData,
     @Param('subscriberId') subscriberId: string,
@@ -374,6 +403,7 @@ export class SubscribersController {
         workflowIdOrInternalId: body.workflowId,
         channels: body.channels,
         schedule: body.schedule,
+        context: body.context,
       })
     );
   }
@@ -390,7 +420,6 @@ export class SubscribersController {
   @SdkGroupName('Subscribers.Topics')
   @SdkMethodName('list')
   @RequirePermissions(PermissionsEnum.SUBSCRIBER_READ)
-  @RequireAuthentication()
   async listSubscriberTopics(
     @UserSession() user: UserSessionData,
     @Param('subscriberId') subscriberId: string,
@@ -402,6 +431,7 @@ export class SubscribersController {
         organizationId: user.organizationId,
         subscriberId,
         topicKey: query.key,
+        contextKeys: query.contextKeys,
         limit: query.limit ? Number(query.limit) : 10,
         after: query.after,
         before: query.before,
@@ -412,82 +442,530 @@ export class SubscribersController {
     );
   }
 
-  @Post('/chat/oauth')
+  @Get('/:subscriberId/notifications')
+  @ExternalApiAccessible()
   @ApiOperation({
-    summary: 'Generate chat OAuth URL',
-    description: `Generate an OAuth URL for chat integrations like Slack. 
-    The subscriber will use this URL to authorize the chat integration.`,
+    summary: 'Retrieve subscriber notifications',
+    description: `Retrieve in-app (inbox) notifications for a subscriber by its unique key identifier **subscriberId**. 
+    Supports filtering by tags, read/archived/snoozed/seen state, data attributes, severity, date range, and context keys.`,
   })
-  @ApiResponse(String)
-  @ApiExcludeEndpoint()
-  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
-  @RequireAuthentication()
-  async getChatOAuthUrl(
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @ApiResponse(GetSubscriberNotificationsResponseDto)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('list')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_READ)
+  async getSubscriberNotifications(
     @UserSession() user: UserSessionData,
-    @Body() body: GenerateChatOauthUrlRequestDto
-  ): Promise<string> {
-    await this.checkFeatureEnabled(user);
+    @Param('subscriberId') subscriberId: string,
+    @Query() query: GetSubscriberNotificationsQueryDto
+  ): Promise<GetSubscriberNotificationsResponseDto> {
+    return await this.getNotificationsUsecase.execute(
+      GetNotificationsCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        contextKeys: query.contextKeys,
+        limit: query.limit,
+        offset: query.offset,
+        after: query.after,
+        tags: query.tags,
+        read: query.read,
+        archived: query.archived,
+        snoozed: query.snoozed,
+        seen: query.seen,
+        data: query.data,
+        severity: query.severity,
+        createdGte: query.createdGte,
+        createdLte: query.createdLte,
+      })
+    );
+  }
 
-    return await this.generateChatOauthUrlUsecase.execute(
-      GenerateChatOauthUrlCommand.create({
+  @Get('/:subscriberId/notifications/count')
+  @ExternalApiAccessible()
+  @ApiOperation({
+    summary: 'Retrieve subscriber notifications count',
+    description: `Retrieve count of in-app (inbox) notifications for a subscriber by its unique key identifier **subscriberId**. 
+    Supports multiple filters to count in-app (inbox) notifications by different criteria, including context keys.`,
+  })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @ApiResponse(GetSubscriberNotificationsCountResponseDto, 200, true)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('count')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_READ)
+  async getSubscriberNotificationsCount(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Query() query: GetSubscriberNotificationsCountQueryDto
+  ): Promise<{ data: GetSubscriberNotificationsCountResponseDto[] }> {
+    return await this.notificationsCountUsecase.execute(
+      NotificationsCountCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        filters: query.filters,
+      })
+    );
+  }
+
+  @Patch('/:subscriberId/notifications/:notificationId/read')
+  @ExternalApiAccessible()
+  @ApiOperation({
+    summary: 'Mark a notification as read',
+    description: 'Mark a specific in-app (inbox) notification as read by its unique identifier **notificationId**.',
+  })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @ApiParam({ name: 'notificationId', description: 'The identifier of the notification', type: String })
+  @ApiQuery({ name: 'contextKeys', required: false, type: [String], description: 'Context keys for filtering' })
+  @ApiResponse(InboxNotificationDto, 200, false, false)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('markAsRead')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
+  async markNotificationAsRead(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Param('notificationId') notificationId: string,
+    @Query() query: ContextKeysQueryDto
+  ): Promise<InboxNotificationDto> {
+    return await this.markNotificationAsUsecase.execute(
+      MarkNotificationAsCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        contextKeys: query.contextKeys,
+        notificationId,
+        read: true,
+      })
+    );
+  }
+
+  @Patch('/:subscriberId/notifications/:notificationId/unread')
+  @ExternalApiAccessible()
+  @ApiOperation({
+    summary: 'Mark a notification as unread',
+    description: 'Mark a specific in-app (inbox) notification as unread by its unique identifier **notificationId**.',
+  })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @ApiParam({ name: 'notificationId', description: 'The identifier of the notification', type: String })
+  @ApiQuery({ name: 'contextKeys', required: false, type: [String], description: 'Context keys for filtering' })
+  @ApiResponse(InboxNotificationDto, 200, false, false)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('markAsUnread')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
+  async markNotificationAsUnread(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Param('notificationId') notificationId: string,
+    @Query() query: ContextKeysQueryDto
+  ): Promise<InboxNotificationDto> {
+    return await this.markNotificationAsUsecase.execute(
+      MarkNotificationAsCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        contextKeys: query.contextKeys,
+        notificationId,
+        read: false,
+      })
+    );
+  }
+
+  @Patch('/:subscriberId/notifications/:notificationId/archive')
+  @ExternalApiAccessible()
+  @ApiOperation({
+    summary: 'Archive a notification',
+    description: 'Archive a specific in-app (inbox) notification by its unique identifier **notificationId**.',
+  })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @ApiParam({ name: 'notificationId', description: 'The identifier of the notification', type: String })
+  @ApiQuery({ name: 'contextKeys', required: false, type: [String], description: 'Context keys for filtering' })
+  @ApiResponse(InboxNotificationDto, 200, false, false)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('archive')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
+  async archiveNotification(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Param('notificationId') notificationId: string,
+    @Query() query: ContextKeysQueryDto
+  ): Promise<InboxNotificationDto> {
+    return await this.markNotificationAsUsecase.execute(
+      MarkNotificationAsCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        contextKeys: query.contextKeys,
+        notificationId,
+        archived: true,
+      })
+    );
+  }
+
+  @Patch('/:subscriberId/notifications/:notificationId/unarchive')
+  @ExternalApiAccessible()
+  @ApiOperation({
+    summary: 'Unarchive a notification',
+    description: 'Unarchive a specific in-app (inbox) notification by its unique identifier **notificationId**.',
+  })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @ApiParam({ name: 'notificationId', description: 'The identifier of the notification', type: String })
+  @ApiQuery({ name: 'contextKeys', required: false, type: [String], description: 'Context keys for filtering' })
+  @ApiResponse(InboxNotificationDto, 200, false, false)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('unarchive')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
+  async unarchiveNotification(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Param('notificationId') notificationId: string,
+    @Query() query: ContextKeysQueryDto
+  ): Promise<InboxNotificationDto> {
+    return await this.markNotificationAsUsecase.execute(
+      MarkNotificationAsCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        contextKeys: query.contextKeys,
+        notificationId,
+        archived: false,
+      })
+    );
+  }
+
+  @Patch('/:subscriberId/notifications/:notificationId/snooze')
+  @ExternalApiAccessible()
+  @ApiOperation({
+    summary: 'Snooze a notification',
+    description:
+      'Snooze a specific in-app (inbox) notification by its unique identifier **notificationId** until a specified time.',
+  })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @ApiParam({ name: 'notificationId', description: 'The identifier of the notification', type: String })
+  @ApiQuery({ name: 'contextKeys', required: false, type: [String], description: 'Context keys for filtering' })
+  @ApiResponse(InboxNotificationDto, 200, false, false)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('snooze')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
+  async snoozeNotification(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Param('notificationId') notificationId: string,
+    @Body() body: SnoozeSubscriberNotificationDto,
+    @Query() query: ContextKeysQueryDto
+  ): Promise<InboxNotificationDto> {
+    return await this.snoozeNotificationUsecase.execute(
+      SnoozeNotificationCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        contextKeys: query.contextKeys,
+        notificationId,
+        snoozeUntil: body.snoozeUntil,
+      })
+    );
+  }
+
+  @Patch('/:subscriberId/notifications/:notificationId/unsnooze')
+  @ExternalApiAccessible()
+  @ApiOperation({
+    summary: 'Unsnooze a notification',
+    description: 'Unsnooze a specific in-app (inbox) notification by its unique identifier **notificationId**.',
+  })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @ApiParam({ name: 'notificationId', description: 'The identifier of the notification', type: String })
+  @ApiQuery({ name: 'contextKeys', required: false, type: [String], description: 'Context keys for filtering' })
+  @ApiResponse(InboxNotificationDto, 200, false, false)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('unsnooze')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
+  async unsnoozeNotification(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Param('notificationId') notificationId: string,
+    @Query() query: ContextKeysQueryDto
+  ): Promise<InboxNotificationDto> {
+    return await this.unsnoozeNotificationUsecase.execute(
+      UnsnoozeNotificationCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        contextKeys: query.contextKeys,
+        notificationId,
+      })
+    );
+  }
+
+  @Delete('/:subscriberId/notifications/:notificationId')
+  @ExternalApiAccessible()
+  @ApiOperation({
+    summary: 'Delete a notification',
+    description:
+      'Delete a specific in-app (inbox) notification permanently by its unique identifier **notificationId**.',
+  })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @ApiParam({ name: 'notificationId', description: 'The identifier of the notification', type: String })
+  @ApiQuery({ name: 'contextKeys', required: false, type: [String], description: 'Context keys for filtering' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('delete')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
+  async deleteNotification(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Param('notificationId') notificationId: string,
+    @Query() query: ContextKeysQueryDto
+  ): Promise<void> {
+    await this.deleteNotificationUsecase.execute(
+      DeleteNotificationCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        contextKeys: query.contextKeys,
+        notificationId,
+      })
+    );
+  }
+
+  @Patch('/:subscriberId/notifications/:notificationId/actions/:actionType/complete')
+  @ExternalApiAccessible()
+  @ApiOperation({
+    summary: 'Complete a notification action',
+    description:
+      "Mark a single in-app (inbox) notification's action (primary or secondary) as completed by its unique identifier **notificationId** and action type **actionType**.",
+  })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @ApiParam({ name: 'notificationId', description: 'The identifier of the notification', type: String })
+  @ApiParam({
+    name: 'actionType',
+    description: 'The type of action (primary or secondary)',
+    enum: ButtonTypeEnum,
+    type: String,
+  })
+  @ApiQuery({ name: 'contextKeys', required: false, type: [String], description: 'Context keys for filtering' })
+  @ApiResponse(InboxNotificationDto, 200, false, false)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('completeAction')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
+  async completeNotificationAction(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Param('notificationId') notificationId: string,
+    @Param('actionType') actionType: ButtonTypeEnum,
+    @Query() query: ContextKeysQueryDto
+  ): Promise<InboxNotificationDto> {
+    return await this.updateNotificationActionUsecase.execute(
+      UpdateNotificationActionCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        contextKeys: query.contextKeys,
+        notificationId,
+        actionType,
+        actionStatus: MessageActionStatusEnum.DONE,
+      })
+    );
+  }
+
+  @Patch('/:subscriberId/notifications/:notificationId/actions/:actionType/revert')
+  @ExternalApiAccessible()
+  @ApiOperation({
+    summary: 'Revert a notification action',
+    description:
+      "Revert a single in-app (inbox) notification's action (primary or secondary) to pending state by its unique identifier **notificationId** and action type **actionType**.",
+  })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @ApiParam({ name: 'notificationId', description: 'The identifier of the notification', type: String })
+  @ApiParam({
+    name: 'actionType',
+    description: 'The type of action (primary or secondary)',
+    enum: ButtonTypeEnum,
+    type: String,
+  })
+  @ApiQuery({ name: 'contextKeys', required: false, type: [String], description: 'Context keys for filtering' })
+  @ApiResponse(InboxNotificationDto, 200, false, false)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('revertAction')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
+  async revertNotificationAction(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Param('notificationId') notificationId: string,
+    @Param('actionType') actionType: ButtonTypeEnum,
+    @Query() query: ContextKeysQueryDto
+  ): Promise<InboxNotificationDto> {
+    return await this.updateNotificationActionUsecase.execute(
+      UpdateNotificationActionCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        contextKeys: query.contextKeys,
+        notificationId,
+        actionType,
+        actionStatus: MessageActionStatusEnum.PENDING,
+      })
+    );
+  }
+
+  @Post('/:subscriberId/notifications/seen')
+  @ExternalApiAccessible()
+  @ApiOperation({
+    summary: 'Mark notifications as seen',
+    description: 'Mark specific and multiple in-app (inbox) notifications as seen. Supports context-based filtering.',
+  })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('markAsSeen')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
+  async markNotificationsAsSeen(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Body() body: MarkSubscriberNotificationsAsSeenDto
+  ): Promise<void> {
+    await this.markNotificationsAsSeenUsecase.execute(
+      MarkNotificationsAsSeenCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        contextKeys: body.contextKeys,
+        notificationIds: body.notificationIds,
+        tags: body.tags,
+        data: body.data,
+      })
+    );
+  }
+
+  @Post('/:subscriberId/notifications/read')
+  @ExternalApiAccessible()
+  @ApiOperation({
+    summary: 'Mark all notifications as read',
+    description:
+      'Mark all in-app (inbox) notifications matching the specified filters as read. Supports context-based filtering.',
+  })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('markAllAsRead')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
+  async markAllNotificationsAsRead(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Body() body: UpdateAllSubscriberNotificationsDto
+  ): Promise<void> {
+    await this.updateAllNotificationsUsecase.execute(
+      UpdateAllNotificationsCommand.create({
         environmentId: user.environmentId,
         organizationId: user.organizationId,
-        subscriberId: body.subscriberId,
-        integrationIdentifier: body.integrationIdentifier,
-        providerId: body.providerId,
+        subscriberId,
+        contextKeys: body.contextKeys,
+        from: {
+          tags: body.tags,
+          data: body.data,
+        },
+        to: {
+          read: true,
+        },
       })
     );
   }
 
-  @Get('/chat/oauth/callback')
+  @Post('/:subscriberId/notifications/archive')
+  @ExternalApiAccessible()
   @ApiOperation({
-    summary: 'Handle chat OAuth callback',
-    description: `Generic OAuth callback handler for all chat integrations (Slack, Teams, Discord, etc.). 
-    This endpoint processes the authorization code and stores the connection for any supported chat provider.`,
+    summary: 'Archive all notifications',
+    description:
+      'Archive all in-app (inbox) notifications matching the specified filters. Supports context-based filtering.',
   })
-  @ApiExcludeEndpoint()
-  async handleChatOAuthCallback(
-    @Res() res: Response,
-    @Query('code') providerCode: string,
-    @Query('state') state: string,
-    @Query('error') error?: string,
-    @Query('error_description') errorDescription?: string
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('archiveAll')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
+  async archiveAllNotifications(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Body() body: UpdateAllSubscriberNotificationsDto
   ): Promise<void> {
-    if (error) {
-      throw new BadRequestException(`OAuth error: ${error}${errorDescription ? ` - ${errorDescription}` : ''}`);
-    }
-
-    if (!providerCode || !state) {
-      throw new BadRequestException('Missing required OAuth parameters: code and state');
-    }
-
-    const result = await this.chatOauthCallbackUsecase.execute(
-      ChatOauthCallbackCommand.create({
-        providerCode,
-        state,
+    await this.updateAllNotificationsUsecase.execute(
+      UpdateAllNotificationsCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        contextKeys: body.contextKeys,
+        from: {
+          tags: body.tags,
+          data: body.data,
+        },
+        to: {
+          archived: true,
+        },
       })
     );
-
-    if (result.type === ResponseTypeEnum.HTML) {
-      res.setHeader('Content-Type', 'text/html');
-      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'");
-      res.send(result.result);
-
-      return;
-    }
-
-    res.redirect(result.result);
   }
 
-  private async checkFeatureEnabled(user: UserSessionData) {
-    const isEnabled = await this.featureFlagsService.getFlag({
-      key: FeatureFlagsKeysEnum.IS_SLACK_TEAMS_ENABLED,
-      defaultValue: false,
-      organization: { _id: user.organizationId },
-    });
+  @Post('/:subscriberId/notifications/read-archive')
+  @ExternalApiAccessible()
+  @ApiOperation({
+    summary: 'Archive all read notifications',
+    description:
+      'Archive all read in-app (inbox) notifications matching the specified filters. Supports context-based filtering.',
+  })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('archiveAllRead')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
+  async archiveAllReadNotifications(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Body() body: UpdateAllSubscriberNotificationsDto
+  ): Promise<void> {
+    await this.updateAllNotificationsUsecase.execute(
+      UpdateAllNotificationsCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        contextKeys: body.contextKeys,
+        from: {
+          tags: body.tags,
+          read: true,
+          data: body.data,
+        },
+        to: {
+          archived: true,
+        },
+      })
+    );
+  }
 
-    if (!isEnabled) {
-      throw new NotFoundException('Feature not enabled');
-    }
+  @Post('/:subscriberId/notifications/delete')
+  @ExternalApiAccessible()
+  @ApiOperation({
+    summary: 'Delete all notifications',
+    description:
+      'Permanently delete all in-app (inbox) notifications matching the specified filters. Supports context-based filtering.',
+  })
+  @ApiParam({ name: 'subscriberId', description: 'The identifier of the subscriber', type: String })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @SdkGroupName('Subscribers.Notifications')
+  @SdkMethodName('deleteAll')
+  @RequirePermissions(PermissionsEnum.SUBSCRIBER_WRITE)
+  async deleteAllNotifications(
+    @UserSession() user: UserSessionData,
+    @Param('subscriberId') subscriberId: string,
+    @Body() body: UpdateAllSubscriberNotificationsDto
+  ): Promise<void> {
+    await this.deleteAllNotificationsUsecase.execute(
+      DeleteAllNotificationsCommand.create({
+        organizationId: user.organizationId,
+        subscriberId,
+        environmentId: user.environmentId,
+        contextKeys: body.contextKeys,
+        filters: {
+          tags: body.tags,
+          data: body.data,
+        },
+      })
+    );
   }
 }

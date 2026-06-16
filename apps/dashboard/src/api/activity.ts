@@ -9,7 +9,9 @@ export type ActivityFilters = {
   transactionId?: string;
   dateRange?: string;
   topicKey?: string;
+  subscriptionId?: string;
   severity?: SeverityLevelEnum[];
+  contextKeys?: string[];
 };
 
 export interface ActivityResponse {
@@ -50,10 +52,13 @@ export interface GetWorkflowRunsDto {
   steps: StepRunDto[];
   severity: SeverityLevelEnum;
   critical: boolean;
+  contextKeys?: string[];
+  topics?: { _topicId: string; topicKey: string }[];
 }
 
 export type GetWorkflowRunResponse = GetWorkflowRunsDto & {
   payload: Record<string, unknown>;
+  overrides?: Record<string, unknown>;
 };
 
 export interface GetWorkflowRunsResponseDto {
@@ -63,6 +68,11 @@ export interface GetWorkflowRunsResponseDto {
 }
 
 function mapWorkflowRunToActivity(workflowRun: GetWorkflowRunResponse | GetWorkflowRunsDto): IActivity {
+  const resolvedOverrides = ('overrides' in workflowRun ? (workflowRun.overrides ?? {}) : {}) as Record<
+    string,
+    Record<string, unknown>
+  >;
+
   return {
     _id: workflowRun.id,
     severity: workflowRun.severity,
@@ -80,6 +90,8 @@ function mapWorkflowRunToActivity(workflowRun: GetWorkflowRunResponse | GetWorkf
     tags: [], // Not available in workflow runs, empty array for compatibility
     createdAt: workflowRun.createdAt,
     updatedAt: workflowRun.updatedAt,
+    contextKeys: workflowRun.contextKeys || [],
+    topics: workflowRun.topics || [],
     template: {
       _id: workflowRun.workflowId,
       name: workflowRun.workflowName,
@@ -144,8 +156,8 @@ function mapWorkflowRunToActivity(workflowRun: GetWorkflowRunResponse | GetWorkf
       status: step.status === 'queued' ? 'pending' : (step.status as any),
       _templateId: workflowRun.workflowId,
       payload: 'payload' in workflowRun ? workflowRun.payload : {},
-      providerId: undefined,
-      overrides: {},
+      providerId: step.providerId,
+      overrides: resolvedOverrides,
       transactionId: workflowRun.transactionId,
       createdAt: workflowRun.createdAt,
       updatedAt: workflowRun.updatedAt,
@@ -229,6 +241,16 @@ export function getActivityList({
     searchParams.append('topicKey', filters.topicKey);
   }
 
+  if (filters?.subscriptionId) {
+    searchParams.append('subscriptionId', filters.subscriptionId);
+  }
+
+  if (filters?.contextKeys?.length) {
+    for (const key of filters.contextKeys) {
+      searchParams.append('contextKeys', key);
+    }
+  }
+
   if (filters?.dateRange) {
     const after = new Date(Date.now() - getDateRangeInMs(filters?.dateRange));
     searchParams.append('after', after.toISOString());
@@ -284,6 +306,10 @@ export async function getWorkflowRunsList({
     searchParams.append('topicKey', filters.topicKey);
   }
 
+  if (filters?.subscriptionId) {
+    searchParams.append('subscriptionId', filters.subscriptionId);
+  }
+
   // Use cursor if provided, otherwise fall back to page-based
   if (cursor) {
     searchParams.append('cursor', cursor);
@@ -329,6 +355,12 @@ export async function getWorkflowRunsList({
     }
   }
 
+  if (filters?.contextKeys?.length) {
+    for (const key of filters.contextKeys) {
+      searchParams.append('contextKeys', key);
+    }
+  }
+
   const response = await get<GetWorkflowRunsResponseDto>(`/activity/workflow-runs?${searchParams.toString()}`, {
     environment,
     signal,
@@ -361,16 +393,24 @@ export async function getWorkflowRun(workflowRunId: string, environment: IEnviro
   return mapWorkflowRunToActivity(data.data);
 }
 
+export type WorkflowRunsCountPeriod = {
+  start: string;
+  end: string;
+};
+
 export async function getWorkflowRunsCount({
   environment,
   filters,
+  period,
   signal,
 }: {
   environment: IEnvironment;
   filters?: ActivityFilters;
+  period?: WorkflowRunsCountPeriod;
   signal?: AbortSignal;
 }): Promise<number> {
   let createdAtGte: string | undefined;
+  let createdAtLte: string | undefined;
   let workflowIds: string[] | undefined;
   let subscriberIds: string[] | undefined;
   let transactionIds: string[] | undefined;
@@ -394,14 +434,16 @@ export async function getWorkflowRunsCount({
   }
 
   if (filters?.transactionId) {
-    // Parse comma-delimited string into array for backend
     transactionIds = filters.transactionId
       .split(',')
       .map((id) => id.trim())
       .filter(Boolean);
   }
 
-  if (filters?.dateRange) {
+  if (period) {
+    createdAtGte = period.start;
+    createdAtLte = period.end;
+  } else if (filters?.dateRange) {
     const after = new Date(Date.now() - getDateRangeInMs(filters?.dateRange));
     createdAtGte = after.toISOString();
   }
@@ -409,6 +451,7 @@ export async function getWorkflowRunsCount({
   const response = await getCharts({
     environment,
     createdAtGte,
+    createdAtLte,
     reportType: [ReportTypeEnum.WORKFLOW_RUNS_COUNT],
     workflowIds,
     subscriberIds,

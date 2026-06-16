@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { TopicEntity, TopicRepository, TopicSubscribersRepository } from '@novu/dal';
 import {
+  FeatureFlagsKeysEnum,
   ISubscribersDefine,
   ITopic,
   SubscriberSourceEnum,
@@ -10,18 +11,18 @@ import {
 } from '@novu/shared';
 
 import { PinoLogger } from 'nestjs-pino';
+import { SubscriberTopicPreference } from '../../dtos';
 import { InstrumentUsecase } from '../../instrumentation';
 import { CacheService, FeatureFlagsService } from '../../services';
-import type { EventType, Trace } from '../../services/analytic-logs';
+import type { EventType } from '../../services/analytic-logs';
 import { LogRepository, mapEventTypeToTitle, TraceLogRepository } from '../../services/analytic-logs';
+import { RequestTraceInput } from '../../services/analytic-logs/trace-log';
 import { SubscriberProcessQueueService } from '../../services/queues/subscriber-process-queue.service';
 import { TriggerBase } from '../trigger-base';
 import { TriggerMulticastCommand } from './trigger-multicast.command';
 
 const QUEUE_CHUNK_SIZE = Number(process.env.MULTICAST_QUEUE_CHUNK_SIZE) || 100;
 const SUBSCRIBER_TOPIC_DISTINCT_BATCH_SIZE = Number(process.env.SUBSCRIBER_TOPIC_DISTINCT_BATCH_SIZE) || 100;
-
-const isNotTopic = (recipient: TriggerRecipient): recipient is TriggerRecipientSubscriber => !isTopic(recipient);
 
 const isTopic = (recipient: TriggerRecipient): recipient is ITopic =>
   (recipient as ITopic).type && (recipient as ITopic).type === TriggerRecipientsTypeEnum.TOPIC;
@@ -37,7 +38,7 @@ export class TriggerMulticast extends TriggerBase {
     protected logger: PinoLogger,
     private traceLogRepository: TraceLogRepository
   ) {
-    super(subscriberProcessQueueService, cacheService, featureFlagsService, logger, QUEUE_CHUNK_SIZE);
+    super(subscriberProcessQueueService, cacheService, logger, QUEUE_CHUNK_SIZE);
     this.logger.setContext(this.constructor.name);
   }
 
@@ -48,7 +49,7 @@ export class TriggerMulticast extends TriggerBase {
     try {
       const mappedRecipients = Array.isArray(recipients) ? recipients : [recipients];
 
-      const { singleSubscribers, topicKeys } = splitByRecipientType(mappedRecipients);
+      const { singleSubscribers, topicKeys, topicExclusions } = splitByRecipientType(mappedRecipients);
       const subscribersToProcess = Array.from(singleSubscribers.values());
       let totalProcessed = 0;
 
@@ -63,35 +64,91 @@ export class TriggerMulticast extends TriggerBase {
 
       const topicIds = topics.map((topic) => topic._id);
       const singleSubscriberIds = Array.from(singleSubscribers.keys());
-      let subscribersList: { subscriberId: string; topics: Pick<TopicEntity, '_id' | 'key'>[] }[] = [];
+      const allTopicExcludedSubscribers = Array.from(
+        new Set([...Array.from(topicExclusions.values()).flatMap((set) => Array.from(set))])
+      );
+
+      // Check feature flag and resolve contextKeys
+      const useContextFiltering = await this.featureFlagsService.getFlag({
+        key: FeatureFlagsKeysEnum.IS_CONTEXT_PREFERENCES_ENABLED,
+        defaultValue: false,
+        organization: { _id: organizationId },
+      });
+
+      // Only pass contextKeys if feature flag is enabled
+      const contextKeysForQuery = useContextFiltering ? command.contextKeys : undefined;
+
       const getTopicDistinctSubscribersGenerator = this.topicSubscribersRepository.getTopicDistinctSubscribers({
         query: {
           _organizationId: organizationId,
           _environmentId: environmentId,
           topicIds,
-          excludeSubscribers: singleSubscriberIds,
+          excludeSubscribers: [...singleSubscriberIds, ...allTopicExcludedSubscribers],
+          contextKeys: contextKeysForQuery,
         },
         batchSize: SUBSCRIBER_TOPIC_DISTINCT_BATCH_SIZE,
       });
 
-      for await (const externalSubscriberIdGroup of getTopicDistinctSubscribersGenerator) {
-        const externalSubscriberId = externalSubscriberIdGroup._id;
+      const subscribersMap = new Map<
+        string,
+        {
+          subscriberId: string;
+          topics: Array<SubscriberTopicPreference>;
+        }
+      >();
+
+      for await (const subscription of getTopicDistinctSubscribersGenerator) {
+        const externalSubscriberId = subscription.subscriberId;
+        const internalSubscriptionId = subscription._id.toString();
+        const subscriptionId = subscription.identifier;
+        const topicId = subscription._topicId.toString();
 
         if (actor && actor.subscriberId === externalSubscriberId) {
           continue;
         }
 
-        subscribersList.push({
-          subscriberId: externalSubscriberId,
-          topics: topics?.map((topic) => ({ _id: topic._id, key: topic.key })),
-        });
-
-        if (subscribersList.length === SUBSCRIBER_TOPIC_DISTINCT_BATCH_SIZE) {
-          await this.sendToProcessSubscriberService(command, subscribersList, SubscriberSourceEnum.TOPIC);
-          totalProcessed += subscribersList.length;
-
-          subscribersList = [];
+        const topic = topics.find((t) => t._id === topicId);
+        if (!topic) {
+          continue;
         }
+
+        const existingSubscriber = subscribersMap.get(externalSubscriberId);
+        if (existingSubscriber) {
+          if (!existingSubscriber.topics.some((t) => t.subscriptionIdentifier === subscriptionId)) {
+            existingSubscriber.topics.push({
+              _topicId: topic._id,
+              topicKey: topic.key,
+              _topicSubscriptionId: internalSubscriptionId,
+              subscriptionIdentifier: subscriptionId,
+            });
+          }
+        } else {
+          subscribersMap.set(externalSubscriberId, {
+            subscriberId: externalSubscriberId,
+            topics: [
+              {
+                _topicId: topic._id,
+                topicKey: topic.key,
+                _topicSubscriptionId: internalSubscriptionId,
+                subscriptionIdentifier: subscriptionId,
+              },
+            ],
+          });
+        }
+
+        if (subscribersMap.size >= SUBSCRIBER_TOPIC_DISTINCT_BATCH_SIZE) {
+          const batchToProcess = Array.from(subscribersMap.values());
+          await this.sendToProcessSubscriberService(command, batchToProcess, SubscriberSourceEnum.TOPIC);
+          totalProcessed += batchToProcess.length;
+
+          subscribersMap.clear();
+        }
+      }
+
+      if (subscribersMap.size > 0) {
+        const finalBatch = Array.from(subscribersMap.values());
+        await this.sendToProcessSubscriberService(command, finalBatch, SubscriberSourceEnum.TOPIC);
+        totalProcessed += finalBatch.length;
       }
 
       await this.createMulticastTrace(
@@ -108,11 +165,6 @@ export class TriggerMulticast extends TriggerBase {
           topicsUsed: topics.length,
         }
       );
-
-      if (subscribersList.length > 0) {
-        await this.sendToProcessSubscriberService(command, subscribersList, SubscriberSourceEnum.TOPIC);
-        totalProcessed += subscribersList.length;
-      }
     } catch (e) {
       const error = e as Error;
       await this.createMulticastTrace(
@@ -128,16 +180,19 @@ export class TriggerMulticast extends TriggerBase {
         }
       );
 
-      this.logger.error(
-        {
-          transactionId: command.transactionId,
-          organization: command.organizationId,
-          triggerIdentifier: command.identifier,
-          userId: command.userId,
-          error: e,
-        },
-        'Unexpected error has occurred when processing multicast'
-      );
+      const logData = {
+        transactionId: command.transactionId,
+        organization: command.organizationId,
+        triggerIdentifier: command.identifier,
+        userId: command.userId,
+        error: e,
+      };
+
+      if (isSubscriberIdValidationError(e)) {
+        this.logger.debug(logData, error.message);
+      } else {
+        this.logger.error(logData, 'Unexpected error has occurred when processing multicast');
+      }
 
       throw e;
     }
@@ -148,14 +203,14 @@ export class TriggerMulticast extends TriggerBase {
     eventType: EventType,
     status: 'success' | 'error' | 'warning' = 'success',
     message?: string,
-    rawData?: any
+    rawData?: Record<string, unknown>
   ): Promise<void> {
     if (!command.requestId) {
       return;
     }
 
     try {
-      const traceData: Omit<Trace, 'id' | 'expires_at'> = {
+      const traceData: RequestTraceInput = {
         created_at: LogRepository.formatDateTime64(new Date()),
         organization_id: command.organizationId,
         environment_id: command.environmentId,
@@ -167,9 +222,10 @@ export class TriggerMulticast extends TriggerBase {
         message: message || null,
         raw_data: rawData ? JSON.stringify(rawData) : null,
         status,
-        entity_type: 'request',
         entity_id: command.requestId,
         workflow_run_identifier: command.template.triggers[0].identifier,
+        workflow_id: command.template._id,
+        provider_id: '',
       };
 
       await this.traceLogRepository.createRequest([traceData]);
@@ -230,6 +286,7 @@ export const splitByRecipientType = (
 ): {
   singleSubscribers: Map<string, ISubscribersDefine>;
   topicKeys: Set<string>;
+  topicExclusions: Map<string, Set<string>>;
 } => {
   return mappedRecipients.reduce(
     (acc, recipient) => {
@@ -239,6 +296,14 @@ export const splitByRecipientType = (
 
       if (isTopic(recipient)) {
         acc.topicKeys.add(recipient.topicKey);
+        const topicRecipient = recipient as ITopic;
+        if (topicRecipient.exclude && topicRecipient.exclude.length > 0) {
+          const existingExclusions = acc.topicExclusions.get(topicRecipient.topicKey) || new Set<string>();
+          for (const subscriberId of topicRecipient.exclude) {
+            existingExclusions.add(subscriberId);
+          }
+          acc.topicExclusions.set(topicRecipient.topicKey, existingExclusions);
+        }
       } else {
         const subscribersDefine = buildSubscriberDefine(recipient);
 
@@ -250,6 +315,7 @@ export const splitByRecipientType = (
     {
       singleSubscribers: new Map<string, ISubscribersDefine>(),
       topicKeys: new Set<string>(),
+      topicExclusions: new Map<string, Set<string>>(),
     }
   );
 };
@@ -263,6 +329,16 @@ export const buildSubscriberDefine = (recipient: TriggerRecipientSubscriber): IS
     return recipient;
   }
 };
+
+const SUBSCRIBER_ID_VALIDATION_PREFIX = 'subscriberId under property to';
+
+function isSubscriberIdValidationError(e: unknown): boolean {
+  return (
+    e instanceof BadRequestException &&
+    typeof e.message === 'string' &&
+    e.message.startsWith(SUBSCRIBER_ID_VALIDATION_PREFIX)
+  );
+}
 
 export const validateSubscriberDefine = (recipient: ISubscribersDefine) => {
   if (!recipient) {

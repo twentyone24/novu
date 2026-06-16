@@ -25,8 +25,8 @@ import {
   JobStatusEnum,
 } from '@novu/shared';
 import { v4 as uuidv4 } from 'uuid';
+import { InboxNotificationDto } from '../../dtos/inbox-notification.dto';
 import { AnalyticsEventsEnum } from '../../utils';
-import { InboxNotification } from '../../utils/types';
 import { MarkNotificationAsCommand } from '../mark-notification-as/mark-notification-as.command';
 import { MarkNotificationAs } from '../mark-notification-as/mark-notification-as.usecase';
 import { SnoozeNotificationCommand } from './snooze-notification.command';
@@ -44,16 +44,18 @@ export class SnoozeNotification {
     private createExecutionDetails: CreateExecutionDetails,
     private markNotificationAs: MarkNotificationAs,
     private analyticsService: AnalyticsService
-  ) {}
+  ) {
+    this.logger.setContext(this.constructor.name);
+  }
 
-  public async execute(command: SnoozeNotificationCommand): Promise<InboxNotification> {
+  public async execute(command: SnoozeNotificationCommand): Promise<InboxNotificationDto> {
     const snoozeDurationMs = this.calculateDelayInMs(command.snoozeUntil);
     await this.validateSnoozeDuration(command, snoozeDurationMs);
     const notification = await this.findNotification(command);
 
     try {
       let scheduledJob = {} as JobEntity;
-      let snoozedNotification = {} as InboxNotification;
+      let snoozedNotification = {} as InboxNotificationDto;
 
       await this.messageRepository.withTransaction(async () => {
         scheduledJob = await this.createScheduledUnsnoozeJob(notification, snoozeDurationMs);
@@ -92,18 +94,14 @@ export class SnoozeNotification {
   }
 
   public async enqueueJob(job: JobEntity, delay: number) {
-    this.logger.info({ jobId: job._id, delay }, 'Adding snooze job to Standard Queue');
-
-    const jobData = {
-      _environmentId: job._environmentId,
-      _id: job._id,
-      _organizationId: job._organizationId,
-      _userId: job._userId,
-    };
-
     await this.standardQueueService.add({
       name: job._id,
-      data: jobData,
+      data: {
+        _environmentId: job._environmentId,
+        _id: job._id,
+        _organizationId: job._organizationId,
+        _userId: job._userId,
+      },
       groupId: job._organizationId,
       options: { delay, attempts: this.RETRY_ATTEMPTS, backoff: { type: 'exponential', delay: 5000 } },
     });
@@ -132,7 +130,7 @@ export class SnoozeNotification {
   }
 
   private calculateDelayInMs(snoozeUntil: Date): number {
-    return snoozeUntil.getTime() - new Date().getTime();
+    return snoozeUntil.getTime() - Date.now();
   }
 
   private async getOrganization(organizationId: string): Promise<OrganizationEntity> {
@@ -152,6 +150,7 @@ export class SnoozeNotification {
       _environmentId: command.environmentId,
       channel: ChannelTypeEnum.IN_APP,
       _id: command.notificationId,
+      contextKeys: command.contextKeys,
     });
 
     if (!message) {
@@ -177,7 +176,7 @@ export class SnoozeNotification {
       status: JobStatusEnum.PENDING,
       delay,
       createdAt: Date.now().toString(),
-      id: JobRepository.createObjectId(),
+      _id: JobRepository.createObjectId(),
       _parentId: null,
       payload: {
         ...originalJob.payload,
@@ -196,6 +195,7 @@ export class SnoozeNotification {
         subscriberId: command.subscriberId,
         notificationId: command.notificationId,
         snoozedUntil: command.snoozeUntil,
+        contextKeys: command.contextKeys,
       })
     );
   }

@@ -1,3 +1,4 @@
+import { Cross2Icon } from '@radix-ui/react-icons';
 import { ReactNode } from 'react';
 import { IconType } from 'react-icons';
 import { RiAlertFill } from 'react-icons/ri';
@@ -23,6 +24,7 @@ type ConfirmationModalProps = {
   confirmTrailingIcon?: IconType;
   isLoading?: boolean;
   isConfirmDisabled?: boolean;
+  confirmButtonVariant?: 'primary' | 'error';
 };
 
 export const ConfirmationModal = ({
@@ -35,24 +37,42 @@ export const ConfirmationModal = ({
   confirmTrailingIcon,
   isLoading,
   isConfirmDisabled,
+  confirmButtonVariant = 'primary',
 }: ConfirmationModalProps) => {
   return (
     <Dialog modal open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
         <DialogOverlay />
-        <DialogContent className="overflow-hidden sm:max-w-[440px]">
-          <div className="flex items-start gap-4 self-stretch">
-            <div className="bg-warning/10 flex items-center justify-center gap-2 rounded-[10px] p-2">
-              <RiAlertFill className="text-warning size-6" />
+        <DialogContent className="max-w-[440px] gap-4 rounded-xl! p-4 overflow-hidden" hideCloseButton>
+          <div className="flex items-start justify-between">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-warning/10">
+              <RiAlertFill className="size-6 text-warning" />
             </div>
-            <div className="flex flex-1 flex-col items-start gap-1">
-              <DialogTitle className="text-md font-medium">{title}</DialogTitle>
-              <DialogDescription className="text-foreground-600">{description}</DialogDescription>
-            </div>
+            <DialogClose>
+              <Cross2Icon className="size-4" />
+              <span className="sr-only">Close</span>
+            </DialogClose>
           </div>
+
+          <div className="flex min-w-0 flex-col gap-1 overflow-hidden">
+            <DialogTitle className="text-md font-medium tracking-normal">{title}</DialogTitle>
+            <DialogDescription className="text-foreground-600 min-w-0 overflow-hidden">{description}</DialogDescription>
+          </div>
+
+          {/* <div className="flex justify-end gap-3"> */}
           <DialogFooter>
             <DialogClose asChild aria-label="Close">
-              <Button type="button" size="sm" mode="outline" variant="secondary" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                size="sm"
+                mode="outline"
+                variant="secondary"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onOpenChange(false);
+                }}
+              >
                 Cancel
               </Button>
             </DialogClose>
@@ -60,8 +80,12 @@ export const ConfirmationModal = ({
             <Button
               type="button"
               size="sm"
-              variant="primary"
-              onClick={onConfirm}
+              variant={confirmButtonVariant}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onConfirm();
+              }}
               trailingIcon={confirmTrailingIcon}
               isLoading={isLoading}
               disabled={isConfirmDisabled}

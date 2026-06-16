@@ -11,19 +11,40 @@ import { NovuCore } from "../core.js";
 import { translationsGroupsDelete } from "../funcs/translationsGroupsDelete.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { unwrapAsync } from "../types/fp.js";
 import { useNovuContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
 export type TranslationsGroupsDeleteMutationVariables = {
-  resourceType: operations.ResourceType;
+  resourceType:
+    operations.TranslationControllerDeleteTranslationGroupEndpointPathParamResourceType;
   resourceId: string;
   idempotencyKey?: string | undefined;
   options?: RequestOptions;
 };
 
 export type TranslationsGroupsDeleteMutationData = void;
+
+export type TranslationsGroupsDeleteMutationError =
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * Delete a translation group
@@ -34,12 +55,12 @@ export type TranslationsGroupsDeleteMutationData = void;
 export function useTranslationsGroupsDeleteMutation(
   options?: MutationHookOptions<
     TranslationsGroupsDeleteMutationData,
-    Error,
+    TranslationsGroupsDeleteMutationError,
     TranslationsGroupsDeleteMutationVariables
   >,
 ): UseMutationResult<
   TranslationsGroupsDeleteMutationData,
-  Error,
+  TranslationsGroupsDeleteMutationError,
   TranslationsGroupsDeleteMutationVariables
 > {
   const client = useNovuContext();

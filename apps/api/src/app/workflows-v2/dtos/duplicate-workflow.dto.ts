@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsOptional, IsString } from 'class-validator';
+import { SLUG_IDENTIFIER_REGEX, slugIdentifierFormatMessage } from '@novu/shared';
+import { IsArray, IsBoolean, IsOptional, IsString, Matches } from 'class-validator';
 
 export class DuplicateWorkflowDto {
   @ApiProperty({
@@ -9,6 +10,17 @@ export class DuplicateWorkflowDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @ApiPropertyOptional({
+    description: 'Custom workflow identifier for the duplicated workflow',
+    type: String,
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(SLUG_IDENTIFIER_REGEX, {
+    message: slugIdentifierFormatMessage('workflowId'),
+  })
+  workflowId?: string;
 
   @ApiPropertyOptional({
     description: 'Tags associated with the workflow',

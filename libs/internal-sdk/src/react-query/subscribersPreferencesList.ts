@@ -5,28 +5,53 @@
 import {
   InvalidateQueryFilters,
   QueryClient,
-  QueryFunctionContext,
-  QueryKey,
   useQuery,
   UseQueryResult,
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { NovuCore } from "../core.js";
-import { subscribersPreferencesList } from "../funcs/subscribersPreferencesList.js";
-import { combineSignals } from "../lib/primitives.js";
-import { RequestOptions } from "../lib/sdks.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
-import { unwrapAsync } from "../types/fp.js";
 import { useNovuContext } from "./_context.js";
 import {
   QueryHookOptions,
   SuspenseQueryHookOptions,
   TupleToPrefixes,
 } from "./_types.js";
+import {
+  buildSubscribersPreferencesListQuery,
+  prefetchSubscribersPreferencesList,
+  queryKeySubscribersPreferencesList,
+  SubscribersPreferencesListQueryData,
+} from "./subscribersPreferencesList.core.js";
+export {
+  buildSubscribersPreferencesListQuery,
+  prefetchSubscribersPreferencesList,
+  queryKeySubscribersPreferencesList,
+  type SubscribersPreferencesListQueryData,
+};
 
-export type SubscribersPreferencesListQueryData =
-  operations.SubscribersControllerGetSubscriberPreferencesResponse;
+export type SubscribersPreferencesListQueryError =
+  | errors.ErrorDto
+  | errors.ValidationErrorDto
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
 
 /**
  * Retrieve subscriber preferences
@@ -36,18 +61,20 @@ export type SubscribersPreferencesListQueryData =
  *     This API returns all five channels preferences for all workflows and global preferences.
  */
 export function useSubscribersPreferencesList(
-  subscriberId: string,
-  criticality?: operations.Criticality | undefined,
-  idempotencyKey?: string | undefined,
-  options?: QueryHookOptions<SubscribersPreferencesListQueryData>,
-): UseQueryResult<SubscribersPreferencesListQueryData, Error> {
+  request: operations.SubscribersControllerGetSubscriberPreferencesRequest,
+  options?: QueryHookOptions<
+    SubscribersPreferencesListQueryData,
+    SubscribersPreferencesListQueryError
+  >,
+): UseQueryResult<
+  SubscribersPreferencesListQueryData,
+  SubscribersPreferencesListQueryError
+> {
   const client = useNovuContext();
   return useQuery({
     ...buildSubscribersPreferencesListQuery(
       client,
-      subscriberId,
-      criticality,
-      idempotencyKey,
+      request,
       options,
     ),
     ...options,
@@ -62,38 +89,23 @@ export function useSubscribersPreferencesList(
  *     This API returns all five channels preferences for all workflows and global preferences.
  */
 export function useSubscribersPreferencesListSuspense(
-  subscriberId: string,
-  criticality?: operations.Criticality | undefined,
-  idempotencyKey?: string | undefined,
-  options?: SuspenseQueryHookOptions<SubscribersPreferencesListQueryData>,
-): UseSuspenseQueryResult<SubscribersPreferencesListQueryData, Error> {
+  request: operations.SubscribersControllerGetSubscriberPreferencesRequest,
+  options?: SuspenseQueryHookOptions<
+    SubscribersPreferencesListQueryData,
+    SubscribersPreferencesListQueryError
+  >,
+): UseSuspenseQueryResult<
+  SubscribersPreferencesListQueryData,
+  SubscribersPreferencesListQueryError
+> {
   const client = useNovuContext();
   return useSuspenseQuery({
     ...buildSubscribersPreferencesListQuery(
       client,
-      subscriberId,
-      criticality,
-      idempotencyKey,
+      request,
       options,
     ),
     ...options,
-  });
-}
-
-export function prefetchSubscribersPreferencesList(
-  queryClient: QueryClient,
-  client$: NovuCore,
-  subscriberId: string,
-  criticality?: operations.Criticality | undefined,
-  idempotencyKey?: string | undefined,
-): Promise<void> {
-  return queryClient.prefetchQuery({
-    ...buildSubscribersPreferencesListQuery(
-      client$,
-      subscriberId,
-      criticality,
-      idempotencyKey,
-    ),
   });
 }
 
@@ -103,6 +115,7 @@ export function setSubscribersPreferencesListData(
     subscriberId: string,
     parameters: {
       criticality?: operations.Criticality | undefined;
+      contextKeys?: Array<string> | undefined;
       idempotencyKey?: string | undefined;
     },
   ],
@@ -120,6 +133,7 @@ export function invalidateSubscribersPreferencesList(
       subscriberId: string,
       parameters: {
         criticality?: operations.Criticality | undefined;
+        contextKeys?: Array<string> | undefined;
         idempotencyKey?: string | undefined;
       },
     ]
@@ -140,51 +154,4 @@ export function invalidateAllSubscribersPreferencesList(
     ...filters,
     queryKey: ["@novu/api", "Preferences", "list"],
   });
-}
-
-export function buildSubscribersPreferencesListQuery(
-  client$: NovuCore,
-  subscriberId: string,
-  criticality?: operations.Criticality | undefined,
-  idempotencyKey?: string | undefined,
-  options?: RequestOptions,
-): {
-  queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<SubscribersPreferencesListQueryData>;
-} {
-  return {
-    queryKey: queryKeySubscribersPreferencesList(subscriberId, {
-      criticality,
-      idempotencyKey,
-    }),
-    queryFn: async function subscribersPreferencesListQueryFn(
-      ctx,
-    ): Promise<SubscribersPreferencesListQueryData> {
-      const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
-      const mergedOptions = {
-        ...options,
-        fetchOptions: { ...options?.fetchOptions, signal: sig },
-      };
-
-      return unwrapAsync(subscribersPreferencesList(
-        client$,
-        subscriberId,
-        criticality,
-        idempotencyKey,
-        mergedOptions,
-      ));
-    },
-  };
-}
-
-export function queryKeySubscribersPreferencesList(
-  subscriberId: string,
-  parameters: {
-    criticality?: operations.Criticality | undefined;
-    idempotencyKey?: string | undefined;
-  },
-): QueryKey {
-  return ["@novu/api", "Preferences", "list", subscriberId, parameters];
 }

@@ -16,7 +16,7 @@ export const API_KEY_SECURITY_DEFINITIONS: SecuritySchemeObject = {
   type: 'apiKey',
   name: 'Authorization',
   in: 'header',
-  description: 'API key authentication. Allowed headers-- "Authorization: ApiKey <api_key>".',
+  description: 'API key authentication. Allowed headers-- "Authorization: ApiKey <novu_secret_key>".',
   'x-speakeasy-example': 'YOUR_SECRET_KEY_HERE',
 } as unknown as SecuritySchemeObject;
 export const BEARER_SECURITY_DEFINITIONS: SecuritySchemeObject = {
@@ -77,7 +77,10 @@ function buildBaseOptions() {
       url: 'https://docs.novu.co/platform/workflow/layouts',
     })
     .addTag('Translations', `Used to localize your notifications to different languages.`, {
-      url: 'https://docs.novu.co/platform/workflow/translations',
+      url: 'https://docs.novu.co/platform/workflow/advanced-features/translations',
+    })
+    .addTag('Domains', `Used to manage your inbound email domains.`, {
+      url: 'https://docs.novu.co/platform/domains',
     });
 
   return options;
@@ -239,6 +242,16 @@ function overloadGlobalSdkRetrySettings(document: OpenAPIObject) {
   };
 }
 
+function patchOpenEnumSchemas(document: OpenAPIObject) {
+  const openEnumSchemas = ['UiComponentEnum'];
+  for (const schemaName of openEnumSchemas) {
+    const schema = document.components?.schemas?.[schemaName];
+    if (schema) {
+      (schema as Record<string, unknown>)['x-speakeasy-unknown-values'] = 'allow';
+    }
+  }
+}
+
 function publishSdkSpecificDocumentAndReturnDocument(
   app: INestApplication,
   document: OpenAPIObject,
@@ -246,7 +259,7 @@ function publishSdkSpecificDocumentAndReturnDocument(
 ) {
   overloadNamingGuidelines(document);
   overloadGlobalSdkRetrySettings(document);
-  document['x-speakeasy-timeout'] = 5000;
+  patchOpenEnumSchemas(document);
 
   let sdkDocument: OpenAPIObject = overloadDocumentForSdkGeneration(document, internalSdkGeneration);
   sdkDocument = sortOpenAPIDocument(sdkDocument);
